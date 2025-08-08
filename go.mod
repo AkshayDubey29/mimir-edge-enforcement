@@ -18,6 +18,8 @@ require (
     k8s.io/api v0.28.4
     k8s.io/apimachinery v0.28.4
     k8s.io/client-go v0.28.4
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
 )
 
 require (
@@ -56,3 +58,8 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 ) 
+
+replace (
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin => ./protos/admin
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus => ./protos/prometheus
+)
