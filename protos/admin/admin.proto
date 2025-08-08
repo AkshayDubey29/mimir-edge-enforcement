@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package admin;
+
+option go_package = "github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin";
+
+import "google/protobuf/timestamp.proto";
+
+service AdminService {
+  rpc SetLimits(SetLimitsRequest) returns (SetLimitsResponse);
+  rpc GetLimits(GetLimitsRequest) returns (GetLimitsResponse);
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse);
+  rpc GetHealth(GetHealthRequest) returns (GetHealthResponse);
+  rpc GetOverview(GetOverviewRequest) returns (GetOverviewResponse);
+  rpc GetTenantDetails(GetTenantDetailsRequest) returns (GetTenantDetailsResponse);
+  rpc SetEnforcement(SetEnforcementRequest) returns (SetEnforcementResponse);
+}
+
+message SetLimitsRequest {
+  string tenant_id = 1;
+  TenantLimits limits = 2;
+}
+
+message SetLimitsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetLimitsRequest {
+  string tenant_id = 1;
+}
+
+message GetLimitsResponse {
+  TenantLimits limits = 1;
+  bool found = 2;
+}
+
+message ListTenantsRequest {
+  int32 page = 1;
+  int32 page_size = 2;
+  string search = 3;
+}
+
+message ListTenantsResponse {
+  repeated TenantInfo tenants = 1;
+  int32 total = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message GetHealthRequest {}
+
+message GetHealthResponse {
+  RLSHealth rls = 1;
+  EnvoyHealth envoy = 2;
+}
+
+message GetOverviewRequest {
+  string range = 1; // 5m, 1h, 24h
+}
+
+message GetOverviewResponse {
+  OverviewStats stats = 1;
+  repeated TenantMetrics top_tenants = 2;
+}
+
+message GetTenantDetailsRequest {
+  string tenant_id = 1;
+}
+
+message GetTenantDetailsResponse {
+  TenantInfo tenant = 1;
+  repeated DenialInfo recent_denials = 2;
+}
+
+message SetEnforcementRequest {
+  string tenant_id = 1;
+  EnforcementConfig enforcement = 2;
+}
+
+message SetEnforcementResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message TenantLimits {
+  double samples_per_second = 1;
+  double burst_pct = 2;
+  int64 max_body_bytes = 3;
+  int32 max_labels_per_series = 4;
+  int32 max_label_value_length = 5;
+  int32 max_series_per_request = 6;
+}
+
+message TenantInfo {
+  string id = 1;
+  string name = 2;
+  TenantLimits limits = 3;
+  TenantMetrics metrics = 4;
+  EnforcementConfig enforcement = 5;
+}
+
+message TenantMetrics {
+  double rps = 1;
+  double bytes_per_sec = 2;
+  double samples_per_sec = 3;
+  double deny_rate = 4;
+  double allow_rate = 5;
+  double utilization_pct = 6;
+}
+
+message EnforcementConfig {
+  bool enabled = 1;
+  double burst_pct_override = 2;
+}
+
+message RLSHealth {
+  string status = 1;
+  string version = 2;
+  string overrides_resource_version = 3;
+  int64 last_sync_ago_sec = 4;
+}
+
+message EnvoyHealth {
+  string status = 1;
+}
+
+message OverviewStats {
+  int64 total_requests = 1;
+  int64 allowed_requests = 2;
+  int64 denied_requests = 3;
+  double allow_percentage = 4;
+  int32 active_tenants = 5;
+}
+
+message DenialInfo {
+  string tenant_id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp timestamp = 3;
+  int64 observed_samples = 4;
+  int64 observed_body_bytes = 5;
+}
+
+
