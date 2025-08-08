@@ -4,6 +4,7 @@ description: Rate Limit Service for Mimir edge enforcement
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+icon: https://raw.githubusercontent.com/grafana/mimir/main/docs/sources/mimir/logo.svg
 keywords:
   - mimir
   - rate-limiting
