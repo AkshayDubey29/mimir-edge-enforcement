@@ -11,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -35,16 +39,17 @@ jobs:
           make proto
       - name: Tidy modules
         run: |
-          go mod tidy || true
-          (cd services/rls && go mod tidy || true)
-          (cd services/overrides-sync && go mod tidy || true)
+          go mod tidy
+          (cd services/rls && go mod tidy)
+          (cd services/overrides-sync && go mod tidy)
       - name: Build services
         run: |
-          make rls || true
-          make sync || true
+          make build-rls
+          make build-sync
+          make build-ui
       - name: Run tests
         run: |
-          make test || true
+          make test
 
   helm-lint:
     runs-on: ubuntu-latest
@@ -69,6 +74,14 @@ jobs:
       DOCKER_BUILD_CONTEXT: .
     steps:
       - uses: actions/checkout@v4
+      - name: Generate protobuf
+        run: |
+          make proto
+      - name: Tidy modules
+        run: |
+          go mod tidy
+          (cd services/rls && go mod tidy)
+          (cd services/overrides-sync && go mod tidy)
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
