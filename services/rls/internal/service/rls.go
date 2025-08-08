@@ -14,8 +14,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 
-    envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-    envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
+	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+	envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
 )
 
 // RLSConfig holds the configuration for the RLS service
@@ -332,9 +332,9 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 	// This is a simplified implementation
 	// In a real implementation, you'd want to check the specific rate limit descriptors
 
-    response := &envoy_service_ratelimit_v3.RateLimitResponse{
-        OverallCode: envoy_service_ratelimit_v3.RateLimitResponse_OK,
-        Statuses:    make([]*envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus, len(req.Descriptors)),
+	response := &envoy_service_ratelimit_v3.RateLimitResponse{
+		OverallCode: envoy_service_ratelimit_v3.RateLimitResponse_OK,
+		Statuses:    make([]*envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus, len(req.Descriptors)),
 	}
 
 	for i, descriptor := range req.Descriptors {
@@ -348,16 +348,16 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 		}
 
 		if tenantID == "" {
-            response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
-                Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
+			response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
+				Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
 			}
 			continue
 		}
 
 		tenant := rls.getTenant(tenantID)
 		if tenant == nil {
-            response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
-                Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
+			response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
+				Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
 			}
 			continue
 		}
@@ -365,16 +365,16 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 		// Check rate limit based on descriptor
 		allowed := rls.checkRateLimit(tenant, descriptor)
 
-        if allowed {
-            response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
-                Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
-            }
-        } else {
-            response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
-                Code: envoy_service_ratelimit_v3.RateLimitResponse_OVER_LIMIT,
-            }
-            response.OverallCode = envoy_service_ratelimit_v3.RateLimitResponse_OVER_LIMIT
-        }
+		if allowed {
+			response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
+				Code: envoy_service_ratelimit_v3.RateLimitResponse_OK,
+			}
+		} else {
+			response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
+				Code: envoy_service_ratelimit_v3.RateLimitResponse_OVER_LIMIT,
+			}
+			response.OverallCode = envoy_service_ratelimit_v3.RateLimitResponse_OVER_LIMIT
+		}
 	}
 
 	return response, nil

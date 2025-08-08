@@ -2,17 +2,28 @@
 FROM golang:1.22-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
+RUN apk add --no-cache git ca-certificates tzdata protobuf
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
-RUN go mod download
+# Copy go mod files (service) and local proto modules
+COPY services/overrides-sync/go.mod services/overrides-sync/go.sum ./
+COPY protos /protos
+RUN go mod download || true
 
-# Copy source code
-COPY . .
+# Generate protobuf stubs inside the image (ensures builds don't rely on host)
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0 \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+
+# Generate stubs for admin
+RUN protoc --proto_path=/protos \
+    --go_out=/protos --go_opt=paths=source_relative \
+    --go-grpc_out=/protos --go-grpc_opt=paths=source_relative \
+    /protos/*.proto
+
+# Copy service source code
+COPY services/overrides-sync/. .
 
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o overrides-sync cmd/overrides-sync/main.go
