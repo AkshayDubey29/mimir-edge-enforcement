@@ -2,7 +2,7 @@
 FROM golang:1.22-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata protobuf
+RUN apk add --no-cache git ca-certificates tzdata protobuf protobuf-dev
 
 # Set working directory
 WORKDIR /app
