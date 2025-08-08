@@ -16,6 +16,8 @@ import (
 
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
+	envoy_extensions_common_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/extensions/common/ratelimit/v3"
+	envoy_type_v3 "github.com/envoyproxy/go-control-plane/envoy/type/v3"
 )
 
 // RLSConfig holds the configuration for the RLS service
@@ -477,7 +479,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64) limit
 }
 
 // checkRateLimit checks rate limits for the ratelimit service
-func (rls *RLS) checkRateLimit(tenant *TenantState, entries []*envoy_service_ratelimit_v3.RateLimitDescriptor_Entry) bool {
+func (rls *RLS) checkRateLimit(tenant *TenantState, entries []*envoy_extensions_common_ratelimit_v3.RateLimitDescriptor_Entry) bool {
 	// Simplified implementation - check requests per second
 	for _, entry := range entries {
 		if entry.Key == "requests_per_second" {
@@ -499,7 +501,7 @@ func (rls *RLS) updateBucketMetrics(tenant *TenantState) {
 // allowResponse creates an allow response
 func (rls *RLS) allowResponse() *envoy_service_auth_v3.CheckResponse {
 	return &envoy_service_auth_v3.CheckResponse{
-		Status: &envoy_service_auth_v3.CheckResponse_OkResponse{
+		HttpResponse: &envoy_service_auth_v3.CheckResponse_OkResponse{
 			OkResponse: &envoy_service_auth_v3.OkHttpResponse{},
 		},
 	}
@@ -508,10 +510,10 @@ func (rls *RLS) allowResponse() *envoy_service_auth_v3.CheckResponse {
 // denyResponse creates a deny response
 func (rls *RLS) denyResponse(reason string, code int32) *envoy_service_auth_v3.CheckResponse {
 	return &envoy_service_auth_v3.CheckResponse{
-		Status: &envoy_service_auth_v3.CheckResponse_DeniedResponse{
+		HttpResponse: &envoy_service_auth_v3.CheckResponse_DeniedResponse{
 			DeniedResponse: &envoy_service_auth_v3.DeniedHttpResponse{
-				Status: &envoy_service_auth_v3.HttpResponse{
-					Code: code,
+				Status: &envoy_type_v3.HttpStatus{
+					Code: envoy_type_v3.StatusCode(code),
 				},
 				Body: reason,
 			},
