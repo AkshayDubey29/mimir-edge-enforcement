@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useQuery } from '@tanstack/react-query';
 
 interface Denial {
@@ -10,10 +10,10 @@ interface Denial {
 }
 
 export function Denials() {
-  const { data, isLoading, error } = useQuery('denials', fetchDenials);
+  const { data, isLoading, error } = useQuery({ queryKey: ['denials'], queryFn: fetchDenials });
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Failed to load denials</div>;
-  const denials: Denial[] = data?.denials ?? [];
+  const denials: Denial[] = data ?? [];
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Recent Denials</h2>

@@ -1,4 +1,4 @@
-import React from 'react';
+
 import { useQuery } from '@tanstack/react-query';
 
 interface Tenant {
@@ -8,12 +8,12 @@ interface Tenant {
 }
 
 export function Tenants() {
-  const { data, isLoading, error } = useQuery('tenants', fetchTenants);
+  const { data, isLoading, error } = useQuery({ queryKey: ['tenants'], queryFn: fetchTenants });
 
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Failed to load tenants</div>;
 
-  const tenants: Tenant[] = data?.tenants ?? [];
+  const tenants: Tenant[] = data ?? [];
 
   return (
     <div>

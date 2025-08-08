@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   BarChart, 
@@ -8,8 +8,7 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-  LineChart,
-  Line,
+
   PieChart,
   Pie,
   Cell
@@ -250,7 +249,7 @@ export function Overview() {
 }
 
 // Mock API function - replace with actual implementation
-async function fetchOverviewData(timeRange: string) {
+async function fetchOverviewData(_timeRange: string) {
   // In a real implementation, this would call the RLS admin API
   // const response = await fetch(`/api/overview?range=${timeRange}`);
   // return response.json();
