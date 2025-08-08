@@ -363,7 +363,7 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 		}
 
 		// Check rate limit based on descriptor
-		allowed := rls.checkRateLimit(tenant, descriptor)
+		allowed := rls.checkRateLimit(tenant, descriptor.Entries)
 
 		if allowed {
 			response.Statuses[i] = &envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus{
@@ -477,9 +477,9 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64) limit
 }
 
 // checkRateLimit checks rate limits for the ratelimit service
-func (rls *RLS) checkRateLimit(tenant *TenantState, descriptor *envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus) bool {
+func (rls *RLS) checkRateLimit(tenant *TenantState, entries []*envoy_service_ratelimit_v3.RateLimitDescriptor_Entry) bool {
 	// Simplified implementation - check requests per second
-	for _, entry := range descriptor.Entries {
+	for _, entry := range entries {
 		if entry.Key == "requests_per_second" {
 			// For simplicity, always allow in this implementation
 			// In a real implementation, you'd check against the requests bucket
