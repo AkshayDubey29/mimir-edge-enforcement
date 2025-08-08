@@ -1,6 +1,12 @@
 # Default values for mimir-envoy
 # This is a YAML-formatted file.
 
+# Deployment configuration
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
 # Service configuration
 service:
   port: 8080

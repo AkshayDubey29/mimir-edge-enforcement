@@ -4,6 +4,7 @@ description: Controller to sync Mimir overrides to RLS
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+icon: https://raw.githubusercontent.com/kubernetes/community/master/icons/svg/resources/labeled/deploy.svg
 keywords:
   - mimir
   - controller

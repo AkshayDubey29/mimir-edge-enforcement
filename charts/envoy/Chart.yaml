@@ -4,6 +4,7 @@ description: Envoy proxy for Mimir edge enforcement
 type: application
 version: 0.1.0
 appVersion: "1.0.0"
+icon: https://raw.githubusercontent.com/envoyproxy/artwork/main/PNG/Envoy_Logo_Final_PANTONE.png
 keywords:
   - mimir
   - envoy
