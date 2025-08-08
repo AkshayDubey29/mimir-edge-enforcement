@@ -185,7 +185,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		samples = result.SamplesCount
 	} else {
 		// Use content length as a proxy for request size
-		bodyBytes = req.Attributes.Request.Http.BodySize
+		bodyBytes = int64(len(req.Attributes.Request.Http.Body))
 		samples = 1 // Default to 1 sample if not parsing
 	}
 
@@ -477,7 +477,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64) limit
 }
 
 // checkRateLimit checks rate limits for the ratelimit service
-func (rls *RLS) checkRateLimit(tenant *TenantState, descriptor *envoy_service_ratelimit_v3.RateLimitDescriptor) bool {
+func (rls *RLS) checkRateLimit(tenant *TenantState, descriptor *envoy_service_ratelimit_v3.RateLimitResponse_DescriptorStatus) bool {
 	// Simplified implementation - check requests per second
 	for _, entry := range descriptor.Entries {
 		if entry.Key == "requests_per_second" {
@@ -499,18 +499,22 @@ func (rls *RLS) updateBucketMetrics(tenant *TenantState) {
 // allowResponse creates an allow response
 func (rls *RLS) allowResponse() *envoy_service_auth_v3.CheckResponse {
 	return &envoy_service_auth_v3.CheckResponse{
-		Status: &envoy_service_auth_v3.OkHttpResponse{},
+		Status: &envoy_service_auth_v3.CheckResponse_OkResponse{
+			OkResponse: &envoy_service_auth_v3.OkHttpResponse{},
+		},
 	}
 }
 
 // denyResponse creates a deny response
 func (rls *RLS) denyResponse(reason string, code int32) *envoy_service_auth_v3.CheckResponse {
 	return &envoy_service_auth_v3.CheckResponse{
-		Status: &envoy_service_auth_v3.DeniedHttpResponse{
-			Status: &envoy_service_auth_v3.HttpResponse{
-				Code: code,
+		Status: &envoy_service_auth_v3.CheckResponse_DeniedResponse{
+			DeniedResponse: &envoy_service_auth_v3.DeniedHttpResponse{
+				Status: &envoy_service_auth_v3.HttpResponse{
+					Code: code,
+				},
+				Body: reason,
 			},
-			Body: reason,
 		},
 	}
 }
