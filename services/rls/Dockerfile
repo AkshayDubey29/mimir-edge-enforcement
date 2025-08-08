@@ -27,7 +27,8 @@ RUN protoc --proto_path=/protos --proto_path=/usr/include \
 COPY services/rls/. .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rls cmd/rls/main.go
+RUN go mod download && \
+    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o rls cmd/rls/main.go
 
 # Final stage
 FROM gcr.io/distroless/static:nonroot
