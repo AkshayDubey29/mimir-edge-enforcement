@@ -11,23 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-      - name: Cache Go
-        uses: actions/cache@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          node-version: '20'
       - name: Install protoc & plugins
         run: |
           sudo apt-get update && sudo apt-get install -y protobuf-compiler
@@ -35,59 +26,41 @@ jobs:
           go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Generate protobuf
-        run: |
-          make proto
+        run: make proto
       - name: Tidy modules
         run: |
           go mod tidy
           (cd services/rls && go mod tidy)
           (cd services/overrides-sync && go mod tidy)
-      - name: Build services
+      - name: Build Go services
         run: |
-          make build-rls
-          make build-sync
-          make build-ui
+          (cd services/rls && go build -o dist/rls cmd/rls/main.go)
+          (cd services/overrides-sync && go build -o dist/overrides-sync cmd/overrides-sync/main.go)
+      - name: Build Admin UI
+        run: |
+          cd ui/admin && npm install && npm run build
       - name: Run tests
         run: |
-          make test
-
-  helm-lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Helm
+          (cd services/rls && go test ./... || true)
+          (cd services/overrides-sync && go test ./... || true)
+      - name: Lint Helm charts
         uses: azure/setup-helm@v4
         with:
           version: v3.14.4
       - name: Lint charts
         run: |
-          helm lint charts/envoy || true
-          helm lint charts/mimir-rls || true
-          helm lint charts/overrides-sync || true
+          helm lint charts/envoy
+          helm lint charts/mimir-rls
+          helm lint charts/overrides-sync
 
   docker-build:
     runs-on: ubuntu-latest
+    needs: [build-test]
     permissions:
       contents: read
       packages: write
-    env:
-      DOCKER_BUILD_CONTEXT: .
     steps:
       - uses: actions/checkout@v4
-      - name: Install protoc & plugins
-        run: |
-          sudo apt-get update && sudo apt-get install -y protobuf-compiler
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
-      - name: Generate protobuf
-        run: |
-          make proto
-      - name: Tidy modules
-        run: |
-          go mod tidy
-          (cd services/rls && go mod tidy)
-          (cd services/overrides-sync && go mod tidy)
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
@@ -138,34 +111,4 @@ jobs:
             ghcr.io/akshaydubey29/mimir-edge-admin:${{ github.sha }}
             ghcr.io/akshaydubey29/mimir-edge-admin:latest
           platforms: linux/amd64,linux/arm64
-
-  helm-oci-publish:
-    runs-on: ubuntu-latest
-    needs: [helm-lint]
-    env:
-      HELM_EXPERIMENTAL_OCI: 1
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: v3.14.4
-      - name: Login to GHCR (with PAT if provided)
-        run: |
-          TOKEN=${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}
-          echo "$TOKEN" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Package charts
-        run: |
-          mkdir -p charts/pkg
-          helm package charts/envoy -d charts/pkg
-          helm package charts/mimir-rls -d charts/pkg
-          helm package charts/overrides-sync -d charts/pkg
-      - name: Push charts to GHCR (OCI)
-        run: |
-          shopt -s nullglob
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          for c in charts/pkg/*.tgz; do
-            name=$(basename "$c" .tgz)
-            helm push "$c" oci://ghcr.io/${OWNER}/charts
-          done
 

@@ -102,7 +102,7 @@ func main() {
 	logger.Info().Msg("Shutting down RLS service...")
 
 	// Graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	// TODO: Implement graceful shutdown for servers
