@@ -8,8 +8,7 @@ import {
   Settings,
   Download
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
+import { Button } from './ui/button';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -34,7 +33,7 @@ export function Layout({ children }: LayoutProps) {
             Mimir Edge
           </h1>
         </div>
-        <Separator />
+        <div className="border-t border-gray-200" />
         <nav className="mt-6 px-3">
           <div className="space-y-1">
             {navigation.map((item) => {
@@ -62,7 +61,7 @@ export function Layout({ children }: LayoutProps) {
         </nav>
         
         <div className="absolute bottom-0 left-0 right-0 p-4">
-          <Separator className="mb-4" />
+          <div className="border-t border-gray-200 mb-4" />
           <div className="space-y-2">
             <Button variant="outline" size="sm" className="w-full justify-start">
               <Settings className="mr-2 h-4 w-4" />
