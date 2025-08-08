@@ -1,46 +1,9 @@
-# Build stage
-FROM golang:1.22-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata protobuf protobuf-dev
-
-# Set working directory
-WORKDIR /app
-
-# Copy go mod files (service) and local proto modules
-COPY services/overrides-sync/go.mod services/overrides-sync/go.sum ./
-COPY protos /protos
-RUN go mod download || true
-
-# Generate protobuf stubs inside the image (ensures builds don't rely on host)
-ENV PATH="/go/bin:${PATH}"
-RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0 \
-    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
-
-# Generate stubs for admin
-RUN protoc --proto_path=/protos --proto_path=/usr/include \
-    --go_out=/protos --go_opt=paths=source_relative \
-    --go-grpc_out=/protos --go-grpc_opt=paths=source_relative \
-    /protos/*.proto
-
-# Copy service source code
-COPY services/overrides-sync/. .
-
-# Build the application
-RUN go mod download && \
-    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o overrides-sync cmd/overrides-sync/main.go
-
-# Final stage
+# Runtime stage - minimal distroless image
 FROM gcr.io/distroless/static:nonroot
 
-# Copy the binary from builder stage
-COPY --from=builder /app/overrides-sync /usr/local/bin/overrides-sync
-
-# Copy timezone data
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-# Expose metrics port
-EXPOSE 9090
+# Architecture-aware binary copy
+ARG TARGETARCH
+COPY overrides-sync-${TARGETARCH} /usr/local/bin/overrides-sync
 
 # Set user
 USER 65532:65532
@@ -50,4 +13,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD ["/usr/local/bin/overrides-sync", "--help"] || exit 1
 
 # Run the application
-ENTRYPOINT ["/usr/local/bin/overrides-sync"] 
+ENTRYPOINT ["/usr/local/bin/overrides-sync"]
