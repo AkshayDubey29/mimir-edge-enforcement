@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';
 import { 
   BarChart, 
   Bar, 
@@ -14,9 +14,7 @@ import {
   Pie,
   Cell
 } from 'recharts';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle } from 'lucide-react';
 
 // Mock data - replace with actual API calls
@@ -85,18 +83,17 @@ export function Overview() {
           <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
           <p className="text-gray-600">Monitor your Mimir edge enforcement system</p>
         </div>
-        <Select value={timeRange} onValueChange={setTimeRange}>
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {timeRanges.map((range) => (
-              <SelectItem key={range.value} value={range.value}>
-                {range.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <select 
+          value={timeRange} 
+          onChange={(e) => setTimeRange(e.target.value)}
+          className="w-48 px-3 py-2 border border-gray-300 rounded-md"
+        >
+          {timeRanges.map((range) => (
+            <option key={range.value} value={range.value}>
+              {range.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Stats Cards */}
@@ -230,14 +227,16 @@ export function Overview() {
                     <td className="py-3 px-4">{tenant.rps.toLocaleString()}</td>
                     <td className="py-3 px-4">{tenant.samples_per_sec.toLocaleString()}</td>
                     <td className="py-3 px-4">
-                      <Badge variant={tenant.deny_rate > 2 ? "destructive" : "secondary"}>
+                      <span className={`inline-block px-2 py-1 text-xs rounded ${
+                        tenant.deny_rate > 2 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
                         {tenant.deny_rate.toFixed(1)}%
-                      </Badge>
+                      </span>
                     </td>
                     <td className="py-3 px-4">
-                      <Badge variant="outline" className="text-green-600">
+                      <span className="inline-block px-2 py-1 text-xs rounded bg-green-100 text-green-800">
                         Active
-                      </Badge>
+                      </span>
                     </td>
                   </tr>
                 ))}
