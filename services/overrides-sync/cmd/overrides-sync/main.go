@@ -93,7 +93,7 @@ func main() {
 	logger.Info().Msg("Shutting down overrides-sync controller...")
 
 	// Graceful shutdown
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	_, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	// Stop controller
