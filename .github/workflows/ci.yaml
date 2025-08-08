@@ -74,6 +74,12 @@ jobs:
       DOCKER_BUILD_CONTEXT: .
     steps:
       - uses: actions/checkout@v4
+      - name: Install protoc & plugins
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
       - name: Generate protobuf
         run: |
           make proto
