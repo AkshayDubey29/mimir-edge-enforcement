@@ -1,0 +1,68 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mimir
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-mimir-distributor
+  namespace: mimir
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-mimir-distributor
+  template:
+    metadata:
+      labels:
+        app: mock-mimir-distributor
+    spec:
+      containers:
+      - name: mock-distributor
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+        env:
+        - name: NGINX_PORT
+          value: "8080"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo 'server { listen 8080; location / { return 200 "mock-mimir-distributor\n"; } }' > /etc/nginx/conf.d/default.conf
+          nginx -g "daemon off;"
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-mimir-distributor
+  namespace: mimir
+spec:
+  selector:
+    app: mock-mimir-distributor
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-overrides
+  namespace: mimir
+data:
+  # Example tenant overrides
+  "tenant-1:samples_per_second": "5000"
+  "tenant-1:burst_percent": "0.1"
+  "tenant-2:samples_per_second": "10000"
+  "tenant-2:burst_percent": "0.2"
+  "tenant-3:samples_per_second": "15000"
+  "tenant-3:burst_percent": "0.3" 

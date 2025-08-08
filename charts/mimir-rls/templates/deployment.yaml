@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mimir-rls.fullname" . }}
+  labels:
+    {{- include "mimir-rls.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "mimir-rls.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mimir-rls.selectorLabels" . | nindent 8 }}
+        {{- if .Values.serviceMonitor.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.ports.metrics }}"
+        prometheus.io/path: "/metrics"
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "mimir-rls.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: rls
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: ext-authz
+              containerPort: {{ .Values.service.ports.extAuthz }}
+            - name: ratelimit
+              containerPort: {{ .Values.service.ports.rateLimit }}
+            - name: admin
+              containerPort: {{ .Values.service.ports.admin }}
+            - name: metrics
+              containerPort: {{ .Values.service.ports.metrics }}
+          args:
+            - "--tenant-header={{ .Values.tenantHeader }}"
+            - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
+            - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
+            - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
+            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            - "--ext-authz-port={{ .Values.service.ports.extAuthz }}"
+            - "--rate-limit-port={{ .Values.service.ports.rateLimit }}"
+            - "--admin-port={{ .Values.service.ports.admin }}"
+            - "--metrics-port={{ .Values.service.ports.metrics }}"
+            - "--log-level={{ .Values.log.level }}"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: admin
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+

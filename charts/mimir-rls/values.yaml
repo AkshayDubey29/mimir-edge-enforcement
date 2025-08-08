@@ -1,0 +1,135 @@
+# Default values for mimir-rls
+# This is a YAML-formatted file.
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    extAuthz: 8080
+    rateLimit: 8081
+    admin: 8082
+    metrics: 9090
+
+# Tenant identification
+tenantHeader: "X-Scope-OrgID"
+
+# Listen configuration
+listen:
+  extAuthz: ":8080"
+  rateLimit: ":8081"
+  admin: ":8082"
+  metrics: ":9090"
+
+# Limits configuration
+limits:
+  # To enforce only tenants present in the ConfigMap by default, keep defaults at 0 (disabled)
+  defaultSamplesPerSecond: 0    # 0 means no default cap; limits must come from ConfigMap
+  defaultBurstPercent: 0        # unused until samples_per_second > 0
+  maxBodyBytes: 0               # 0 means no default body size cap
+  enforceBodyParsing: true      # parsing can stay enabled for metrics/visibility
+
+# Store configuration
+store:
+  backend: "memory"  # memory or redis
+  redis:
+    address: "localhost:6379"
+    tls:
+      enabled: false
+      caCert: ""
+      clientCert: ""
+      clientKey: ""
+
+# Logging configuration
+log:
+  level: "info"
+
+# Deployment configuration
+replicaCount: 1
+
+image:
+  repository: ghcr.io/AkshayDubey29/mimir-rls
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: true
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+# Additional environment variables
+env: []
+
+# Additional volume mounts
+volumeMounts: []
+
+# Additional volumes
+volumes: [] 

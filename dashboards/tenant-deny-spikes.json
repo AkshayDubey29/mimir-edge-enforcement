@@ -1,0 +1,13 @@
+{
+  "title": "Tenant Deny Spikes",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Denies by Tenant (5m)",
+      "targets": [
+        { "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (tenant)" }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,8 @@
+{
+  "title": "Envoy vs Mimir",
+  "panels": [
+    { "type": "graph", "title": "Envoy HTTP 429", "targets": [ { "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)" } ] },
+    { "type": "graph", "title": "RLS Decisions", "targets": [ { "expr": "sum(rate(rls_decisions_total[5m])) by (decision)" } ] }
+  ]
+}
+

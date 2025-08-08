@@ -1,0 +1,15 @@
+# Use official Envoy image as base
+FROM envoyproxy/envoy:v1.28-latest
+
+# Copy Envoy configuration
+COPY charts/envoy/templates/configmap.yaml /etc/envoy/envoy.yaml
+
+# Expose ports
+EXPOSE 8080 9901
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:9901/ready || exit 1
+
+# Run Envoy
+CMD ["/usr/local/bin/envoy", "-c", "/etc/envoy/envoy.yaml"] 

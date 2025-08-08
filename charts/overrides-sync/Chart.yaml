@@ -1,0 +1,17 @@
+apiVersion: v2
+name: overrides-sync
+description: Controller to sync Mimir overrides to RLS
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - mimir
+  - controller
+  - overrides
+  - sync
+home: https://github.com/AkshayDubey29/mimir-edge-enforcement
+sources:
+  - https://github.com/AkshayDubey29/mimir-edge-enforcement
+maintainers:
+  - name: AkshayDubey29
+    email: akshay.dubey29@gmail.com 
