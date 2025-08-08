@@ -61,6 +61,42 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+      - name: Install protoc & plugins
+        run: |
+          sudo apt-get update && sudo apt-get install -y protobuf-compiler
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+      - name: Generate protobuf
+        run: make proto
+      - name: Tidy modules
+        run: |
+          go mod tidy
+          (cd services/rls && go mod tidy)
+          (cd services/overrides-sync && go mod tidy)
+      - name: Build Go binaries for multiple architectures
+        run: |
+          # Build RLS for amd64 and arm64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o services/rls/rls-amd64 services/rls/cmd/rls/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o services/rls/rls-arm64 services/rls/cmd/rls/main.go
+          
+          # Build overrides-sync for amd64 and arm64
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o services/overrides-sync/overrides-sync-amd64 services/overrides-sync/cmd/overrides-sync/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o services/overrides-sync/overrides-sync-arm64 services/overrides-sync/cmd/overrides-sync/main.go
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: ui/admin/package-lock.json
+      - name: Build Admin UI
+        run: |
+          cd ui/admin
+          npm ci
+          npm run build
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
       - name: Setup Docker Buildx
@@ -74,7 +110,7 @@ jobs:
       - name: Build and push RLS
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: services/rls
           file: services/rls/Dockerfile
           push: true
           tags: |
@@ -84,7 +120,7 @@ jobs:
       - name: Build and push overrides-sync
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: services/overrides-sync
           file: services/overrides-sync/Dockerfile
           push: true
           tags: |
