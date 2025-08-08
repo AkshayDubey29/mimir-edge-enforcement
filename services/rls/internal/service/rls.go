@@ -15,7 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-	ratelimit "github.com/lyft/ratelimit/proto/ratelimit"
+    ratelimit "github.com/envoyproxy/ratelimit/proto/ratelimit"
 )
 
 // RLSConfig holds the configuration for the RLS service

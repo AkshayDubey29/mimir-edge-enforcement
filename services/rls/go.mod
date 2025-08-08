@@ -3,21 +3,21 @@ module github.com/AkshayDubey29/mimir-edge-enforcement/services/rls
 go 1.22
 
 require (
-	github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
-	github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
-	github.com/envoyproxy/go-control-plane v0.12.0
-	github.com/golang/protobuf v1.5.3
-	github.com/google/uuid v1.4.0
-	github.com/gorilla/mux v1.8.1
-	github.com/lyft/ratelimit v1.4.2
-	github.com/prometheus/client_golang v1.17.0
-	github.com/redis/go-redis/v9 v9.3.0
-	github.com/rs/zerolog v1.31.0
-	github.com/stretchr/testify v1.8.4
-	go.uber.org/zap v1.26.0
-	golang.org/x/net v0.17.0
-	google.golang.org/grpc v1.59.0
-	google.golang.org/protobuf v1.31.0
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
+    github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
+    github.com/envoyproxy/go-control-plane v0.12.0
+    github.com/envoyproxy/ratelimit v1.5.0
+    github.com/golang/protobuf v1.5.3
+    github.com/google/uuid v1.4.0
+    github.com/gorilla/mux v1.8.1
+    github.com/prometheus/client_golang v1.17.0
+    github.com/redis/go-redis/v9 v9.3.0
+    github.com/rs/zerolog v1.31.0
+    github.com/stretchr/testify v1.8.4
+    go.uber.org/zap v1.26.0
+    golang.org/x/net v0.17.0
+    google.golang.org/grpc v1.59.0
+    google.golang.org/protobuf v1.31.0
 )
 
 replace (
