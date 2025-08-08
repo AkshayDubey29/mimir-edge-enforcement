@@ -6,7 +6,6 @@ require (
     github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
     github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
     github.com/envoyproxy/go-control-plane v0.12.0
-    github.com/envoyproxy/ratelimit v1.5.0
     github.com/golang/protobuf v1.5.3
     github.com/google/uuid v1.4.0
     github.com/gorilla/mux v1.8.1

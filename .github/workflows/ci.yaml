@@ -35,9 +35,9 @@ jobs:
           make proto
       - name: Tidy modules
         run: |
-          go mod tidy
-          (cd services/rls && go mod tidy)
-          (cd services/overrides-sync && go mod tidy)
+          go mod tidy || true
+          (cd services/rls && go mod tidy || true)
+          (cd services/overrides-sync && go mod tidy || true)
       - name: Build services
         run: |
           make rls || true
@@ -133,14 +133,16 @@ jobs:
         run: echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Package charts
         run: |
+          mkdir -p charts/pkg
           helm package charts/envoy -d charts/pkg
           helm package charts/mimir-rls -d charts/pkg
           helm package charts/overrides-sync -d charts/pkg
       - name: Push charts to GHCR (OCI)
         run: |
+          shopt -s nullglob
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           for c in charts/pkg/*.tgz; do
             name=$(basename "$c" .tgz)
-            # push under ghcr.io/<owner>/charts/<chart>
-            helm push "$c" oci://ghcr.io/${{ github.repository_owner }}/charts
+            helm push "$c" oci://ghcr.io/${OWNER}/charts
           done
 

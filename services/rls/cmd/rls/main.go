@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
-	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
-    ratelimit "github.com/envoyproxy/ratelimit/proto/ratelimit"
+    envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
+    envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
 )
 
 var (
@@ -134,7 +134,7 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 	}
 
 	grpcServer := grpc.NewServer()
-	ratelimit.RegisterRateLimitServiceServer(grpcServer, rls)
+    envoy_service_ratelimit_v3.RegisterRateLimitServiceServer(grpcServer, rls)
 	reflection.Register(grpcServer)
 
 	logger.Info().Str("port", port).Msg("ratelimit gRPC server started")
