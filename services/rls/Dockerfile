@@ -13,11 +13,12 @@ COPY protos /protos
 RUN go mod download || true
 
 # Generate protobuf stubs inside the image (ensures builds don't rely on host)
+ENV PATH="/go/bin:${PATH}"
 RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31.0 \
     && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
 
 # Generate stubs for admin and remote_write
-RUN protoc --proto_path=/protos \
+RUN protoc --proto_path=/protos --proto_path=/usr/include \
     --go_out=/protos --go_opt=paths=source_relative \
     --go-grpc_out=/protos --go-grpc_opt=paths=source_relative \
     /protos/*.proto
