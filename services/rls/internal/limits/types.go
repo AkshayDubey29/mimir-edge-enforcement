@@ -83,7 +83,7 @@ type Decision struct {
 func (tl *TenantLimits) ToProto() *adminpb.TenantLimits {
 	return &adminpb.TenantLimits{
 		SamplesPerSecond:    tl.SamplesPerSecond,
-		BurstPercent:        tl.BurstPercent,
+        BurstPct:            tl.BurstPercent,
 		MaxBodyBytes:        tl.MaxBodyBytes,
 		MaxLabelsPerSeries:  tl.MaxLabelsPerSeries,
 		MaxLabelValueLength: tl.MaxLabelValueLength,
@@ -94,7 +94,7 @@ func (tl *TenantLimits) ToProto() *adminpb.TenantLimits {
 // FromProto converts protobuf to TenantLimits
 func (tl *TenantLimits) FromProto(pb *adminpb.TenantLimits) {
 	tl.SamplesPerSecond = pb.SamplesPerSecond
-	tl.BurstPercent = pb.BurstPercent
+    tl.BurstPercent = pb.BurstPct
 	tl.MaxBodyBytes = pb.MaxBodyBytes
 	tl.MaxLabelsPerSeries = pb.MaxLabelsPerSeries
 	tl.MaxLabelValueLength = pb.MaxLabelValueLength
