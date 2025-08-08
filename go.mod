@@ -4,7 +4,6 @@ go 1.22
 
 require (
     github.com/envoyproxy/go-control-plane v0.12.0
-    github.com/envoyproxy/ratelimit v1.5.0
     github.com/golang/protobuf v1.5.3
     github.com/google/uuid v1.4.0
     github.com/gorilla/mux v1.8.1
