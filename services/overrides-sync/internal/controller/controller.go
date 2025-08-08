@@ -197,9 +197,9 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 		limitName := parts[1]
 
 		// Get or create tenant limits
-		limits, exists := overrides[tenantID]
+		tenantLimits, exists := overrides[tenantID]
 		if !exists {
-			limits = limits.TenantLimits{
+			tenantLimits = limits.TenantLimits{
 				SamplesPerSecond:    10000, // Default
 				BurstPercent:        0.2,
 				MaxBodyBytes:        4194304,
@@ -210,7 +210,7 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 		}
 
 		// Parse limit value
-		if err := c.parseLimitValue(&limits, limitName, value); err != nil {
+		if err := c.parseLimitValue(&tenantLimits, limitName, value); err != nil {
 			c.logger.Warn().
 				Err(err).
 				Str("tenant", tenantID).
@@ -220,7 +220,7 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 			continue
 		}
 
-		overrides[tenantID] = limits
+		overrides[tenantID] = tenantLimits
 	}
 
 	return overrides, nil
