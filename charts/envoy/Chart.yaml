@@ -1,0 +1,17 @@
+apiVersion: v2
+name: mimir-envoy
+description: Envoy proxy for Mimir edge enforcement
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - mimir
+  - envoy
+  - rate-limiting
+  - authorization
+home: https://github.com/AkshayDubey29/mimir-edge-enforcement
+sources:
+  - https://github.com/AkshayDubey29/mimir-edge-enforcement
+maintainers:
+  - name: AkshayDubey29
+    email: akshay.dubey29@gmail.com 

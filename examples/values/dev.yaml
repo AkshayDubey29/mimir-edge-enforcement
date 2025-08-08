@@ -1,0 +1,121 @@
+# Development values for Mimir Edge Enforcement
+
+# RLS Configuration
+mimir-rls:
+  replicaCount: 1
+  
+  image:
+    repository: ghcr.io/AkshayDubey29/mimir-rls
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    type: ClusterIP
+    ports:
+      extAuthz: 8080
+      rateLimit: 8081
+      admin: 8082
+      metrics: 9090
+  
+  tenantHeader: "X-Scope-OrgID"
+  
+  limits:
+    # Production-like: only enforce when ConfigMap provides limits
+    defaultSamplesPerSecond: 0
+    defaultBurstPercent: 0
+    maxBodyBytes: 0
+    enforceBodyParsing: true
+  
+  store:
+    backend: "memory"
+  
+  log:
+    level: "info"
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Envoy Configuration
+mimir-envoy:
+  replicaCount: 1
+  
+  image:
+    repository: ghcr.io/AkshayDubey29/mimir-envoy
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  service:
+    port: 8080
+    type: ClusterIP
+  
+  remoteWrite:
+    path: "/api/v1/push"
+  
+  tenantHeader: "X-Scope-OrgID"
+  
+  mimir:
+    distributorHost: "mock-mimir-distributor.mimir.svc.cluster.local"
+    distributorPort: 8080
+  
+  rls:
+    host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+    extAuthzPort: 8080
+    rateLimitPort: 8081
+  
+  extAuthz:
+    maxRequestBytes: 4194304
+    failureModeAllow: false
+  
+  rateLimit:
+    failureModeDeny: true
+    domain: "mimir_remote_write"
+  
+  proxy:
+    upstreamTimeout: "30s"
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Overrides-Sync Configuration
+overrides-sync:
+  replicaCount: 1
+  
+  image:
+    repository: ghcr.io/AkshayDubey29/overrides-sync
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  mimir:
+    namespace: "mimir"
+    overridesConfigMap: "mimir-overrides"
+  
+  rls:
+    host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+    adminPort: "8082"
+  
+  pollFallbackSeconds: 30
+  
+  service:
+    type: ClusterIP
+    port: 9090
+  
+  log:
+    level: "info"
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi 

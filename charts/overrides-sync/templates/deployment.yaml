@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "overrides-sync.fullname" . }}
+  labels:
+    {{- include "overrides-sync.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "overrides-sync.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "overrides-sync.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "overrides-sync.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: overrides-sync
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - "--mimir-namespace={{ .Values.mimir.namespace }}"
+            - "--overrides-configmap={{ .Values.mimir.overridesConfigMap }}"
+            - "--rls-host={{ .Values.rls.host }}"
+            - "--rls-admin-port={{ .Values.rls.adminPort }}"
+            - "--poll-fallback-seconds={{ .Values.pollFallbackSeconds }}"
+            - "--log-level={{ .Values.log.level }}"
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.service.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+

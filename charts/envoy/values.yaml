@@ -1,0 +1,135 @@
+# Default values for mimir-envoy
+# This is a YAML-formatted file.
+
+# Service configuration
+service:
+  port: 8080
+  type: ClusterIP
+
+# Remote write configuration
+remoteWrite:
+  path: "/api/v1/push"
+
+# Tenant identification
+tenantHeader: "X-Scope-OrgID"
+
+# Mimir distributor configuration
+mimir:
+  distributorHost: "mimir-distributor.mimir.svc.cluster.local"
+  distributorPort: 8080
+
+# RLS service configuration
+rls:
+  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  extAuthzPort: 8080
+  rateLimitPort: 8081
+
+# External authorization configuration
+extAuthz:
+  maxRequestBytes: 4194304  # 4 MiB
+  failureModeAllow: false
+
+# Rate limiting configuration
+rateLimit:
+  failureModeDeny: true
+  domain: "mimir_remote_write"
+
+# Proxy configuration
+proxy:
+  upstreamTimeout: "30s"
+
+# Deployment configuration
+replicaCount: 1
+
+image:
+  repository: ghcr.io/AkshayDubey29/mimir-envoy
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: true
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+# ConfigMap for Envoy configuration
+configMap:
+  create: true
+  name: ""
+
+# Additional environment variables
+env: []
+
+# Additional volume mounts
+volumeMounts: []
+
+# Additional volumes
+volumes: [] 
