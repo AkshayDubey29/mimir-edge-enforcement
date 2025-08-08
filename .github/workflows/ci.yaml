@@ -65,6 +65,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      DOCKER_BUILD_CONTEXT: .
     steps:
       - uses: actions/checkout@v4
       - name: Setup QEMU
@@ -80,7 +82,7 @@ jobs:
       - name: Build and push RLS
         uses: docker/build-push-action@v5
         with:
-          context: services/rls
+          context: .
           file: services/rls/Dockerfile
           push: true
           tags: |
@@ -90,7 +92,7 @@ jobs:
       - name: Build and push overrides-sync
         uses: docker/build-push-action@v5
         with:
-          context: services/overrides-sync
+          context: .
           file: services/overrides-sync/Dockerfile
           push: true
           tags: |

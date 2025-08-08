@@ -3,20 +3,20 @@ module github.com/AkshayDubey29/mimir-edge-enforcement/services/rls
 go 1.22
 
 require (
-    github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
-    github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
-    github.com/envoyproxy/go-control-plane v0.12.0
-    github.com/golang/protobuf v1.5.3
-    github.com/google/uuid v1.4.0
-    github.com/gorilla/mux v1.8.1
-    github.com/prometheus/client_golang v1.17.0
-    github.com/redis/go-redis/v9 v9.3.0
-    github.com/rs/zerolog v1.31.0
-    github.com/stretchr/testify v1.8.4
-    go.uber.org/zap v1.26.0
-    golang.org/x/net v0.17.0
-    google.golang.org/grpc v1.59.0
-    google.golang.org/protobuf v1.31.0
+	github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin v0.0.0
+	github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
+	github.com/envoyproxy/go-control-plane v0.12.0
+	github.com/golang/protobuf v1.5.3
+	github.com/google/uuid v1.4.0
+	github.com/gorilla/mux v1.8.1
+	github.com/prometheus/client_golang v1.17.0
+	github.com/redis/go-redis/v9 v9.3.0
+	github.com/rs/zerolog v1.31.0
+	github.com/stretchr/testify v1.8.4
+	go.uber.org/zap v1.26.0
+	golang.org/x/net v0.17.0
+	google.golang.org/grpc v1.59.0
+	google.golang.org/protobuf v1.32.0
 )
 
 replace (
@@ -37,7 +37,7 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_model v0.4.1-0.20230718164431-9a2bf3000d16 // indirect
+	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
 	github.com/prometheus/procfs v0.11.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
@@ -46,4 +46,4 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20231016165738-49dd2c1f3d0b // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231016165738-49dd2c1f3d0b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-) 
+)
