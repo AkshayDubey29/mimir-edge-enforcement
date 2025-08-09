@@ -91,7 +91,9 @@ Deploy individual components as needed:
 ./scripts/deploy-admin-ui.sh --type ingress --domain admin.your-domain.com
 ```
 
-## 🔧 Manual Deployment Steps
+## 🔧 Component-by-Component Deployment
+
+For users who want full control over each component deployment, follow these detailed steps:
 
 ### Step 1: Environment Setup
 ```bash
@@ -145,9 +147,374 @@ data:
 EOF
 ```
 
-### Step 3: Deploy with Production Values
+### Step 3: Deploy RLS (Rate Limiting Service)
 
-Use the production values template:
+```bash
+# Create values file for RLS
+cat > values-rls.yaml <<EOF
+# Production configuration for RLS
+replicaCount: 3
+
+image:
+  repository: ghcr.io/akshaydubey29/mimir-rls
+  tag: "latest"  # 🔴 CHANGE: Use specific SHA in production: "abc123def"
+  pullPolicy: IfNotPresent
+
+# Production resource limits
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# High availability
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# Pod disruption budget
+pdb:
+  enabled: true
+  minAvailable: 2
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# Service configuration
+service:
+  type: ClusterIP
+  extAuthzPort: 8080
+  rateLimitPort: 8081
+  adminPort: 8082
+
+# Mimir configuration
+mimir:
+  namespace: "mimir"
+  overridesConfigMap: "mimir-overrides"
+
+# Default limits (0 = ConfigMap driven)
+defaultSamplesPerSecond: 0
+defaultBurstPercent: 0
+maxBodyBytes: 0
+
+# Logging
+log:
+  level: "info"
+  format: "json"
+
+# Metrics
+metrics:
+  enabled: true
+  port: 9090
+
+# Network policy
+networkPolicy:
+  enabled: true
+
+# Image pull secrets
+imagePullSecrets:
+  - name: ghcr-secret
+EOF
+
+# Deploy RLS
+helm install mimir-rls charts/mimir-rls \
+  --namespace mimir-edge-enforcement \
+  --values values-rls.yaml \
+  --wait --timeout=300s
+
+# Verify deployment
+kubectl get pods -l app.kubernetes.io/name=mimir-rls -n mimir-edge-enforcement
+kubectl get services -l app.kubernetes.io/name=mimir-rls -n mimir-edge-enforcement
+
+# Check logs
+kubectl logs -l app.kubernetes.io/name=mimir-rls -n mimir-edge-enforcement --tail=50
+```
+
+### Step 4: Deploy Overrides-Sync Controller
+
+```bash
+# Create values file for overrides-sync
+cat > values-overrides-sync.yaml <<EOF
+# Production configuration for overrides-sync
+replicaCount: 2
+
+image:
+  repository: ghcr.io/akshaydubey29/overrides-sync
+  tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+  pullPolicy: IfNotPresent
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Pod disruption budget for HA
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Controller configuration
+mimir:
+  namespace: "mimir"
+  overridesConfigMap: "mimir-overrides"
+
+rls:
+  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  adminPort: "8082"
+
+# Polling configuration
+pollFallbackSeconds: 30
+
+# Security
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# RBAC for ConfigMap access
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Logging
+log:
+  level: "info"
+  format: "json"
+
+# Image pull secrets
+imagePullSecrets:
+  - name: ghcr-secret
+EOF
+
+# Deploy overrides-sync
+helm install overrides-sync charts/overrides-sync \
+  --namespace mimir-edge-enforcement \
+  --values values-overrides-sync.yaml \
+  --wait --timeout=300s
+
+# Verify deployment
+kubectl get pods -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement
+
+# Check logs for tenant parsing
+kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement --tail=50
+
+# Expected logs:
+# {"level":"info","message":"found overrides.yaml - parsing Mimir YAML format"}
+# {"level":"info","message":"found tenants in overrides YAML","tenants_in_yaml":3}
+# {"level":"info","message":"syncing overrides to RLS","tenant_count":3}
+```
+
+### Step 5: Deploy Envoy Proxy
+
+```bash
+# Create values file for Envoy
+cat > values-envoy.yaml <<EOF
+# Production configuration for Envoy
+replicaCount: 3
+
+image:
+  repository: ghcr.io/akshaydubey29/mimir-envoy
+  tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+  pullPolicy: IfNotPresent
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# High availability
+hpa:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 80
+
+# Pod disruption budget
+pdb:
+  enabled: true
+  minAvailable: 2
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# Mimir distributor configuration
+mimir:
+  distributorHost: "distributor.mimir.svc.cluster.local"  # 🔴 CHANGE: Your Mimir service
+  distributorPort: 8080
+
+# RLS configuration
+rls:
+  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  extAuthzPort: 8080
+  rateLimitPort: 8081
+
+# Resource limits and overload protection
+resourceLimits:
+  maxDownstreamConnections: 25000      # High for production traffic
+  maxHeapSizeBytes: 838860800          # 800 MiB (80% of 1Gi container)
+  disableKeepaliveThreshold: 0.8       # Disable keepalive at 80%
+  stopAcceptingRequestsThreshold: 0.95 # Stop accepting at 95%
+  shrinkHeapThreshold: 0.8             # Shrink heap at 80%
+  heapStopAcceptingThreshold: 0.95     # Stop accepting at 95% heap
+
+# External authorization
+extAuthz:
+  maxRequestBytes: 4194304  # 4 MiB
+  failureModeAllow: false   # Fail closed for security
+
+# Rate limiting
+rateLimit:
+  failureModeDeny: true     # Deny on rate limit service failure
+
+# Tenant configuration
+tenantHeader: "X-Scope-OrgID"
+
+# Security
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# Image pull secrets
+imagePullSecrets:
+  - name: ghcr-secret
+EOF
+
+# Deploy Envoy
+helm install mimir-envoy charts/envoy \
+  --namespace mimir-edge-enforcement \
+  --values values-envoy.yaml \
+  --wait --timeout=300s
+
+# Verify deployment
+kubectl get pods -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement
+kubectl get services -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement
+
+# Test Envoy admin interface
+kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement &
+curl http://localhost:8001/ready
+curl http://localhost:8001/stats | grep -E "(ready|healthy)"
+```
+
+### Step 6: Deploy Admin UI (Optional)
+
+```bash
+# Create values file for Admin UI
+cat > values-admin-ui.yaml <<EOF
+# Production configuration for Admin UI
+replicaCount: 3
+
+image:
+  repository: ghcr.io/akshaydubey29/mimir-edge-admin
+  tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+  pullPolicy: IfNotPresent
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Auto-scaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+# High availability
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+
+# Ingress configuration (customize for your setup)
+ingress:
+  enabled: true
+  className: "nginx"  # 🔧 CUSTOMIZE: Your ingress class
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+  hosts:
+    - host: mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: mimir-admin-tls
+      hosts:
+        - mimir-admin.your-domain.com
+
+# API configuration
+config:
+  apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
+  serverName: "mimir-admin.your-domain.com"  # 🔴 CHANGE: Your domain
+
+# Security
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101  # nginx user
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# Image pull secrets
+imagePullSecrets:
+  - name: ghcr-secret
+EOF
+
+# Create basic auth secret for Admin UI (optional)
+htpasswd -c auth admin
+kubectl create secret generic admin-ui-auth --from-file=auth -n mimir-edge-enforcement
+rm auth
+
+# Deploy Admin UI
+helm install mimir-admin charts/admin-ui \
+  --namespace mimir-edge-enforcement \
+  --values values-admin-ui.yaml \
+  --wait --timeout=300s
+
+# Verify deployment
+kubectl get pods -l app.kubernetes.io/name=mimir-admin -n mimir-edge-enforcement
+kubectl get ingress -n mimir-edge-enforcement
+
+# Test Admin UI
+curl https://mimir-admin.your-domain.com/api/tenants
+```
+
+### Step 7: Deploy with Production Values (All-in-One Alternative)
+
+As an alternative to the component-by-component approach above, use the production values template:
 
 ```bash
 # Use the production values file
@@ -430,7 +797,7 @@ helm install mimir-edge-enforcement . \
 
 ## 🎯 NGINX Canary Integration
 
-### Step 4: Configure NGINX for Canary Rollout
+### Step 8: Configure NGINX for Canary Rollout
 
 Update your existing NGINX configuration for **safe canary deployment**:
 
@@ -445,7 +812,7 @@ kubectl apply -f examples/nginx-with-canary.yaml
 kubectl rollout restart deployment/mimir-nginx -n mimir
 ```
 
-### Step 5: Manage Canary Rollout
+### Step 9: Manage Canary Rollout
 
 Use the canary management script for **safe traffic migration**:
 
@@ -471,7 +838,7 @@ kubectl logs -l app=mimir-rls -n mimir-edge-enforcement --tail=100 -f
 
 ## 📊 Post-Deployment Verification
 
-### Step 6: Verify All Components
+### Step 10: Verify All Components
 
 ```bash
 # Check all pods are running
@@ -488,7 +855,7 @@ kubectl exec -it deployment/mimir-rls -n mimir-edge-enforcement -- \
   wget -qO- http://mimir-envoy:8080/stats | grep -E "(ready|healthy)"
 ```
 
-### Step 7: Verify Mimir ConfigMap Integration
+### Step 11: Verify Mimir ConfigMap Integration
 
 ```bash
 # Check overrides-sync logs for tenant parsing
@@ -504,7 +871,7 @@ kubectl exec -it deployment/mimir-rls -n mimir-edge-enforcement -- \
   wget -qO- http://localhost:8082/api/tenants | jq .
 ```
 
-### Step 8: Test Rate Limiting
+### Step 12: Test Rate Limiting
 
 ```bash
 # Port forward for testing
