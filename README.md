@@ -25,6 +25,32 @@ Alloy → NGINX → Envoy → Mimir Distributor
 
 ## Quick Start
 
+### 🎯 One-Shot Production Deployment
+
+Deploy the complete system with a single command:
+
+```bash
+# Set your GitHub credentials (for private registry access)
+export GITHUB_USERNAME=your-username
+export GITHUB_TOKEN=your-personal-access-token
+
+# Deploy everything including Admin UI
+./scripts/deploy-complete.sh production mimir-admin.your-domain.com
+
+# Or use the advanced deployment script
+./scripts/deploy-production.sh production your-domain.com mimir-admin.your-domain.com complete
+```
+
+This will deploy:
+- ✅ **RLS** (Rate Limiting Service) - 3 replicas with auto-scaling
+- ✅ **Overrides Sync Controller** - Watches Mimir ConfigMap
+- ✅ **Envoy Proxy** - ext_authz + ratelimit filters
+- ✅ **Admin UI** - React dashboard with Ingress + SSL + authentication
+
+**Access your Admin UI at:** `https://mimir-admin.your-domain.com`
+
+### 🛠️ Manual Setup
+
 ```bash
 # Clone and setup
 git clone <repo>

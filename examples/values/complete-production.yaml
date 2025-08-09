@@ -1,0 +1,488 @@
+# Complete Production Deployment Values for mimir-edge-enforcement
+# This file deploys ALL components in one shot: RLS + Overrides-Sync + Envoy + Admin UI
+# Copy and customize this file for your environment
+
+# =================================================================
+# GLOBAL CONFIGURATION - UPDATE THESE FIRST!
+# =================================================================
+global:
+  # Your domains (🔴 MUST CHANGE!)
+  domains:
+    admin: "mimir-admin.your-domain.com"      # 🔴 CHANGE: Admin UI domain
+    
+  # Your Mimir deployment (🔴 MUST CHANGE!)
+  mimir:
+    namespace: "mimir"                        # 🔴 CHANGE: Your Mimir namespace
+    configMap: "mimir-overrides"              # 🔴 CHANGE: Your overrides ConfigMap
+    distributorService: "mimir-distributor"   # 🔴 CHANGE: Your Mimir distributor service
+    
+  # Container registry (🔴 MUST CHANGE!)
+  registry:
+    url: "ghcr.io"
+    username: "your-github-username"          # 🔴 CHANGE: Your GitHub username
+    # password: Set via GITHUB_TOKEN env var   # 🔴 CHANGE: Use environment variable
+    
+  # Cluster information
+  cluster:
+    name: "production"
+    region: "us-west-2"                       # 🔧 CUSTOMIZE: Your region
+    
+  # Ingress controller (🔧 CUSTOMIZE!)
+  ingress:
+    className: "nginx"                        # 🔧 CUSTOMIZE: nginx, traefik, istio, etc.
+    certIssuer: "letsencrypt-prod"           # 🔧 CUSTOMIZE: Your cert-manager issuer
+    
+  # Security settings
+  security:
+    networkPolicies: true
+    podSecurityStandards: true
+    ipWhitelist: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"  # 🔧 CUSTOMIZE: Your office/VPN IPs
+
+# =================================================================
+# RLS (Rate Limiting Service) Configuration
+# =================================================================
+rls:
+  enabled: true
+  replicaCount: 3
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-rls
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Auto-scaling
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  
+  # High availability
+  pdb:
+    enabled: true
+    minAvailable: 2
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    extAuthzPort: 8080
+    rateLimitPort: 8081
+    adminPort: 8082
+    metricsPort: 9090
+  
+  # Default limits (0 = ConfigMap driven only)
+  defaultSamplesPerSecond: 0
+  defaultBurstPercent: 0
+  maxBodyBytes: 0
+  
+  # Logging
+  log:
+    level: "info"
+    format: "json"
+  
+  # Metrics
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      interval: 30s
+      labels:
+        release: prometheus
+  
+  # Network policy
+  networkPolicy:
+    enabled: true
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Overrides Sync Controller Configuration  
+# =================================================================
+overridesSync:
+  enabled: true
+  replicaCount: 2
+  
+  image:
+    repository: ghcr.io/akshaydubey29/overrides-sync
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # High availability
+  hpa:
+    enabled: false  # Controller doesn't need auto-scaling
+    
+  pdb:
+    enabled: true
+    minAvailable: 1
+  
+  # Controller settings
+  pollFallbackSeconds: 30
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # RBAC
+  serviceAccount:
+    create: true
+    annotations: {}
+  
+  rbac:
+    create: true
+  
+  # Logging
+  log:
+    level: "info"
+    format: "json"
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Envoy Proxy Configuration
+# =================================================================
+envoy:
+  enabled: true
+  replicaCount: 3
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-envoy
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  # Auto-scaling
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15
+    targetCPUUtilizationPercentage: 80
+  
+  # High availability
+  pdb:
+    enabled: true
+    minAvailable: 2
+  
+  # Service configuration
+  service:
+    type: ClusterIP  # 🔧 CUSTOMIZE: LoadBalancer for direct access
+    port: 8080
+    annotations: {}
+  
+  # External authorization settings
+  extAuthz:
+    maxRequestBytes: 4194304  # 4 MiB
+    failureModeAllow: false   # 🔴 SECURITY: Fail closed
+  
+  # Rate limiting settings
+  rateLimit:
+    failureModeDeny: true     # 🔴 SECURITY: Deny on failure
+  
+  # Tenant configuration
+  tenantHeader: "X-Scope-OrgID"
+  
+  # Remote write configuration
+  remoteWrite:
+    path: "/api/v1/push"
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Admin UI Configuration (Full Production Setup)
+# =================================================================
+adminUI:
+  enabled: true  # ✅ ENABLED: Complete monitoring solution
+  replicaCount: 3
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-edge-admin
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 300m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Auto-scaling
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+  
+  # High availability
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    annotations: {}
+  
+  # Ingress configuration (Production-ready with security)
+  ingress:
+    enabled: true
+    className: ""  # Will be set from global.ingress.className
+    annotations:
+      # SSL/TLS - automatic from global.ingress.certIssuer
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      
+      # Authentication
+      nginx.ingress.kubernetes.io/auth-type: basic
+      nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+      nginx.ingress.kubernetes.io/auth-realm: "Authentication Required - Mimir Admin UI"
+      
+      # Rate limiting
+      nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+      nginx.ingress.kubernetes.io/rate-limit-rpm: "60"
+      
+      # Security headers
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer-when-downgrade" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      
+      # CORS for API access
+      nginx.ingress.kubernetes.io/enable-cors: "true"
+      nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+      nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+      
+    hosts:
+      - host: ""  # Will be set from global.domains.admin
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: mimir-admin-tls
+        hosts:
+          - ""  # Will be set from global.domains.admin
+  
+  # Application configuration
+  config:
+    environment: "production"
+    apiBaseUrl: ""  # Will be dynamically set
+    serverName: ""  # Will be set from global.domains.admin
+    nginxConfig: true
+  
+  # Security hardening
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  
+  # Network policy
+  networkPolicy:
+    enabled: true
+    ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx  # 🔧 CUSTOMIZE: Your ingress namespace
+        ports:
+        - protocol: TCP
+          port: 80
+    egress:
+      - to: []  # RLS service - will be configured dynamically
+        ports:
+        - protocol: TCP
+          port: 8082
+      - to: []  # DNS
+        ports:
+        - protocol: UDP
+          port: 53
+  
+  # Monitoring
+  serviceMonitor:
+    enabled: false  # Admin UI doesn't expose metrics yet
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Service Dependencies (Auto-configured)
+# =================================================================
+# These are automatically configured by the deployment script
+# based on the global configuration above. You normally don't
+# need to modify these unless you have custom requirements.
+
+# RLS dependencies
+rlsDependencies:
+  mimir:
+    namespace: ""     # Set from global.mimir.namespace
+    overridesConfigMap: ""  # Set from global.mimir.configMap
+
+# Overrides Sync dependencies  
+overridesSyncDependencies:
+  mimir:
+    namespace: ""     # Set from global.mimir.namespace
+    overridesConfigMap: ""  # Set from global.mimir.configMap
+  rls:
+    host: ""          # Set to mimir-rls.{namespace}.svc.cluster.local
+    adminPort: 8082
+
+# Envoy dependencies
+envoyDependencies:
+  mimir:
+    distributorHost: ""  # Set from global.mimir
+    distributorPort: 8080
+  rls:
+    host: ""            # Set to mimir-rls.{namespace}.svc.cluster.local
+    extAuthzPort: 8080
+    rateLimitPort: 8081
+
+# Admin UI dependencies
+adminUIDependencies:
+  rls:
+    apiBaseUrl: ""      # Set to http://mimir-rls.{namespace}.svc.cluster.local:8082
+  ingress:
+    className: ""       # Set from global.ingress.className
+    certIssuer: ""      # Set from global.ingress.certIssuer
+    host: ""            # Set from global.domains.admin
+    ipWhitelist: ""     # Set from global.security.ipWhitelist
+
+# =================================================================
+# Monitoring Integration (Optional)
+# =================================================================
+monitoring:
+  enabled: true
+  
+  # Prometheus ServiceMonitors
+  serviceMonitors:
+    rls: true
+    envoy: false      # Envoy metrics via admin interface
+    adminUI: false    # No metrics endpoint yet
+  
+  # Grafana dashboards (if grafana-operator is available)
+  dashboards:
+    enabled: false    # 🔧 CUSTOMIZE: Enable if you have grafana-operator
+    
+  # Alert rules (if prometheus-operator is available)  
+  alerts:
+    enabled: false    # 🔧 CUSTOMIZE: Enable if you have prometheus-operator
+
+# =================================================================
+# Advanced Configuration (Optional)
+# =================================================================
+
+# Custom ConfigMaps/Secrets
+customConfig:
+  # Additional ConfigMaps to create
+  configMaps: {}
+  # Additional Secrets to create  
+  secrets: {}
+
+# Node selection and affinity
+nodeSelection:
+  # Node selector for all components
+  nodeSelector: {}
+  
+  # Tolerations for all components
+  tolerations: []
+  
+  # Anti-affinity to spread pods across nodes
+  podAntiAffinity:
+    enabled: true
+    
+# Resource quotas and limits
+resourceManagement:
+  # Namespace resource quota
+  quota:
+    enabled: false
+    hard:
+      requests.cpu: "10"
+      requests.memory: "20Gi"
+      limits.cpu: "20"
+      limits.memory: "40Gi"
+      persistentvolumeclaims: "10"
+  
+  # Limit ranges
+  limitRange:
+    enabled: false
+
+# Backup and disaster recovery
+backup:
+  enabled: false
+  # Configuration for backing up RLS state (if persistent storage is used)
+
+# Development and testing overrides
+# (Uncomment for non-production environments)
+# development:
+#   rls:
+#     replicaCount: 1
+#     log:
+#       level: "debug"
+#   envoy:
+#     replicaCount: 1
+#   adminUI:
+#     replicaCount: 1
+#     ingress:
+#       annotations:
+#         nginx.ingress.kubernetes.io/auth-type: ""  # No auth for dev
