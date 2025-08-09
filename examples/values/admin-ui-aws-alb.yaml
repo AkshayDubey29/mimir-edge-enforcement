@@ -1,0 +1,149 @@
+# Admin UI Configuration for AWS ALB Ingress
+# Domain: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+
+adminUI:
+  enabled: true
+  replicaCount: 3
+
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-edge-admin
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+  # Auto-scaling
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+
+  # High availability
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 2
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    annotations:
+      service.beta.kubernetes.io/aws-load-balancer-type: "alb"
+      service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+
+  # AWS ALB Ingress configuration
+  ingress:
+    enabled: true
+    className: "alb"
+    annotations:
+      # AWS ALB Configuration
+      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"
+      alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
+      alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
+      alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400"
+      alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/scheme: "internal"
+      alb.ingress.kubernetes.io/security-groups: "sg-0a537b10f8b71c3c,sg-05a0b6bb8700b4164"
+      alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-02487497d2f5e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"
+      alb.ingress.kubernetes.io/success-codes: "200"
+      alb.ingress.kubernetes.io/tags: "role=couwatch_mimir_edge_enforcement"
+      alb.ingress.kubernetes.io/target-type: "ip"
+      kubernetes.io/ingress.class: "alb"
+      
+      # Admin UI health checks
+      alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+      alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+      alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+      
+      # Security and rate limiting
+      nginx.ingress.kubernetes.io/rate-limit: "100"
+      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      
+      # CORS for Admin UI
+      nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+      nginx.ingress.kubernetes.io/cors-allow-origin: "https://mimir-edge-enforcement.vzone1.kr.couwatchdev.net"
+      nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Content-Length"
+      nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    hosts:
+    - host: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+      paths:
+      - path: /
+        pathType: Prefix
+    
+    tls:
+    - hosts:
+      - mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+      secretName: mimir-edge-enforcement-tls
+
+  # API configuration
+  config:
+    environment: "production"
+    apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
+    serverName: "mimir-edge-enforcement.vzone1.kr.couwatchdev.net"
+    nginxConfig: true
+
+  # Security configuration
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101  # nginx user
+    runAsGroup: 101
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+
+  # Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+
+  # Network Policy for security
+  networkPolicy:
+    enabled: true
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: aws-load-balancer-controller
+      - namespaceSelector:
+          matchLabels:
+            name: kube-system
+      ports:
+      - protocol: TCP
+        port: 80
+    egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: mimir-edge-enforcement
+      ports:
+      - protocol: TCP
+        port: 8082  # RLS Admin API
+
+  # Image pull secrets
+  imagePullSecrets:
+  - name: ghcr-secret
+
+# Optional: Enable basic authentication
+# auth:
+#   enabled: true
+#   type: "basic"
+#   credentials:
+#     admin: "$2y$10$..."  # htpasswd generated hash
+
+# Global settings
+global:
+  imageRegistry: ghcr.io/akshaydubey29
+  imagePullSecrets:
+  - name: ghcr-secret
