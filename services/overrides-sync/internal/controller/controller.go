@@ -1,8 +1,11 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -27,9 +30,10 @@ type Config struct {
 
 // Controller watches Mimir overrides ConfigMap and syncs to RLS
 type Controller struct {
-	config    *Config
-	k8sClient *kubernetes.Clientset
-	logger    zerolog.Logger
+	config     *Config
+	k8sClient  *kubernetes.Clientset
+	httpClient *http.Client
+	logger     zerolog.Logger
 
 	// State
 	lastResourceVersion string
@@ -39,10 +43,11 @@ type Controller struct {
 // NewController creates a new controller
 func NewController(config *Config, k8sClient *kubernetes.Clientset, logger zerolog.Logger) *Controller {
 	return &Controller{
-		config:    config,
-		k8sClient: k8sClient,
-		logger:    logger,
-		stopChan:  make(chan struct{}),
+		config:     config,
+		k8sClient:  k8sClient,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		logger:     logger,
+		stopChan:   make(chan struct{}),
 	}
 }
 
@@ -164,20 +169,83 @@ func (c *Controller) syncOverridesFromConfigMap(configMap *v1.ConfigMap) error {
 		return fmt.Errorf("failed to parse overrides: %w", err)
 	}
 
-	// Sync to RLS (simplified - in real implementation, you'd call RLS gRPC API)
+	// Sync to RLS via HTTP API
 	c.logger.Info().
 		Int("tenant_count", len(overrides)).
+		Str("rls_host", c.config.RLSHost).
+		Str("rls_port", c.config.RLSAdminPort).
 		Msg("syncing overrides to RLS")
 
+	// Send each tenant's limits to RLS
+	successCount := 0
 	for tenantID, limits := range overrides {
-		c.logger.Debug().
-			Str("tenant", tenantID).
-			Float64("samples_per_second", limits.SamplesPerSecond).
-			Msg("syncing tenant limits")
-
-		// TODO: Call RLS gRPC API to set limits
-		// For now, just log
+		if err := c.sendTenantLimitsToRLS(tenantID, limits); err != nil {
+			c.logger.Error().
+				Err(err).
+				Str("tenant", tenantID).
+				Msg("failed to sync tenant limits to RLS")
+		} else {
+			c.logger.Debug().
+				Str("tenant", tenantID).
+				Float64("samples_per_second", limits.SamplesPerSecond).
+				Float64("burst_percent", limits.BurstPercent).
+				Int64("max_body_bytes", limits.MaxBodyBytes).
+				Msg("successfully synced tenant limits to RLS")
+			successCount++
+		}
 	}
+
+	c.logger.Info().
+		Int("total_tenants", len(overrides)).
+		Int("successful_syncs", successCount).
+		Int("failed_syncs", len(overrides)-successCount).
+		Msg("completed sync to RLS")
+
+	return nil
+}
+
+// sendTenantLimitsToRLS sends tenant limits to RLS via HTTP API
+func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.TenantLimits) error {
+	// Build RLS URL
+	rlsURL := fmt.Sprintf("http://%s:%s/api/tenants/%s/limits", c.config.RLSHost, c.config.RLSAdminPort, tenantID)
+	
+	// Marshal limits to JSON
+	limitsJSON, err := json.Marshal(tenantLimits)
+	if err != nil {
+		return fmt.Errorf("failed to marshal tenant limits: %w", err)
+	}
+
+	// Create HTTP request
+	req, err := http.NewRequest(http.MethodPut, rlsURL, bytes.NewBuffer(limitsJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "overrides-sync/1.0")
+
+	// Send request
+	c.logger.Debug().
+		Str("tenant_id", tenantID).
+		Str("url", rlsURL).
+		Str("method", "PUT").
+		Msg("sending tenant limits to RLS")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("RLS returned status %d: %s", resp.StatusCode, resp.Status)
+	}
+
+	c.logger.Debug().
+		Str("tenant_id", tenantID).
+		Int("status_code", resp.StatusCode).
+		Msg("successfully sent tenant limits to RLS")
 
 	return nil
 }
