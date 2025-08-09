@@ -80,12 +80,16 @@ jobs:
       - name: Build Go binaries for multiple architectures
         run: |
           # Build RLS for amd64 and arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o services/rls/rls-amd64 services/rls/cmd/rls/main.go
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o services/rls/rls-arm64 services/rls/cmd/rls/main.go
+          cd services/rls
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o rls-amd64 cmd/rls/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o rls-arm64 cmd/rls/main.go
+          cd ../..
           
           # Build overrides-sync for amd64 and arm64
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o services/overrides-sync/overrides-sync-amd64 services/overrides-sync/cmd/overrides-sync/main.go
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o services/overrides-sync/overrides-sync-arm64 services/overrides-sync/cmd/overrides-sync/main.go
+          cd services/overrides-sync
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o overrides-sync-amd64 cmd/overrides-sync/main.go
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -a -installsuffix cgo -o overrides-sync-arm64 cmd/overrides-sync/main.go
+          cd ../..
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
