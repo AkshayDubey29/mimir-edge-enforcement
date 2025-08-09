@@ -35,17 +35,7 @@ data:
       refresh_interval: 0.25s
       resource_monitors:
       - name: "envoy.resource_monitors.downstream_connections"
-        thresholds:
-        - name: "envoy.overload_actions.disable_http_keepalive"
-          value: {{ .Values.resourceLimits.disableKeepaliveThreshold }}
-        - name: "envoy.overload_actions.stop_accepting_requests"
-          value: {{ .Values.resourceLimits.stopAcceptingRequestsThreshold }}
       - name: "envoy.resource_monitors.fixed_heap"
-        thresholds:
-        - name: "envoy.overload_actions.shrink_heap"
-          value: {{ .Values.resourceLimits.shrinkHeapThreshold }}
-        - name: "envoy.overload_actions.stop_accepting_requests"
-          value: {{ .Values.resourceLimits.heapStopAcceptingThreshold }}
       actions:
       - name: "envoy.overload_actions.disable_http_keepalive"
         triggers:
