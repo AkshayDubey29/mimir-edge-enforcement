@@ -1,0 +1,133 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mimir-edge-enforcement-admin-ui
+  namespace: mimir-edge-enforcement
+  annotations:
+    # AWS ALB Configuration
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+    alb.ingress.kubernetes.io/backend-protocol-version: HTTP1
+    alb.ingress.kubernetes.io/target-group-attributes: stickiness.enabled=false,deregistration_delay.timeout_seconds=30,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400
+    alb.ingress.kubernetes.io/inbound-cidrs: 10.0.0.0/8
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/security-groups: sg-0a537b10f8b71c3c,sg-05a0b6bb8700b4164
+    alb.ingress.kubernetes.io/subnets: subnet-01ab33de57fc8101,subnet-02487497d2f5e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/tags: role=couwatch_mimir_edge_enforcement
+    alb.ingress.kubernetes.io/target-type: ip
+    kubernetes.io/ingress.class: alb
+
+    # Admin UI specific configurations
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "30"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/unhealthy-threshold-count: "3"
+
+    # Rate limiting for Admin UI protection
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+
+    # SSL and security
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Timeout configurations for Admin UI
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "64k"
+    nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
+
+    # CORS settings for Admin UI
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://mimir-edge-enforcement.vzone1.kr.couwatchdev.net"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Content-Length"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "DENY" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+      add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'" always;
+
+    # Basic authentication (optional - uncomment if needed)
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+    # nginx.ingress.kubernetes.io/auth-realm: "Mimir Edge Enforcement Admin"
+
+spec:
+  ingressClassName: alb
+  rules:
+  - host: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+    http:
+      paths:
+      # Admin UI Frontend (React App)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-edge-enforcement-admin-ui
+            port:
+              number: 80
+      
+      # Admin API Endpoints
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: mimir-rls
+            port:
+              number: 8082
+      
+      # Health check endpoint
+      - path: /healthz
+        pathType: Exact
+        backend:
+          service:
+            name: mimir-edge-enforcement-admin-ui
+            port:
+              number: 80
+
+  # TLS configuration (handled by ALB with ACM certificate)
+  tls:
+  - hosts:
+    - mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+    secretName: mimir-edge-enforcement-tls
+
+---
+# Optional: Basic Auth Secret (uncomment if basic auth is needed)
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: admin-ui-auth
+#   namespace: mimir-edge-enforcement
+# type: Opaque
+# data:
+#   # admin:admin123 (change this!)
+#   auth: YWRtaW46JGFwcjEkNEcuRVdLOGQkOUk4VXV4bXBQdXF2R0xZTFMvRnhwLgo=
+
+---
+# Service for Admin UI (if not already created by Helm)
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-edge-enforcement-admin-ui
+  namespace: mimir-edge-enforcement
+  labels:
+    app.kubernetes.io/name: mimir-edge-enforcement-admin-ui
+    app.kubernetes.io/component: admin-ui
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 80
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: mimir-edge-enforcement-admin-ui
+    app.kubernetes.io/component: admin-ui
