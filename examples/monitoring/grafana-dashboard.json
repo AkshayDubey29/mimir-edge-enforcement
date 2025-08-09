@@ -1,0 +1,202 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Mimir Edge Enforcement - Production Monitoring",
+    "tags": ["mimir", "edge-enforcement", "rate-limiting"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Edge Protection Overview",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "rate(rls_requests_total[5m])",
+            "legendFormat": "Total Requests/sec"
+          },
+          {
+            "expr": "rate(rls_requests_denied_total[5m])",
+            "legendFormat": "Denied Requests/sec"
+          },
+          {
+            "expr": "(rate(rls_requests_denied_total[5m]) / rate(rls_requests_total[5m])) * 100",
+            "legendFormat": "Protection Rate %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "green", "value": null},
+                {"color": "yellow", "value": 20},
+                {"color": "red", "value": 50}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Tenant Monitoring",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "rls_tenant_requests_total",
+            "legendFormat": "{{tenant_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Request Flow",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(rls_requests_total[5m])",
+            "legendFormat": "Total Requests"
+          },
+          {
+            "expr": "rate(rls_requests_allowed_total[5m])",
+            "legendFormat": "Allowed (to Mimir)"
+          },
+          {
+            "expr": "rate(rls_requests_denied_total[5m])",
+            "legendFormat": "Denied (at Edge)"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Requests/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+      },
+      {
+        "id": 4,
+        "title": "Denial Reasons",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "increase(rls_denials_total[1h])",
+            "legendFormat": "{{reason}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      },
+      {
+        "id": 5,
+        "title": "Component Health",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up{job=\"rls\"}",
+            "legendFormat": "RLS"
+          },
+          {
+            "expr": "up{job=\"overrides-sync\"}",
+            "legendFormat": "Overrides Sync"
+          },
+          {
+            "expr": "up{job=\"envoy\"}",
+            "legendFormat": "Envoy"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": null},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      },
+      {
+        "id": 6,
+        "title": "Response Time Impact",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(envoy_http_downstream_rq_time_bucket[5m]))",
+            "legendFormat": "95th percentile"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(envoy_http_downstream_rq_time_bucket[5m]))",
+            "legendFormat": "50th percentile"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Response Time (ms)",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+      },
+      {
+        "id": 7,
+        "title": "Resource Usage",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{pod=~\"mimir-rls.*\"}[5m]) * 100",
+            "legendFormat": "RLS CPU %"
+          },
+          {
+            "expr": "container_memory_usage_bytes{pod=~\"mimir-rls.*\"} / 1024 / 1024",
+            "legendFormat": "RLS Memory MB"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+      },
+      {
+        "id": 8,
+        "title": "Mimir Load Reduction",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(cortex_distributor_requests_in_total[5m])",
+            "legendFormat": "Distributor Requests"
+          },
+          {
+            "expr": "rate(cortex_distributor_ingester_append_failures_total[5m])",
+            "legendFormat": "Append Failures"
+          }
+        ],
+        "yAxes": [
+          {
+            "label": "Requests/sec",
+            "min": 0
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32}
+      }
+    ],
+    "annotations": {
+      "list": [
+        {
+          "name": "Deployments",
+          "datasource": "Prometheus",
+          "enable": true,
+          "expr": "changes(up{job=\"rls\"}[1m]) > 0"
+        }
+      ]
+    }
+  }
+}
