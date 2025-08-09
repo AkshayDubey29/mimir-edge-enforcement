@@ -2,8 +2,18 @@ apiVersion: v2
 name: mimir-envoy
 description: Envoy proxy for Mimir edge enforcement
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "1.0.0"
+
+annotations:
+  # Change log for version 0.2.0
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: Fix 426 Upgrade Required errors when NGINX routes HTTP/1.1 traffic to Envoy
+    - kind: added  
+      description: Proper HTTP protocol configuration for downstream (HTTP/1.1) and upstream (HTTP/1.1 to Mimir, HTTP/2 to RLS)
+    - kind: improved
+      description: Enhanced header handling for NGINX proxy integration
 icon: https://raw.githubusercontent.com/envoyproxy/artwork/main/PNG/Envoy_Logo_Final_PANTONE.png
 keywords:
   - mimir
