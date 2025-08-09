@@ -11,6 +11,10 @@ fullnameOverride: ""
 service:
   port: 8080
   type: ClusterIP
+  annotations: {}
+  # nodePort: 30080  # Specify for NodePort service
+  # loadBalancerIP: ""  # Specify for LoadBalancer service
+  # loadBalancerSourceRanges: []  # Restrict LoadBalancer access
 
 # Remote write configuration
 remoteWrite:
@@ -133,6 +137,20 @@ configMap:
 
 # Additional environment variables
 env: []
+
+# Auto-scaling configuration
+hpa:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
 
 # Additional volume mounts
 volumeMounts: []
