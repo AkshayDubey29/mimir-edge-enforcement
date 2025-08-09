@@ -71,6 +71,8 @@ tolerations: []
 affinity: {}
 
 # Horizontal Pod Autoscaler
+# Note: HPA is not recommended for overrides-sync as it's a single ConfigMap watcher.
+# Multiple replicas watching the same ConfigMap create duplicate work and require leader election.
 hpa:
   enabled: false
   minReplicas: 1
@@ -79,9 +81,11 @@ hpa:
   targetMemoryUtilizationPercentage: 80
 
 # Pod Disruption Budget
+# Recommended for production to ensure availability during node maintenance
 pdb:
-  enabled: true
+  enabled: false  # Enable in production with replicaCount: 2
   minAvailable: 1
+  # maxUnavailable: 1
 
 # Network Policy
 networkPolicy:
