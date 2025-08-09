@@ -16,21 +16,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle } from 'lucide-react';
 
-// Mock data - replace with actual API calls
-const mockOverviewData = {
-  stats: {
-    total_requests: 1250000,
-    allowed_requests: 1187500,
-    denied_requests: 62500,
-    allow_percentage: 95.0,
-    active_tenants: 42
-  },
-  top_tenants: [
-    { id: 'tenant-1', name: 'Production', rps: 1500, samples_per_sec: 50000, deny_rate: 2.1 },
-    { id: 'tenant-2', name: 'Staging', rps: 800, samples_per_sec: 25000, deny_rate: 1.5 },
-    { id: 'tenant-3', name: 'Development', rps: 300, samples_per_sec: 10000, deny_rate: 0.8 },
-  ]
-};
+// Overview data is now fetched from real RLS API endpoints
 
 const timeRanges = [
   { value: '5m', label: 'Last 5 minutes' },
@@ -47,16 +33,34 @@ export function Overview() {
     () => fetchOverviewData(timeRange),
     {
       refetchInterval: 30000, // Refetch every 30 seconds
-      initialData: mockOverviewData,
     }
   );
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">Loading overview data...</div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div>Error loading overview data</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="text-lg text-red-600 mb-2">Error loading overview data</div>
+          <div className="text-sm text-gray-500">
+            {error instanceof Error ? error.message : 'Unknown error occurred'}
+          </div>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const { stats, top_tenants } = overviewData;
@@ -80,7 +84,12 @@ export function Overview() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
-          <p className="text-gray-600">Monitor your Mimir edge enforcement system</p>
+          <p className="text-gray-600">
+            Monitor your Mimir edge enforcement system
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+              Live Data
+            </span>
+          </p>
         </div>
         <select 
           value={timeRange} 
@@ -248,12 +257,48 @@ export function Overview() {
   );
 }
 
-// Mock API function - replace with actual implementation
-async function fetchOverviewData(_timeRange: string) {
-  // In a real implementation, this would call the RLS admin API
-  // const response = await fetch(`/api/overview?range=${timeRange}`);
-  // return response.json();
+// Real API function - calls the RLS admin API
+async function fetchOverviewData(timeRange: string) {
+  // Fetch overview stats
+  const overviewResponse = await fetch(`/api/overview?range=${timeRange}`);
+  if (!overviewResponse.ok) {
+    throw new Error(`Failed to fetch overview data: ${overviewResponse.statusText}`);
+  }
+  const overviewData = await overviewResponse.json();
   
-  // For now, return mock data
-  return mockOverviewData;
+  // Fetch tenant data to calculate top tenants
+  const tenantsResponse = await fetch('/api/tenants');
+  let topTenants = [];
+  
+  if (tenantsResponse.ok) {
+    const tenantsData = await tenantsResponse.json();
+    const tenants = tenantsData.tenants || [];
+    
+    // Transform tenants to top tenants format and sort by metrics
+    topTenants = tenants
+      .filter(tenant => tenant.metrics && (tenant.metrics.allow_rate > 0 || tenant.metrics.deny_rate > 0))
+      .map(tenant => ({
+        id: tenant.id,
+        name: tenant.name || tenant.id,
+        rps: Math.round((tenant.metrics.allow_rate + tenant.metrics.deny_rate) / 60), // Convert to RPS estimate
+        samples_per_sec: tenant.limits?.samples_per_second || 0,
+        deny_rate: tenant.metrics.deny_rate > 0 
+          ? Math.round(((tenant.metrics.deny_rate / (tenant.metrics.allow_rate + tenant.metrics.deny_rate)) * 100) * 10) / 10
+          : 0
+      }))
+      .sort((a, b) => b.rps - a.rps) // Sort by RPS descending
+      .slice(0, 10); // Top 10 tenants
+  }
+  
+  // If no real tenant data, use fallback for demo
+  if (topTenants.length === 0) {
+    topTenants = [
+      { id: 'no-data', name: 'No Active Tenants', rps: 0, samples_per_sec: 0, deny_rate: 0 }
+    ];
+  }
+  
+  return {
+    stats: overviewData.stats,
+    top_tenants: topTenants
+  };
 } 
