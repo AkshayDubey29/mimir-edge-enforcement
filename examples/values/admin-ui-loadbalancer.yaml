@@ -1,0 +1,98 @@
+# Admin UI with LoadBalancer service (direct external access)
+# Use this for cloud environments (AWS ELB, GCP LB, Azure LB)
+
+replicaCount: 3
+
+image:
+  repository: ghcr.io/akshaydubey29/mimir-edge-admin
+  tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+  pullPolicy: IfNotPresent
+
+# LoadBalancer service configuration
+service:
+  type: LoadBalancer
+  port: 80
+  annotations:
+    # AWS LoadBalancer annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+    
+    # GCP LoadBalancer annotations (uncomment for GCP)
+    # cloud.google.com/load-balancer-type: "External"
+    # cloud.google.com/backend-config: '{"default": "admin-ui-backend-config"}'
+    
+    # Azure LoadBalancer annotations (uncomment for Azure)
+    # service.beta.kubernetes.io/azure-load-balancer-external: "true"
+    # service.beta.kubernetes.io/azure-load-balancer-external-subnet: "subnet-name"
+  
+  # Restrict access to specific IP ranges (optional)
+  loadBalancerSourceRanges:
+    - "10.0.0.0/8"     # Private networks
+    - "172.16.0.0/12"  # Private networks
+    - "192.168.0.0/16" # Private networks
+    # - "YOUR_OFFICE_IP/32"  # Add your office IP
+
+# Disable Ingress since we're using LoadBalancer
+ingress:
+  enabled: false
+
+# Configuration
+config:
+  environment: "production"
+  apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
+  serverName: "mimir-admin"
+  nginxConfig: true
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 300m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# High availability
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Security
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 101
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+
+# Network policy (allow LoadBalancer traffic)
+networkPolicy:
+  enabled: true
+  ingress:
+    - from: []  # Allow all external traffic to LoadBalancer
+      ports:
+      - protocol: TCP
+        port: 80
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: mimir-edge-enforcement
+      ports:
+      - protocol: TCP
+        port: 8082
+    - to: []  # Allow DNS
+      ports:
+      - protocol: UDP
+        port: 53
+
+# Image pull secrets (if needed)
+imagePullSecrets:
+  - name: ghcr-secret

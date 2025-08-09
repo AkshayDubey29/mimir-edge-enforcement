@@ -183,5 +183,11 @@ jobs:
           echo "   helm install mimir-rls charts/mimir-rls"
           echo "   helm install mimir-envoy charts/envoy"
           echo "   helm install overrides-sync charts/overrides-sync"
+          echo "   helm install admin-ui charts/admin-ui"
+          echo ""
+          echo "🎨 ADMIN UI ACCESS OPTIONS:"
+          echo "   Ingress:     ./scripts/deploy-admin-ui.sh ingress your-domain.com"
+          echo "   LoadBalancer: ./scripts/deploy-admin-ui.sh loadbalancer"
+          echo "   NodePort:    ./scripts/deploy-admin-ui.sh nodeport"
           echo "======================================================"
 

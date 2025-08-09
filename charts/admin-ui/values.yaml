@@ -1,0 +1,260 @@
+# Default values for admin-ui
+# This is a YAML-formatted file.
+
+# Deployment configuration
+replicaCount: 2
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Container image
+image:
+  repository: ghcr.io/akshaydubey29/mimir-edge-admin
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "latest"
+
+imagePullSecrets: []
+
+# Service account
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 101  # nginx user
+  runAsGroup: 101
+  fsGroup: 101
+
+# Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 101
+  runAsGroup: 101
+  capabilities:
+    drop:
+    - ALL
+
+# Service configuration
+service:
+  type: ClusterIP  # Options: ClusterIP, NodePort, LoadBalancer
+  port: 80
+  # nodePort: 30080  # Specify for NodePort service
+  # loadBalancerIP: ""  # Specify for LoadBalancer service
+  # loadBalancerSourceRanges: []  # Restrict LoadBalancer access
+  annotations: {}
+    # For AWS LoadBalancer:
+    # service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    # For GCP LoadBalancer:
+    # cloud.google.com/load-balancer-type: External
+    # For Azure LoadBalancer:
+    # service.beta.kubernetes.io/azure-load-balancer-external: "true"
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"  # ingress-nginx, traefik, istio, etc.
+  annotations:
+    # Common annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit-connections: "10"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/rate-limit-rpm: "100"
+    
+    # Security headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-XSS-Protection "1; mode=block" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    
+    # Authentication (uncomment for basic auth)
+    # nginx.ingress.kubernetes.io/auth-type: basic
+    # nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+    # nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - Mimir Admin UI'
+    
+    # CORS (if needed)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    
+    # TLS/SSL (for cert-manager)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # cert-manager.io/issuer: "letsencrypt-staging"  # For testing
+    
+  hosts:
+    - host: mimir-admin.local  # 🔴 CHANGE: Replace with your domain
+      paths:
+        - path: /
+          pathType: Prefix
+          
+  tls:
+    - secretName: mimir-admin-tls
+      hosts:
+        - mimir-admin.local  # 🔴 CHANGE: Replace with your domain
+
+# Resource configuration
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Auto-scaling
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Application configuration
+config:
+  # Environment
+  environment: "production"
+  
+  # API configuration
+  apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"  # 🔴 CHANGE: Your RLS service URL
+  
+  # Server configuration
+  serverName: "mimir-admin.local"  # 🔴 CHANGE: Replace with your domain
+  
+  # Enable nginx config customization
+  nginxConfig: true
+
+# Volume mounts and volumes (for nginx config)
+volumeMounts:
+  - name: nginx-config
+    mountPath: /etc/nginx/nginx.conf
+    subPath: nginx.conf
+    readOnly: true
+  - name: tmp
+    mountPath: /tmp
+  - name: var-cache
+    mountPath: /var/cache/nginx
+  - name: var-run
+    mountPath: /var/run
+
+volumes:
+  - name: nginx-config
+    configMap:
+      name: admin-ui-nginx
+      defaultMode: 0644
+  - name: tmp
+    emptyDir: {}
+  - name: var-cache
+    emptyDir: {}
+  - name: var-run
+    emptyDir: {}
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ingress-nginx
+      - namespaceSelector:
+          matchLabels:
+            name: istio-system
+      ports:
+      - protocol: TCP
+        port: 80
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: mimir-edge-enforcement
+      ports:
+      - protocol: TCP
+        port: 8082
+    - to: []  # Allow DNS resolution
+      ports:
+      - protocol: UDP
+        port: 53
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+
+# Additional environment variables
+env: []
+  # - name: CUSTOM_VAR
+  #   value: "custom_value"
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
+
+# Pod lifecycle hooks
+lifecycle: {}
+
+# Liveness and readiness probe overrides
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 30
