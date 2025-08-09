@@ -203,19 +203,19 @@ func handleOverview(rls *service.RLS) http.HandlerFunc {
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
-		
+
 		log.Debug().Msg("handling /api/overview request")
 		stats := rls.OverviewSnapshot()
-		
+
 		response := map[string]any{"stats": stats}
 		log.Info().
 			Int64("total_requests", stats.TotalRequests).
 			Int64("allowed_requests", stats.AllowedRequests).
 			Int64("denied_requests", stats.DeniedRequests).
 			Float64("allow_percentage", stats.AllowPercentage).
-			Int("active_tenants", stats.ActiveTenants).
+			Int("active_tenants", int(stats.ActiveTenants)).
 			Msg("overview API response")
-			
+
 		writeJSON(w, http.StatusOK, response)
 	}
 }
@@ -228,13 +228,13 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
 		}()
-		
+
 		log.Debug().Msg("handling /api/tenants request")
 		tenants := rls.ListTenantsWithMetrics()
-		
+
 		// Log detailed tenant information
 		tenantLogger := log.Info().Int("tenant_count", len(tenants))
-		
+
 		if len(tenants) == 0 {
 			tenantLogger.Msg("tenants API response: NO TENANTS FOUND - this explains zero active tenants!")
 		} else {
@@ -256,7 +256,7 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 			}
 			tenantLogger.Msg("tenants API response with tenant details")
 		}
-		
+
 		response := map[string]any{"tenants": tenants}
 		writeJSON(w, http.StatusOK, response)
 	}
