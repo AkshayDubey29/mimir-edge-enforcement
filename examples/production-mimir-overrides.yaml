@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-overrides
+  namespace: mimir
+data:
+  mimir.yaml: |
+    metrics:
+      per_tenant_metrics_enabled: true
+  overrides.yaml: |
+    overrides:
+      benefit:
+        cardinality_analysis_enabled: true
+        ingestion_burst_size: 3.5e+06
+        ingestion_rate: 350000
+        ingestion_tenant_shard_size: 8
+        max_global_metadata_per_metric: 10
+        max_global_metadata_per_user: 600000
+        max_global_series_per_user: 3e+06
+        max_label_names_per_series: 50
+        ruler_max_rule_groups_per_tenant: 20
+        ruler_max_rules_per_rule_group: 20
+      boltx:
+        accept_ha_samples: true
+        cardinality_analysis_enabled: true
+        ha_cluster_label: cluster
+        ha_replica_label: __replica__
+        ingestion_burst_size: 3.5e+06
+        ingestion_rate: 1e+07
+        ingestion_tenant_shard_size: 40
+        max_cache_freshness: 2h
+        max_global_metadata_per_metric: 10
+        max_global_metadata_per_user: 4e+06
+        max_global_series_per_metric: 5e+06
+        max_global_series_per_user: 2e+07
+        max_label_names_per_series: 250
+        ruler_max_rule_groups_per_tenant: 90
+        ruler_max_rules_per_rule_group: 90
+      buybox:
+        cardinality_analysis_enabled: true
+        ingestion_burst_size: 3.5e+06
+        ingestion_rate: 350000
+        ingestion_tenant_shard_size: 8
+        max_global_metadata_per_metric: 10
+        max_global_series_per_user: 3e+06
