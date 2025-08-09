@@ -1,0 +1,164 @@
+# Prometheus Alert Rules for Mimir Edge Enforcement
+
+groups:
+  - name: edge-enforcement.rules
+    interval: 30s
+    rules:
+      # Recording Rules
+      - record: edge:protection_rate
+        expr: |
+          (
+            rate(rls_requests_denied_total[5m]) / 
+            rate(rls_requests_total[5m])
+          ) * 100
+
+      - record: edge:effectiveness_ratio
+        expr: |
+          rate(rls_requests_denied_total[5m]) / 
+          rate(cortex_distributor_requests_in_total[5m])
+
+      - record: edge:response_time_p95
+        expr: |
+          histogram_quantile(0.95, 
+            rate(envoy_http_downstream_rq_time_bucket[5m])
+          )
+
+      # Alert Rules
+      - alert: EdgeEnforcementDown
+        expr: up{job="rls"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: edge-enforcement
+        annotations:
+          summary: "Edge enforcement RLS service is down"
+          description: "RLS service has been down for more than 1 minute"
+          runbook_url: "https://your-docs.com/runbooks/edge-enforcement"
+
+      - alert: OverridesSyncDown
+        expr: up{job="overrides-sync"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "Overrides sync service is down"
+          description: "Overrides sync has been down for more than 2 minutes"
+
+      - alert: HighProtectionRate
+        expr: edge:protection_rate > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "High protection rate detected"
+          description: "Edge enforcement is blocking {{ $value }}% of requests for 5+ minutes"
+
+      - alert: NoTenantLimitsLoaded
+        expr: |
+          (
+            time() - process_start_time_seconds{job="overrides-sync"}
+          ) > 300 and rls_tenants_total == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: edge-enforcement
+        annotations:
+          summary: "No tenant limits loaded"
+          description: "Overrides sync has been running for 5+ minutes but no tenants loaded"
+
+      - alert: EdgeEnforcementHighLatency
+        expr: edge:response_time_p95 > 500
+        for: 3m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "High latency in edge enforcement"
+          description: "95th percentile response time is {{ $value }}ms"
+
+      - alert: RLSHighMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{pod=~"mimir-rls.*"} / 
+            container_spec_memory_limit_bytes{pod=~"mimir-rls.*"}
+          ) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "RLS high memory usage"
+          description: "RLS memory usage is {{ $value }}% of limit"
+
+      - alert: EnforcementNotEffective
+        expr: |
+          (
+            rate(rls_requests_total[10m]) > 100 and 
+            rate(rls_requests_denied_total[10m]) == 0
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "Edge enforcement may not be effective"
+          description: "High request volume but no denials for 10+ minutes"
+
+      - alert: TenantSyncFailures
+        expr: |
+          rate(overrides_sync_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "Tenant sync failures detected"
+          description: "{{ $value }} sync failures per second"
+
+  - name: mimir-protection.rules
+    interval: 30s
+    rules:
+      # Mimir Protection Effectiveness
+      - record: mimir:load_reduction_ratio
+        expr: |
+          1 - (
+            rate(cortex_distributor_requests_in_total[5m]) / 
+            (
+              rate(cortex_distributor_requests_in_total[5m]) + 
+              rate(rls_requests_denied_total[5m])
+            )
+          )
+
+      - record: mimir:error_rate_improvement
+        expr: |
+          rate(cortex_distributor_ingester_append_failures_total[5m]) / 
+          rate(cortex_distributor_requests_in_total[5m])
+
+      # Alerts for Mimir protection
+      - alert: MimirStillOverloaded
+        expr: |
+          rate(cortex_distributor_ingester_append_failures_total[5m]) / 
+          rate(cortex_distributor_requests_in_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: mimir
+        annotations:
+          summary: "Mimir still experiencing high error rates"
+          description: "{{ $value }}% error rate despite edge enforcement"
+
+      - alert: EdgeProtectionInsufficient
+        expr: |
+          (
+            mimir:load_reduction_ratio < 0.1 and 
+            rate(cortex_distributor_requests_in_total[5m]) > 1000
+          )
+        for: 10m
+        labels:
+          severity: warning
+          service: edge-enforcement
+        annotations:
+          summary: "Edge protection insufficient"
+          description: "Only {{ $value }}% load reduction on high traffic"
