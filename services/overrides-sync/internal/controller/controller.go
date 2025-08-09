@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
+	"gopkg.in/yaml.v2"
 )
 
 // Config holds the controller configuration
@@ -181,6 +182,11 @@ func (c *Controller) syncOverridesFromConfigMap(configMap *v1.ConfigMap) error {
 	return nil
 }
 
+// MimirOverridesConfig represents the structure of Mimir's overrides.yaml
+type MimirOverridesConfig struct {
+	Overrides map[string]map[string]interface{} `yaml:"overrides"`
+}
+
 // parseOverrides parses overrides from ConfigMap data
 func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.TenantLimits, error) {
 	overrides := make(map[string]limits.TenantLimits)
@@ -190,20 +196,98 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 		Msg("parsing ConfigMap data")
 
 	// Log all keys for debugging
-	for key, value := range data {
+	for key := range data {
 		c.logger.Debug().
 			Str("key", key).
-			Str("value", value).
+			Int("value_length", len(data[key])).
 			Msg("found ConfigMap entry")
 	}
 
+	// First, try to parse the Mimir YAML format (overrides.yaml key)
+	if overridesYaml, exists := data["overrides.yaml"]; exists {
+		c.logger.Info().Msg("found overrides.yaml - parsing Mimir YAML format")
+		return c.parseMimirYamlOverrides(overridesYaml)
+	}
+
+	// Fallback to legacy flat format for backward compatibility
+	c.logger.Info().Msg("no overrides.yaml found - trying legacy flat format")
+	return c.parseFlatOverrides(data)
+}
+
+// parseMimirYamlOverrides parses the actual Mimir overrides.yaml format
+func (c *Controller) parseMimirYamlOverrides(yamlContent string) (map[string]limits.TenantLimits, error) {
+	var config MimirOverridesConfig
+	
+	c.logger.Debug().
+		Str("yaml_content", yamlContent[:min(500, len(yamlContent))]).
+		Msg("parsing Mimir YAML overrides")
+
+	if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
+		return nil, fmt.Errorf("failed to parse overrides YAML: %w", err)
+	}
+
+	overrides := make(map[string]limits.TenantLimits)
+
+	c.logger.Info().
+		Int("tenants_in_yaml", len(config.Overrides)).
+		Msg("found tenants in overrides YAML")
+
+	for tenantID, tenantConfig := range config.Overrides {
+		c.logger.Debug().
+			Str("tenant", tenantID).
+			Int("config_fields", len(tenantConfig)).
+			Msg("processing tenant overrides")
+
+		// Start with defaults
+		tenantLimits := limits.TenantLimits{
+			SamplesPerSecond:    10000, // Default
+			BurstPercent:        0.2,
+			MaxBodyBytes:        4194304,
+			MaxLabelsPerSeries:  60,
+			MaxLabelValueLength: 2048,
+			MaxSeriesPerRequest: 100000,
+		}
+
+		// Parse each field in the tenant config
+		for fieldName, fieldValue := range tenantConfig {
+			valueStr := fmt.Sprintf("%v", fieldValue)
+			
+			c.logger.Debug().
+				Str("tenant", tenantID).
+				Str("field", fieldName).
+				Str("value", valueStr).
+				Msg("parsing tenant field")
+
+			if err := c.parseLimitValue(&tenantLimits, fieldName, valueStr); err != nil {
+				c.logger.Warn().
+					Err(err).
+					Str("tenant", tenantID).
+					Str("field", fieldName).
+					Str("value", valueStr).
+					Msg("failed to parse tenant field - skipping")
+				continue
+			}
+		}
+
+		overrides[tenantID] = tenantLimits
+		c.logger.Info().
+			Str("tenant", tenantID).
+			Interface("limits", tenantLimits).
+			Msg("processed tenant overrides")
+	}
+
+	c.logger.Info().
+		Int("total_tenants", len(overrides)).
+		Msg("completed parsing Mimir YAML overrides")
+
+	return overrides, nil
+}
+
+// parseFlatOverrides parses the legacy flat key-value format for backward compatibility
+func (c *Controller) parseFlatOverrides(data map[string]string) (map[string]limits.TenantLimits, error) {
+	overrides := make(map[string]limits.TenantLimits)
+
 	for key, value := range data {
-		// Parse tenant-specific overrides
-		// Support multiple formats:
-		// 1. tenant_id:limit_name = value (our format)
-		// 2. tenant_id.limit_name = value (alternative format)
-		// 3. limit_name = value (global overrides - skip for now)
-		
 		var tenantID, limitName string
 		
 		// Try colon separator first
@@ -235,12 +319,6 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 			continue
 		}
 
-		c.logger.Debug().
-			Str("tenant", tenantID).
-			Str("limit", limitName).
-			Str("value", value).
-			Msg("parsing tenant limit")
-
 		// Get or create tenant limits
 		tenantLimits, exists := overrides[tenantID]
 		if !exists {
@@ -252,9 +330,6 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 				MaxLabelValueLength: 2048,
 				MaxSeriesPerRequest: 100000,
 			}
-			c.logger.Debug().
-				Str("tenant", tenantID).
-				Msg("created new tenant limits with defaults")
 		}
 
 		// Parse limit value
@@ -269,18 +344,21 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 		}
 
 		overrides[tenantID] = tenantLimits
-		c.logger.Debug().
-			Str("tenant", tenantID).
-			Str("limit", limitName).
-			Interface("limits", tenantLimits).
-			Msg("updated tenant limits")
 	}
 
 	c.logger.Info().
 		Int("total_tenants", len(overrides)).
-		Msg("completed parsing ConfigMap")
+		Msg("completed parsing flat overrides")
 
 	return overrides, nil
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // parseLimitValue parses a single limit value
@@ -295,7 +373,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 		Msg("parsing limit value")
 
 	switch normalizedLimitName {
-	// Samples per second variations
+	// Samples per second variations (ingestion_rate is the primary Mimir field)
 	case "samples_per_second", "ingestion_rate", "samples_per_sec", "sps":
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.SamplesPerSecond = val
@@ -304,13 +382,32 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 			return fmt.Errorf("invalid samples_per_second: %s", value)
 		}
 
-	// Burst percent variations  
-	case "burst_percent", "burst_pct", "burst_percentage", "ingestion_burst_size":
+	// Burst size variations (ingestion_burst_size is the primary Mimir field)
+	// Note: Mimir uses absolute burst size, we convert to percentage of ingestion_rate
+	case "burst_percent", "burst_pct", "burst_percentage":
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.BurstPercent = val
 			c.logger.Debug().Float64("parsed_value", val).Msg("set burst_percent")
 		} else {
 			return fmt.Errorf("invalid burst_percent: %s", value)
+		}
+	
+	case "ingestion_burst_size":
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
+			// Convert absolute burst size to percentage of ingestion_rate
+			// If ingestion_rate is not set yet, use a reasonable default
+			rate := limits.SamplesPerSecond
+			if rate <= 0 {
+				rate = 10000 // Default rate for percentage calculation
+			}
+			limits.BurstPercent = val / rate
+			c.logger.Debug().
+				Float64("burst_size", val).
+				Float64("ingestion_rate", rate).
+				Float64("calculated_burst_percent", limits.BurstPercent).
+				Msg("converted ingestion_burst_size to burst_percent")
+		} else {
+			return fmt.Errorf("invalid ingestion_burst_size: %s", value)
 		}
 
 	// Max body bytes variations
@@ -322,8 +419,8 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 			return fmt.Errorf("invalid max_body_bytes: %s", value)
 		}
 
-	// Max labels per series variations
-	case "max_labels_per_series", "max_labels_per_metric", "labels_limit":
+	// Max labels per series variations (max_label_names_per_series is the Mimir field)
+	case "max_labels_per_series", "max_labels_per_metric", "labels_limit", "max_label_names_per_series":
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			limits.MaxLabelsPerSeries = int32(val)
 			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_labels_per_series")
@@ -348,6 +445,18 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 		} else {
 			return fmt.Errorf("invalid max_series_per_request: %s", value)
 		}
+	
+	// Additional Mimir fields (log but don't error - these are not part of our core limits yet)
+	case "max_global_series_per_user", "max_global_series_per_metric", "max_global_metadata_per_user", 
+		 "max_global_metadata_per_metric", "ingestion_tenant_shard_size", "cardinality_analysis_enabled",
+		 "accept_ha_samples", "ha_cluster_label", "ha_replica_label", "max_cache_freshness",
+		 "ruler_max_rule_groups_per_tenant", "ruler_max_rules_per_rule_group":
+		c.logger.Debug().
+			Str("field", limitName).
+			Str("value", value).
+			Msg("recognized Mimir field - not mapped to RLS limits yet")
+		// Don't error, just log for future implementation
+		return nil
 
 	default:
 		c.logger.Warn().

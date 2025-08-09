@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/rs/zerolog"
+	"gopkg.in/yaml.v2"
 )
 
 // TenantLimits represents the limits for a tenant
@@ -21,16 +22,89 @@ type TenantLimits struct {
 	MaxSeriesPerRequest int32   `json:"max_series_per_request"`
 }
 
+// MimirOverridesConfig represents the structure of Mimir's overrides.yaml
+type MimirOverridesConfig struct {
+	Overrides map[string]map[string]interface{} `yaml:"overrides"`
+}
+
+// min returns the minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 // Test function similar to the controller's parseOverrides
 func parseOverrides(data map[string]string, logger zerolog.Logger) (map[string]TenantLimits, error) {
-	overrides := make(map[string]TenantLimits)
-
 	logger.Info().Int("configmap_keys", len(data)).Msg("parsing ConfigMap data")
 
 	// Log all keys for debugging
-	for key, value := range data {
-		logger.Debug().Str("key", key).Str("value", value).Msg("found ConfigMap entry")
+	for key := range data {
+		logger.Debug().Str("key", key).Int("value_length", len(data[key])).Msg("found ConfigMap entry")
 	}
+
+	// First, try to parse the Mimir YAML format (overrides.yaml key)
+	if overridesYaml, exists := data["overrides.yaml"]; exists {
+		logger.Info().Msg("found overrides.yaml - parsing Mimir YAML format")
+		return parseMimirYamlOverrides(overridesYaml, logger)
+	}
+
+	// Fallback to legacy flat format for backward compatibility
+	logger.Info().Msg("no overrides.yaml found - trying legacy flat format")
+	return parseFlatOverrides(data, logger)
+}
+
+// parseMimirYamlOverrides parses the actual Mimir overrides.yaml format
+func parseMimirYamlOverrides(yamlContent string, logger zerolog.Logger) (map[string]TenantLimits, error) {
+	var config MimirOverridesConfig
+	
+	logger.Debug().Str("yaml_content", yamlContent[:min(500, len(yamlContent))]).Msg("parsing Mimir YAML overrides")
+
+	if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
+		return nil, fmt.Errorf("failed to parse overrides YAML: %w", err)
+	}
+
+	overrides := make(map[string]TenantLimits)
+
+	logger.Info().Int("tenants_in_yaml", len(config.Overrides)).Msg("found tenants in overrides YAML")
+
+	for tenantID, tenantConfig := range config.Overrides {
+		logger.Debug().Str("tenant", tenantID).Int("config_fields", len(tenantConfig)).Msg("processing tenant overrides")
+
+		// Start with defaults
+		tenantLimits := TenantLimits{
+			SamplesPerSecond:    10000, // Default
+			BurstPercent:        0.2,
+			MaxBodyBytes:        4194304,
+			MaxLabelsPerSeries:  60,
+			MaxLabelValueLength: 2048,
+			MaxSeriesPerRequest: 100000,
+		}
+
+		// Parse each field in the tenant config
+		for fieldName, fieldValue := range tenantConfig {
+			valueStr := fmt.Sprintf("%v", fieldValue)
+			
+			logger.Debug().Str("tenant", tenantID).Str("field", fieldName).Str("value", valueStr).Msg("parsing tenant field")
+
+			if err := parseLimitValue(&tenantLimits, fieldName, valueStr, logger); err != nil {
+				logger.Warn().Err(err).Str("tenant", tenantID).Str("field", fieldName).Str("value", valueStr).Msg("failed to parse tenant field - skipping")
+				continue
+			}
+		}
+
+		overrides[tenantID] = tenantLimits
+		logger.Info().Str("tenant", tenantID).Interface("limits", tenantLimits).Msg("processed tenant overrides")
+	}
+
+	logger.Info().Int("total_tenants", len(overrides)).Msg("completed parsing Mimir YAML overrides")
+	return overrides, nil
+}
+
+// parseFlatOverrides parses the legacy flat key-value format for backward compatibility
+func parseFlatOverrides(data map[string]string, logger zerolog.Logger) (map[string]TenantLimits, error) {
+	overrides := make(map[string]TenantLimits)
 
 	for key, value := range data {
 		var tenantID, limitName string
@@ -157,19 +231,45 @@ func main() {
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr}).With().Timestamp().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	// Test data similar to your ConfigMap
+	// Test data mimicking actual production Mimir ConfigMap
 	testData := map[string]string{
-		"tenant-1:samples_per_second":     "5000",
-		"tenant-1:burst_percent":          "0.1",
-		"tenant-1:max_body_bytes":         "1048576",
-		"tenant-2:ingestion_rate":         "10000",
-		"tenant-2:burst_pct":              "0.2",
-		"tenant-2:max_labels_per_series":  "50",
-		"tenant-3.samples_per_second":     "15000",
-		"tenant-3.burst_percentage":       "0.3",
-		"tenant-3.max_series_per_request": "50000",
-		"default_ingestion_rate":          "1000",
-		"global_max_body_bytes":           "2097152",
+		"mimir.yaml": `metrics:
+  per_tenant_metrics_enabled: true`,
+		"overrides.yaml": `overrides:
+  benefit:
+    cardinality_analysis_enabled: true
+    ingestion_burst_size: 3.5e+06
+    ingestion_rate: 350000
+    ingestion_tenant_shard_size: 8
+    max_global_metadata_per_metric: 10
+    max_global_metadata_per_user: 600000
+    max_global_series_per_user: 3e+06
+    max_label_names_per_series: 50
+    ruler_max_rule_groups_per_tenant: 20
+    ruler_max_rules_per_rule_group: 20
+  boltx:
+    accept_ha_samples: true
+    cardinality_analysis_enabled: true
+    ha_cluster_label: cluster
+    ha_replica_label: __replica__
+    ingestion_burst_size: 3.5e+06
+    ingestion_rate: 1e+07
+    ingestion_tenant_shard_size: 40
+    max_cache_freshness: 2h
+    max_global_metadata_per_metric: 10
+    max_global_metadata_per_user: 4e+06
+    max_global_series_per_metric: 5e+06
+    max_global_series_per_user: 2e+07
+    max_label_names_per_series: 250
+    ruler_max_rule_groups_per_tenant: 90
+    ruler_max_rules_per_rule_group: 90
+  buybox:
+    cardinality_analysis_enabled: true
+    ingestion_burst_size: 3.5e+06
+    ingestion_rate: 350000
+    ingestion_tenant_shard_size: 8
+    max_global_metadata_per_metric: 10
+    max_global_series_per_user: 3e+06`,
 	}
 
 	fmt.Println("🧪 Testing ConfigMap parsing...")
