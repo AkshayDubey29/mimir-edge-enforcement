@@ -19,29 +19,17 @@ data:
             log_format:
               text_format: "[%START_TIME%] %REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL% %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_SENT% %DURATION% %REQ(X-FORWARDED-FOR)% %REQ(USER-AGENT)% %REQ(X-REQUEST-ID)% %REQ(:AUTHORITY)% %UPSTREAM_HOST%\n"
 
-    # Overload manager with resource monitors and actions
+    # Overload manager with memory monitoring (compatible with all Envoy versions)
     overload_manager:
       refresh_interval: 0.25s
       resource_monitors:
-      - name: "envoy.resource_monitors.downstream_connections"
-        typed_config:
-          "@type": type.googleapis.com/envoy.extensions.resource_monitors.downstream_connections.v3.DownstreamConnectionsConfig
-          max_active_downstream_connections: {{ .Values.resourceLimits.maxDownstreamConnections | int }}
       - name: "envoy.resource_monitors.fixed_heap"
         typed_config:
           "@type": type.googleapis.com/envoy.extensions.resource_monitors.fixed_heap.v3.FixedHeapConfig
           max_heap_size_bytes: {{ .Values.resourceLimits.maxHeapSizeBytes | int }}
       actions:
-      - name: "envoy.overload_actions.disable_http_keepalive"
-        triggers:
-        - name: "envoy.resource_monitors.downstream_connections"
-          threshold:
-            value: {{ .Values.resourceLimits.disableKeepaliveThreshold }}
       - name: "envoy.overload_actions.stop_accepting_requests"
         triggers:
-        - name: "envoy.resource_monitors.downstream_connections"
-          threshold:
-            value: {{ .Values.resourceLimits.stopAcceptingRequestsThreshold }}
         - name: "envoy.resource_monitors.fixed_heap"
           threshold:
             value: {{ .Values.resourceLimits.heapStopAcceptingThreshold }}

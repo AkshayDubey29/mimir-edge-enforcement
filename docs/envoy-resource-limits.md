@@ -5,19 +5,20 @@ This document explains the resource monitoring and overload management configura
 ## 🎯 Purpose
 
 Envoy resource limits protect against:
-- **Connection exhaustion**: Too many concurrent connections
 - **Memory exhaustion**: Heap memory usage spikes
 - **Resource starvation**: Preventing complete service outage
 - **Cascading failures**: Graceful degradation under load
 
+> **Note**: This configuration uses only memory-based resource monitoring for maximum compatibility across all Envoy versions. The `downstream_connections` resource monitor requires newer Envoy versions and has been removed to ensure broad compatibility.
+
 ## 📊 Default Configuration
 
-### Connection Limits
+### Memory Limits (Compatible with all Envoy versions)
 ```yaml
 resourceLimits:
-  maxDownstreamConnections: 10000    # Default: 10k connections
-  disableKeepaliveThreshold: 0.8     # Disable keepalive at 80%
-  stopAcceptingRequestsThreshold: 0.95  # Stop accepting at 95%
+  maxHeapSizeBytes: 838860800        # 800 MiB (for 1Gi container)
+  shrinkHeapThreshold: 0.8           # Start shrinking heap at 80%
+  heapStopAcceptingThreshold: 0.95   # Stop accepting requests at 95% heap
 ```
 
 ### Generated Envoy Configuration Structure
@@ -25,19 +26,21 @@ resourceLimits:
 overload_manager:
   refresh_interval: 0.25s
   resource_monitors:
-  - name: "envoy.resource_monitors.downstream_connections"
   - name: "envoy.resource_monitors.fixed_heap"
+    typed_config:
+      "@type": type.googleapis.com/envoy.extensions.resource_monitors.fixed_heap.v3.FixedHeapConfig
+      max_heap_size_bytes: 838860800
   actions:
-  - name: "envoy.overload_actions.disable_http_keepalive"
-    triggers:
-    - name: "envoy.resource_monitors.downstream_connections"
-      threshold:
-        value: 0.8
   - name: "envoy.overload_actions.stop_accepting_requests"
     triggers:
-    - name: "envoy.resource_monitors.downstream_connections"
+    - name: "envoy.resource_monitors.fixed_heap"
       threshold:
         value: 0.95
+  - name: "envoy.overload_actions.shrink_heap"
+    triggers:
+    - name: "envoy.resource_monitors.fixed_heap"
+      threshold:
+        value: 0.8
 ```
 
 ### Memory Limits
