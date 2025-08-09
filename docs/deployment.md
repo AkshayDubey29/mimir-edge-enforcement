@@ -29,6 +29,10 @@ kubectl auth can-i create deployments --namespace=default
 kubectl auth can-i create services --namespace=default
 kubectl auth can-i create configmaps --namespace=mimir
 kubectl auth can-i watch configmaps --namespace=mimir
+
+# Verify AWS Load Balancer Controller (for ALB Ingress)
+kubectl get deployment aws-load-balancer-controller -n kube-system
+kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-load-balancer-controller
 ```
 
 ### 3. Container Registry Access
@@ -453,30 +457,48 @@ service:
   type: ClusterIP
   port: 80
 
-# Ingress configuration (customize for your setup)
+# AWS ALB Ingress configuration (production-ready default)
 ingress:
   enabled: true
-  className: "nginx"  # 🔧 CUSTOMIZE: Your ingress class
+  className: "alb"  # AWS Application Load Balancer
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/auth-type: basic
-    nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+    # AWS ALB Configuration
+    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"  # 🔴 CHANGE: Your ACM certificate ARN
+    alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
+    alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
+    alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400"
+    alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/scheme: "internal"
+    alb.ingress.kubernetes.io/security-groups: "sg-03a537b10f8b71c3c,sg-0faab6bb8700b4164"  # 🔴 CHANGE: Your security groups
+    alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-0247d97d25e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"  # 🔴 CHANGE: Your subnets
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/tags: "role=couwatch_mimir"
+    alb.ingress.kubernetes.io/target-type: "ip"
+    kubernetes.io/ingress.class: "alb"
+    
+    # Security and rate limiting
     nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    
+    # CORS for Admin UI
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Content-Length"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
   hosts:
-    - host: mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+    - host: mimir-edge-enforcement.vzonel.kr.couwatchdev.net  # 🔴 CHANGE: Your domain
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: mimir-admin-tls
       hosts:
-        - mimir-admin.your-domain.com
+        - mimir-edge-enforcement.vzonel.kr.couwatchdev.net
 
 # API configuration
 config:
   apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
-  serverName: "mimir-admin.your-domain.com"  # 🔴 CHANGE: Your domain
+  serverName: "mimir-edge-enforcement.vzonel.kr.couwatchdev.net"  # 🔴 CHANGE: Your domain
 
 # Security
 securityContext:
@@ -677,20 +699,32 @@ adminUI:
     enabled: true
     minAvailable: 2
   
-  # 🌍 Ingress Configuration
+  # 🌍 AWS ALB Ingress Configuration (Production Default)
   ingress:
     enabled: true
-    className: "nginx"  # Adjust for your ingress controller
+    className: "alb"  # AWS Application Load Balancer
     annotations:
-      cert-manager.io/cluster-issuer: "letsencrypt-prod"
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      nginx.ingress.kubernetes.io/auth-type: basic
-      nginx.ingress.kubernetes.io/auth-secret: admin-ui-auth
+      # AWS ALB Configuration
+      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"  # 🔴 CHANGE: Your ACM certificate
+      alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
+      alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
+      alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30"
+      alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/scheme: "internal"
+      alb.ingress.kubernetes.io/security-groups: "sg-03a537b10f8b71c3c,sg-0faab6bb8700b4164"  # 🔴 CHANGE: Your security groups
+      alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-0247d97d25e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"  # 🔴 CHANGE: Your subnets
+      alb.ingress.kubernetes.io/success-codes: "200"
+      alb.ingress.kubernetes.io/tags: "role=couwatch_mimir"
+      alb.ingress.kubernetes.io/target-type: "ip"
+      kubernetes.io/ingress.class: "alb"
+      
+      # Security and rate limiting
       nginx.ingress.kubernetes.io/rate-limit: "100"
-      nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
     
     hosts:
-      - host: mimir-admin.your-domain.com
+      - host: mimir-edge-enforcement.vzonel.kr.couwatchdev.net  # 🔴 CHANGE: Your domain
         paths:
           - path: /
             pathType: Prefix
@@ -698,7 +732,7 @@ adminUI:
     tls:
       - secretName: mimir-admin-tls
         hosts:
-          - mimir-admin.your-domain.com
+          - mimir-edge-enforcement.vzonel.kr.couwatchdev.net
   
   # 🔐 Security
   auth:
