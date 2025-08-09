@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -208,7 +209,7 @@ func (c *Controller) syncOverridesFromConfigMap(configMap *v1.ConfigMap) error {
 func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.TenantLimits) error {
 	// Build RLS URL
 	rlsURL := fmt.Sprintf("http://%s:%s/api/tenants/%s/limits", c.config.RLSHost, c.config.RLSAdminPort, tenantID)
-	
+
 	// Marshal limits to JSON
 	limitsJSON, err := json.Marshal(tenantLimits)
 	if err != nil {
@@ -239,7 +240,19 @@ func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("RLS returned status %d: %s", resp.StatusCode, resp.Status)
+		// Read response body for debugging
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyStr := string(bodyBytes)
+		
+		c.logger.Error().
+			Str("tenant_id", tenantID).
+			Str("url", rlsURL).
+			Int("status_code", resp.StatusCode).
+			Str("status", resp.Status).
+			Str("response_body", bodyStr).
+			Msg("RLS API request failed")
+			
+		return fmt.Errorf("RLS returned status %d: %s, body: %s", resp.StatusCode, resp.Status, bodyStr)
 	}
 
 	c.logger.Debug().

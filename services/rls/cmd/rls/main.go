@@ -147,6 +147,19 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger zerolog.Logger) {
 	router := mux.NewRouter()
 
+	// Add request logging middleware
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log.Info().
+				Str("method", r.Method).
+				Str("path", r.URL.Path).
+				Str("remote_addr", r.RemoteAddr).
+				Str("user_agent", r.Header.Get("User-Agent")).
+				Msg("RLS admin API request")
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// Health check
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -168,6 +181,36 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
+	
+	// Debug endpoint to list all routes
+	router.HandleFunc("/api/debug/routes", func(w http.ResponseWriter, r *http.Request) {
+		routes := []map[string]interface{}{}
+		router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+			pathTemplate, err := route.GetPathTemplate()
+			if err == nil {
+				methods, _ := route.GetMethods()
+				routes = append(routes, map[string]interface{}{
+					"path":    pathTemplate,
+					"methods": methods,
+				})
+			}
+			return nil
+		})
+		writeJSON(w, http.StatusOK, map[string]interface{}{"routes": routes})
+	}).Methods("GET")
+
+	// Log all registered routes for debugging
+	router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
+		pathTemplate, err := route.GetPathTemplate()
+		if err == nil {
+			methods, _ := route.GetMethods()
+			log.Info().
+				Str("path", pathTemplate).
+				Strs("methods", methods).
+				Msg("RLS registered route")
+		}
+		return nil
+	})
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -315,7 +358,7 @@ func handleSetTenantLimits(rls *service.RLS) http.HandlerFunc {
 		}()
 
 		id := mux.Vars(r)["id"]
-		
+
 		// Parse request body
 		var tenantLimits limits.TenantLimits
 		if err := json.NewDecoder(r.Body).Decode(&tenantLimits); err != nil {
@@ -339,9 +382,9 @@ func handleSetTenantLimits(rls *service.RLS) http.HandlerFunc {
 			Msg("RLS: tenant limits set via HTTP API from overrides-sync")
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"success": true,
+			"success":   true,
 			"tenant_id": id,
-			"limits": tenantLimits,
+			"limits":    tenantLimits,
 		})
 	}
 }
