@@ -185,16 +185,61 @@ func (c *Controller) syncOverridesFromConfigMap(configMap *v1.ConfigMap) error {
 func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.TenantLimits, error) {
 	overrides := make(map[string]limits.TenantLimits)
 
+	c.logger.Debug().
+		Int("configmap_keys", len(data)).
+		Msg("parsing ConfigMap data")
+
+	// Log all keys for debugging
+	for key, value := range data {
+		c.logger.Debug().
+			Str("key", key).
+			Str("value", value).
+			Msg("found ConfigMap entry")
+	}
+
 	for key, value := range data {
 		// Parse tenant-specific overrides
-		// Format: tenant_id:limit_name = value
-		parts := strings.SplitN(key, ":", 2)
-		if len(parts) != 2 {
-			continue // Skip non-tenant keys
+		// Support multiple formats:
+		// 1. tenant_id:limit_name = value (our format)
+		// 2. tenant_id.limit_name = value (alternative format)
+		// 3. limit_name = value (global overrides - skip for now)
+		
+		var tenantID, limitName string
+		
+		// Try colon separator first
+		if strings.Contains(key, ":") {
+			parts := strings.SplitN(key, ":", 2)
+			if len(parts) == 2 {
+				tenantID = strings.TrimSpace(parts[0])
+				limitName = strings.TrimSpace(parts[1])
+			}
+		} else if strings.Contains(key, ".") {
+			// Try dot separator
+			parts := strings.SplitN(key, ".", 2)
+			if len(parts) == 2 {
+				tenantID = strings.TrimSpace(parts[0])
+				limitName = strings.TrimSpace(parts[1])
+			}
+		} else {
+			// Global override or unsupported format - skip
+			c.logger.Debug().
+				Str("key", key).
+				Msg("skipping non-tenant-specific key")
+			continue
 		}
 
-		tenantID := parts[0]
-		limitName := parts[1]
+		if tenantID == "" || limitName == "" {
+			c.logger.Debug().
+				Str("key", key).
+				Msg("skipping malformed key")
+			continue
+		}
+
+		c.logger.Debug().
+			Str("tenant", tenantID).
+			Str("limit", limitName).
+			Str("value", value).
+			Msg("parsing tenant limit")
 
 		// Get or create tenant limits
 		tenantLimits, exists := overrides[tenantID]
@@ -207,6 +252,9 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 				MaxLabelValueLength: 2048,
 				MaxSeriesPerRequest: 100000,
 			}
+			c.logger.Debug().
+				Str("tenant", tenantID).
+				Msg("created new tenant limits with defaults")
 		}
 
 		// Parse limit value
@@ -221,58 +269,94 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 		}
 
 		overrides[tenantID] = tenantLimits
+		c.logger.Debug().
+			Str("tenant", tenantID).
+			Str("limit", limitName).
+			Interface("limits", tenantLimits).
+			Msg("updated tenant limits")
 	}
+
+	c.logger.Info().
+		Int("total_tenants", len(overrides)).
+		Msg("completed parsing ConfigMap")
 
 	return overrides, nil
 }
 
 // parseLimitValue parses a single limit value
 func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, value string) error {
-	switch limitName {
-	case "samples_per_second":
+	// Normalize limit name to handle different naming conventions
+	normalizedLimitName := strings.ToLower(strings.TrimSpace(limitName))
+	
+	c.logger.Debug().
+		Str("original_limit", limitName).
+		Str("normalized_limit", normalizedLimitName).
+		Str("value", value).
+		Msg("parsing limit value")
+
+	switch normalizedLimitName {
+	// Samples per second variations
+	case "samples_per_second", "ingestion_rate", "samples_per_sec", "sps":
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.SamplesPerSecond = val
+			c.logger.Debug().Float64("parsed_value", val).Msg("set samples_per_second")
 		} else {
 			return fmt.Errorf("invalid samples_per_second: %s", value)
 		}
 
-	case "burst_percent":
+	// Burst percent variations  
+	case "burst_percent", "burst_pct", "burst_percentage", "ingestion_burst_size":
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.BurstPercent = val
+			c.logger.Debug().Float64("parsed_value", val).Msg("set burst_percent")
 		} else {
 			return fmt.Errorf("invalid burst_percent: %s", value)
 		}
 
-	case "max_body_bytes":
+	// Max body bytes variations
+	case "max_body_bytes", "max_request_size", "request_rate_limit", "max_request_body_size":
 		if val, err := strconv.ParseInt(value, 10, 64); err == nil {
 			limits.MaxBodyBytes = val
+			c.logger.Debug().Int64("parsed_value", val).Msg("set max_body_bytes")
 		} else {
 			return fmt.Errorf("invalid max_body_bytes: %s", value)
 		}
 
-	case "max_labels_per_series":
+	// Max labels per series variations
+	case "max_labels_per_series", "max_labels_per_metric", "labels_limit":
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			limits.MaxLabelsPerSeries = int32(val)
+			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_labels_per_series")
 		} else {
 			return fmt.Errorf("invalid max_labels_per_series: %s", value)
 		}
 
-	case "max_label_value_length":
+	// Max label value length variations
+	case "max_label_value_length", "max_label_name_length", "label_length_limit":
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			limits.MaxLabelValueLength = int32(val)
+			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_label_value_length")
 		} else {
 			return fmt.Errorf("invalid max_label_value_length: %s", value)
 		}
 
-	case "max_series_per_request":
+	// Max series per request variations
+	case "max_series_per_request", "max_series_per_metric", "max_series_per_query", "series_limit":
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
 			limits.MaxSeriesPerRequest = int32(val)
+			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_series_per_request")
 		} else {
 			return fmt.Errorf("invalid max_series_per_request: %s", value)
 		}
 
 	default:
-		return fmt.Errorf("unknown limit: %s", limitName)
+		c.logger.Warn().
+			Str("limit_name", limitName).
+			Str("normalized_name", normalizedLimitName).
+			Str("value", value).
+			Msg("unknown limit type - skipping")
+		// Don't return error for unknown limits, just skip them
+		return nil
 	}
 
 	return nil

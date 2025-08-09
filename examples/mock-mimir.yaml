@@ -59,10 +59,19 @@ metadata:
   name: mimir-overrides
   namespace: mimir
 data:
-  # Example tenant overrides
+  # Example tenant overrides - multiple formats supported
   "tenant-1:samples_per_second": "5000"
   "tenant-1:burst_percent": "0.1"
-  "tenant-2:samples_per_second": "10000"
-  "tenant-2:burst_percent": "0.2"
-  "tenant-3:samples_per_second": "15000"
-  "tenant-3:burst_percent": "0.3" 
+  "tenant-1:max_body_bytes": "1048576"
+  
+  "tenant-2:ingestion_rate": "10000"
+  "tenant-2:burst_pct": "0.2"
+  "tenant-2:max_labels_per_series": "50"
+  
+  "tenant-3.samples_per_second": "15000"
+  "tenant-3.burst_percentage": "0.3"
+  "tenant-3.max_series_per_request": "50000"
+  
+  # Global overrides (will be skipped)
+  "default_ingestion_rate": "1000"
+  "global_max_body_bytes": "2097152" 
