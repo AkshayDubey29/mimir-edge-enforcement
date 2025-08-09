@@ -33,9 +33,6 @@ data:
     # Overload manager to handle resource pressure
     overload_manager:
       refresh_interval: 0.25s
-      resource_monitors:
-      - name: "envoy.resource_monitors.downstream_connections"
-      - name: "envoy.resource_monitors.fixed_heap"
       actions:
       - name: "envoy.overload_actions.disable_http_keepalive"
         triggers:
