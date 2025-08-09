@@ -151,4 +151,37 @@ jobs:
             ghcr.io/akshaydubey29/mimir-edge-admin:${{ github.sha }}
             ghcr.io/akshaydubey29/mimir-edge-admin:latest
           platforms: linux/amd64,linux/arm64
+      
+      - name: 📦 Deployment Summary
+        run: |
+          echo "🎉 SUCCESS! All containers have been built and pushed to GHCR!"
+          echo ""
+          echo "📋 DEPLOYED CONTAINERS:"
+          echo "======================================================"
+          echo "🔧 RLS (Rate Limiting Service):"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-rls:${{ github.sha }}"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-rls:latest"
+          echo ""
+          echo "🔄 Overrides Sync Controller:"
+          echo "   📍 ghcr.io/akshaydubey29/overrides-sync:${{ github.sha }}"
+          echo "   📍 ghcr.io/akshaydubey29/overrides-sync:latest"
+          echo ""
+          echo "🌐 Envoy Proxy:"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-envoy:${{ github.sha }}"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-envoy:latest"
+          echo ""
+          echo "💻 Admin UI:"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-edge-admin:${{ github.sha }}"
+          echo "   📍 ghcr.io/akshaydubey29/mimir-edge-admin:latest"
+          echo ""
+          echo "🏗️ PLATFORMS: linux/amd64, linux/arm64"
+          echo "📦 REGISTRY: GitHub Container Registry (GHCR)"
+          echo "🏷️ COMMIT: ${{ github.sha }}"
+          echo "🌿 BRANCH: ${{ github.ref_name }}"
+          echo ""
+          echo "🚀 READY FOR DEPLOYMENT:"
+          echo "   helm install mimir-rls charts/mimir-rls"
+          echo "   helm install mimir-envoy charts/envoy"
+          echo "   helm install overrides-sync charts/overrides-sync"
+          echo "======================================================"
 
