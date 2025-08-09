@@ -16,6 +16,51 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle } from 'lucide-react';
 
+// TypeScript interfaces for the API data
+interface OverviewStats {
+  total_requests: number;
+  allowed_requests: number;
+  denied_requests: number;
+  allow_percentage: number;
+  active_tenants: number;
+}
+
+interface TopTenant {
+  id: string;
+  name: string;
+  rps: number;
+  samples_per_sec: number;
+  deny_rate: number;
+}
+
+interface OverviewData {
+  stats: OverviewStats;
+  top_tenants: TopTenant[];
+}
+
+interface TenantMetrics {
+  allow_rate: number;
+  deny_rate: number;
+  utilization_pct?: number;
+}
+
+interface TenantLimits {
+  samples_per_second?: number;
+  burst_percent?: number;
+  max_body_bytes?: number;
+}
+
+interface Tenant {
+  id: string;
+  name?: string;
+  limits?: TenantLimits;
+  metrics?: TenantMetrics;
+}
+
+interface TenantsResponse {
+  tenants: Tenant[];
+}
+
 // Overview data is now fetched from real RLS API endpoints
 
 const timeRanges = [
@@ -28,7 +73,7 @@ const timeRanges = [
 export function Overview() {
   const [timeRange, setTimeRange] = useState('1h');
 
-  const { data: overviewData, isLoading, error } = useQuery(
+  const { data: overviewData, isLoading, error } = useQuery<OverviewData>(
     ['overview', timeRange],
     () => fetchOverviewData(timeRange),
     {
@@ -63,6 +108,15 @@ export function Overview() {
     );
   }
 
+  // Ensure overviewData exists before destructuring
+  if (!overviewData) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">No data available</div>
+      </div>
+    );
+  }
+
   const { stats, top_tenants } = overviewData;
 
   // Prepare chart data
@@ -71,7 +125,7 @@ export function Overview() {
     { name: 'Denied', value: stats.denied_requests, color: '#ef4444' },
   ];
 
-  const tenantChartData = top_tenants.map(tenant => ({
+  const tenantChartData = top_tenants.map((tenant: TopTenant) => ({
     name: tenant.name,
     rps: tenant.rps,
     samples: tenant.samples_per_sec,
@@ -175,7 +229,7 @@ export function Overview() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   outerRadius={80}
                   fill="#8884d8"
                   dataKey="value"
@@ -229,7 +283,7 @@ export function Overview() {
                 </tr>
               </thead>
               <tbody>
-                {top_tenants.map((tenant) => (
+                {top_tenants.map((tenant: TopTenant) => (
                   <tr key={tenant.id} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium">{tenant.name}</td>
                     <td className="py-3 px-4">{tenant.rps.toLocaleString()}</td>
@@ -258,7 +312,7 @@ export function Overview() {
 }
 
 // Real API function - calls the RLS admin API
-async function fetchOverviewData(timeRange: string) {
+async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
   // Fetch overview stats
   const overviewResponse = await fetch(`/api/overview?range=${timeRange}`);
   if (!overviewResponse.ok) {
@@ -268,25 +322,25 @@ async function fetchOverviewData(timeRange: string) {
   
   // Fetch tenant data to calculate top tenants
   const tenantsResponse = await fetch('/api/tenants');
-  let topTenants = [];
+  let topTenants: TopTenant[] = [];
   
   if (tenantsResponse.ok) {
-    const tenantsData = await tenantsResponse.json();
+    const tenantsData: TenantsResponse = await tenantsResponse.json();
     const tenants = tenantsData.tenants || [];
     
     // Transform tenants to top tenants format and sort by metrics
     topTenants = tenants
-      .filter(tenant => tenant.metrics && (tenant.metrics.allow_rate > 0 || tenant.metrics.deny_rate > 0))
-      .map(tenant => ({
+      .filter((tenant: Tenant) => tenant.metrics && (tenant.metrics.allow_rate > 0 || tenant.metrics.deny_rate > 0))
+      .map((tenant: Tenant): TopTenant => ({
         id: tenant.id,
         name: tenant.name || tenant.id,
-        rps: Math.round((tenant.metrics.allow_rate + tenant.metrics.deny_rate) / 60), // Convert to RPS estimate
+        rps: Math.round((tenant.metrics!.allow_rate + tenant.metrics!.deny_rate) / 60), // Convert to RPS estimate
         samples_per_sec: tenant.limits?.samples_per_second || 0,
-        deny_rate: tenant.metrics.deny_rate > 0 
-          ? Math.round(((tenant.metrics.deny_rate / (tenant.metrics.allow_rate + tenant.metrics.deny_rate)) * 100) * 10) / 10
+        deny_rate: tenant.metrics!.deny_rate > 0 
+          ? Math.round(((tenant.metrics!.deny_rate / (tenant.metrics!.allow_rate + tenant.metrics!.deny_rate)) * 100) * 10) / 10
           : 0
       }))
-      .sort((a, b) => b.rps - a.rps) // Sort by RPS descending
+      .sort((a: TopTenant, b: TopTenant) => b.rps - a.rps) // Sort by RPS descending
       .slice(0, 10); // Top 10 tenants
   }
   
