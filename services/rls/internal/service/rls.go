@@ -87,7 +87,51 @@ func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
 	}
 
 	rls.metrics = rls.createMetrics()
+	
+	// Start periodic tenant status logging
+	go rls.startPeriodicStatusLog()
+	
 	return rls
+}
+
+// startPeriodicStatusLog logs tenant count periodically for debugging
+func (rls *RLS) startPeriodicStatusLog() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case <-ticker.C:
+			rls.tenantsMu.RLock()
+			tenantCount := len(rls.tenants)
+			tenantIDs := make([]string, 0, tenantCount)
+			for id := range rls.tenants {
+				tenantIDs = append(tenantIDs, id)
+			}
+			rls.tenantsMu.RUnlock()
+			
+			rls.countersMu.RLock()
+			activeCounters := len(rls.counters)
+			rls.countersMu.RUnlock()
+			
+			logger := rls.logger.Info().
+				Int("tenant_count", tenantCount).
+				Int("active_counters", activeCounters)
+			
+			if tenantCount > 0 {
+				if tenantCount <= 5 {
+					// Log all tenant IDs if there are few
+					logger = logger.Strs("tenant_ids", tenantIDs)
+				} else {
+					// Log just the first 5 tenant IDs if there are many
+					logger = logger.Strs("sample_tenant_ids", tenantIDs[:5])
+				}
+				logger.Msg("RLS: periodic tenant status - TENANTS LOADED")
+			} else {
+				logger.Msg("RLS: periodic tenant status - NO TENANTS (check overrides-sync)")
+			}
+		}
+	}
 }
 
 // createMetrics creates and registers all Prometheus metrics
@@ -527,6 +571,8 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 	defer rls.tenantsMu.Unlock()
 
 	tenant, exists := rls.tenants[tenantID]
+	isNewTenant := !exists
+	
 	if !exists {
 		tenant = &TenantState{
 			Info: limits.TenantInfo{
@@ -535,7 +581,23 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 			},
 		}
 		rls.tenants[tenantID] = tenant
+		rls.logger.Info().
+			Str("tenant_id", tenantID).
+			Msg("RLS: creating new tenant from overrides-sync")
 	}
+
+	// Log the limits being set
+	rls.logger.Info().
+		Str("tenant_id", tenantID).
+		Bool("is_new_tenant", isNewTenant).
+		Float64("samples_per_second", newLimits.SamplesPerSecond).
+		Float64("burst_percent", newLimits.BurstPercent).
+		Int64("max_body_bytes", newLimits.MaxBodyBytes).
+		Int32("max_labels_per_series", newLimits.MaxLabelsPerSeries).
+		Int32("max_label_value_length", newLimits.MaxLabelValueLength).
+		Int32("max_series_per_request", newLimits.MaxSeriesPerRequest).
+		Int("total_tenants_after", len(rls.tenants)).
+		Msg("RLS: received tenant limits from overrides-sync")
 
 	tenant.Info.Limits = newLimits
 
@@ -543,22 +605,48 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 	if newLimits.SamplesPerSecond > 0 {
 		if tenant.SamplesBucket == nil {
 			tenant.SamplesBucket = buckets.NewTokenBucket(newLimits.SamplesPerSecond, newLimits.SamplesPerSecond)
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Float64("rate", newLimits.SamplesPerSecond).
+				Msg("RLS: created samples bucket")
 		} else {
 			tenant.SamplesBucket.SetRate(newLimits.SamplesPerSecond)
 			tenant.SamplesBucket.SetCapacity(newLimits.SamplesPerSecond)
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Float64("rate", newLimits.SamplesPerSecond).
+				Msg("RLS: updated samples bucket")
 		}
 	} else {
+		if tenant.SamplesBucket != nil {
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Msg("RLS: removed samples bucket (zero limit)")
+		}
 		tenant.SamplesBucket = nil
 	}
 
 	if newLimits.MaxBodyBytes > 0 {
 		if tenant.BytesBucket == nil {
 			tenant.BytesBucket = buckets.NewTokenBucket(float64(newLimits.MaxBodyBytes), float64(newLimits.MaxBodyBytes))
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Int64("max_bytes", newLimits.MaxBodyBytes).
+				Msg("RLS: created bytes bucket")
 		} else {
 			tenant.BytesBucket.SetRate(float64(newLimits.MaxBodyBytes))
 			tenant.BytesBucket.SetCapacity(float64(newLimits.MaxBodyBytes))
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Int64("max_bytes", newLimits.MaxBodyBytes).
+				Msg("RLS: updated bytes bucket")
 		}
 	} else {
+		if tenant.BytesBucket != nil {
+			rls.logger.Debug().
+				Str("tenant_id", tenantID).
+				Msg("RLS: removed bytes bucket (zero limit)")
+		}
 		tenant.BytesBucket = nil
 	}
 
