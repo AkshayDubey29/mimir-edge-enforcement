@@ -72,7 +72,7 @@ rls:
 # Overrides Sync Controller Configuration  
 # =================================================================
 overridesSync:
-  replicaCount: 2
+  replicaCount: 2  # HA setup for production
   
   image:
     repository: ghcr.io/akshaydubey29/overrides-sync
@@ -111,6 +111,11 @@ overridesSync:
   serviceAccount:
     create: true
     annotations: {}
+  
+  # High availability (no HPA needed for ConfigMap watchers)
+  pdb:
+    enabled: true   # ✅ Ensures availability during maintenance
+    minAvailable: 1
   
   # Image pull secrets
   imagePullSecrets:
