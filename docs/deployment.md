@@ -370,10 +370,7 @@ rls:
 
 # Resource limits and overload protection
 resourceLimits:
-  maxDownstreamConnections: 25000      # High for production traffic
   maxHeapSizeBytes: 838860800          # 800 MiB (80% of 1Gi container)
-  disableKeepaliveThreshold: 0.8       # Disable keepalive at 80%
-  stopAcceptingRequestsThreshold: 0.95 # Stop accepting at 95%
   shrinkHeapThreshold: 0.8             # Shrink heap at 80%
   heapStopAcceptingThreshold: 0.95     # Stop accepting at 95% heap
 
