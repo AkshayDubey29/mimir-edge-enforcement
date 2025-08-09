@@ -35,7 +35,7 @@ data:
         gzip on;
         gzip_vary on;
         gzip_min_length 10240;
-        gzip_proxied expired no-cache no-store private must-revalidate;
+        gzip_proxied any;
         gzip_types
             text/plain
             text/css
@@ -100,10 +100,16 @@ data:
                 add_header X-Content-Type-Options "nosniff" always;
             }
             
-            # Health check endpoint
+            # Health check endpoints
             location /health {
                 access_log off;
                 return 200 "healthy\n";
+                add_header Content-Type text/plain;
+            }
+            
+            location /healthz {
+                access_log off;
+                return 200 "ok\n";
                 add_header Content-Type text/plain;
             }
         }
