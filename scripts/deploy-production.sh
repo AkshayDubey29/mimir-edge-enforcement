@@ -306,6 +306,11 @@ print_next_steps() {
     echo "   kubectl port-forward svc/mimir-rls 9090:9090 -n $NAMESPACE"
     echo "   curl http://localhost:9090/metrics"
     echo ""
+    echo "5. Deploy Admin UI (optional):"
+    echo "   ./scripts/deploy-admin-ui.sh ingress mimir-admin.your-domain.com $NAMESPACE"
+    echo "   ./scripts/deploy-admin-ui.sh loadbalancer '' $NAMESPACE"
+    echo "   ./scripts/deploy-admin-ui.sh nodeport '' $NAMESPACE"
+    echo ""
     echo "🚀 Your mimir-edge-enforcement system is ready for production!"
 }
 
