@@ -1,10 +1,19 @@
-{{- if .Values.configMap.create }}
+# Fix for 426 Upgrade Required Error
+# Update Envoy configuration to properly handle HTTP/1.1 from NGINX
+
+# Add this to your values.yaml for the envoy chart:
+proxy:
+  # Force HTTP/1.1 for downstream connections (from NGINX)
+  httpProtocol: "HTTP1"
+  upstreamTimeout: "30s"
+  
+# Or apply this ConfigMap patch:
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "mimir-envoy.fullname" . }}-config
-  labels:
-    {{- include "mimir-envoy.labels" . | nindent 4 }}
+  name: mimir-envoy-config-patch
+  namespace: mimir-edge-enforcement
 data:
   envoy.yaml: |
     admin:
@@ -12,32 +21,6 @@ data:
         socket_address:
           address: 0.0.0.0
           port_value: 9901
-      access_log:
-        - name: envoy.access_loggers.stdout
-          typed_config:
-            "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
-            log_format:
-              text_format: "[%START_TIME%] %REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL% %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_SENT% %DURATION% %REQ(X-FORWARDED-FOR)% %REQ(USER-AGENT)% %REQ(X-REQUEST-ID)% %REQ(:AUTHORITY)% %UPSTREAM_HOST%\n"
-
-    # Overload manager with memory monitoring (compatible with all Envoy versions)
-    overload_manager:
-      refresh_interval: 0.25s
-      resource_monitors:
-      - name: "envoy.resource_monitors.fixed_heap"
-        typed_config:
-          "@type": type.googleapis.com/envoy.extensions.resource_monitors.fixed_heap.v3.FixedHeapConfig
-          max_heap_size_bytes: {{ .Values.resourceLimits.maxHeapSizeBytes | int }}
-      actions:
-      - name: "envoy.overload_actions.stop_accepting_requests"
-        triggers:
-        - name: "envoy.resource_monitors.fixed_heap"
-          threshold:
-            value: {{ .Values.resourceLimits.heapStopAcceptingThreshold }}
-      - name: "envoy.overload_actions.shrink_heap"
-        triggers:
-        - name: "envoy.resource_monitors.fixed_heap"
-          threshold:
-            value: {{ .Values.resourceLimits.shrinkHeapThreshold }}
 
     static_resources:
       listeners:
@@ -45,21 +28,21 @@ data:
         address:
           socket_address:
             address: 0.0.0.0
-            port_value: {{ .Values.service.port | int }}
+            port_value: 8080
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
               stat_prefix: ingress_http
-              codec_type: AUTO
-              # 🔧 FIX: Accept HTTP/1.1 from NGINX (prevents 426 Upgrade Required errors)
+              codec_type: AUTO  # This allows both HTTP/1.1 and HTTP/2
+              # 🔧 FIX: Add HTTP/1.1 protocol options
               http_protocol_options:
-                accept_http_10: {{ .Values.proxy.httpProtocol.acceptHttp10 }}
-                default_host_for_http_10: {{ include "mimir-envoy.fullname" . | quote }}
-              # Enable proper handling of forwarded headers from NGINX
-              use_remote_address: {{ .Values.proxy.httpProtocol.useRemoteAddress }}
-              xff_num_trusted_hops: {{ .Values.proxy.httpProtocol.xffNumTrustedHops | int }}
+                accept_http_10: true
+                default_host_for_http_10: "mimir-envoy"
+              # 🔧 FIX: Configure connection manager for HTTP/1.1 compatibility
+              use_remote_address: true
+              xff_num_trusted_hops: 1
               route_config:
                 name: local_route
                 virtual_hosts:
@@ -67,43 +50,42 @@ data:
                   domains: ["*"]
                   routes:
                   - match:
-                      prefix: "{{ .Values.remoteWrite.path }}"
+                      prefix: "/api/v1/push"
                     route:
                       cluster: mimir_distributor
-                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                      timeout: 30s
               http_filters:
               - name: envoy.filters.http.ext_authz
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
                   transport_api_version: V3
                   with_request_body:
-                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
+                    max_request_bytes: 4194304
                     allow_partial_message: true
-                  failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
+                  failure_mode_allow: false
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
               - name: envoy.filters.http.ratelimit
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
-                  domain: {{ .Values.rateLimit.domain }}
+                  domain: "mimir_remote_write"
                   rate_limit_service:
                     transport_api_version: V3
                     grpc_service:
                       envoy_grpc:
                         cluster_name: rls_ratelimit
-                  failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
+                  failure_mode_deny: true
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
-                  dynamic_stats: true
 
       clusters:
       - name: mimir_distributor
         connect_timeout: 0.25s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
-        # 🔧 FIX: Use HTTP/1.1 for Mimir distributor (most Mimir deployments use HTTP/1.1)
+        # 🔧 FIX: Use HTTP/1.1 for Mimir distributor
         typed_extension_protocol_options:
           envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
             "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -116,14 +98,14 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: {{ .Values.mimir.distributorHost }}
-                    port_value: {{ .Values.mimir.distributorPort | int }}
+                    address: mimir-distributor.mimir.svc.cluster.local
+                    port_value: 8080
 
       - name: rls_ext_authz
         connect_timeout: 0.25s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
-        # 🔧 FIX: Properly configure HTTP/2 for gRPC communication to RLS
+        # 🔧 FIX: Keep HTTP/2 for gRPC but configure properly
         typed_extension_protocol_options:
           envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
             "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -136,14 +118,14 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: {{ .Values.rls.host }}
-                    port_value: {{ .Values.rls.extAuthzPort | int }}
+                    address: mimir-rls.mimir-edge-enforcement.svc.cluster.local
+                    port_value: 8080
 
       - name: rls_ratelimit
         connect_timeout: 0.25s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
-        # 🔧 FIX: Properly configure HTTP/2 for gRPC communication to RLS
+        # 🔧 FIX: Keep HTTP/2 for gRPC but configure properly
         typed_extension_protocol_options:
           envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
             "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -156,6 +138,5 @@ data:
             - endpoint:
                 address:
                   socket_address:
-                    address: {{ .Values.rls.host }}
-                    port_value: {{ .Values.rls.rateLimitPort | int }}
-{{- end }} 
+                    address: mimir-rls.mimir-edge-enforcement.svc.cluster.local
+                    port_value: 8081

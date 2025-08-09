@@ -47,6 +47,14 @@ rateLimit:
 # Proxy configuration
 proxy:
   upstreamTimeout: "30s"
+  # HTTP protocol settings (fixes 426 Upgrade Required errors)
+  httpProtocol:
+    # Accept HTTP/1.0 and HTTP/1.1 from downstream (NGINX)
+    acceptHttp10: true
+    # Use remote address from NGINX proxy
+    useRemoteAddress: true
+    # Number of trusted hops for X-Forwarded-For
+    xffNumTrustedHops: 1
 
 # Resource limits and overload management
 resourceLimits:
