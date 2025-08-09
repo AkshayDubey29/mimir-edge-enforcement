@@ -277,6 +277,15 @@ envoy:
       failureModeDeny: true     # Deny on rate limit service failure
     
     tenantHeader: "X-Scope-OrgID"
+  
+  # Resource limits and overload protection
+  resourceLimits:
+    maxDownstreamConnections: 25000      # High for production traffic
+    maxHeapSizeBytes: 838860800          # 800 MiB (80% of 1Gi container)
+    disableKeepaliveThreshold: 0.8       # Disable keepalive at 80%
+    stopAcceptingRequestsThreshold: 0.95 # Stop accepting at 95%
+    shrinkHeapThreshold: 0.8             # Shrink heap at 80%
+    heapStopAcceptingThreshold: 0.95     # Stop accepting at 95% heap
 
 # 📊 Admin UI  
 adminUI:
@@ -537,6 +546,7 @@ curl https://mimir-admin.your-domain.com/api/tenants
 ### Key Metrics to Monitor
 - **RLS**: `tenant_requests_total`, `rate_limit_decisions_total`, `denied_requests_total`
 - **Envoy**: `ext_authz.allowed`, `ext_authz.denied`, `ratelimit.ok`, `ratelimit.over_limit`
+- **Envoy Overload**: `overload.envoy.overload_actions.*.scale_timer`, `server.memory_heap_size`, `http.inbound.downstream_cx_active`
 - **Overrides-Sync**: `config_map_syncs_total`, `tenant_count`, `sync_errors_total`
 
 ### Grafana Dashboards
@@ -684,6 +694,19 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    kubectl logs -l app=mimir-nginx -n mimir --tail=100 | grep "X-Canary-Route"
    ```
 
+5. **Envoy overload actions triggered**:
+   ```bash
+   # Check overload status
+   kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement
+   curl http://localhost:8001/stats | grep overload
+   
+   # Check connection and memory usage
+   curl http://localhost:8001/stats | grep -E "(downstream_cx_active|memory_heap_size)"
+   
+   # Scale up if needed
+   kubectl scale deployment/mimir-envoy --replicas=5 -n mimir-edge-enforcement
+   ```
+
 ### Emergency Procedures
 ```bash
 # Instant bypass (route all traffic direct to Mimir)
@@ -719,6 +742,7 @@ kubectl rollout restart deployment/mimir-nginx -n mimir
 
 - **[NGINX Canary Setup Guide](nginx-canary-setup.md)**: Detailed canary rollout procedures
 - **[Overrides-Sync Troubleshooting](troubleshooting-overrides-sync.md)**: Fix ConfigMap parsing issues
+- **[Envoy Resource Limits](envoy-resource-limits.md)**: Configure overload protection and monitoring
 - **[Production Values Examples](../examples/values/)**: Template configurations
 - **[Monitoring & Dashboards](../examples/monitoring/)**: Grafana dashboards and alerts
 
