@@ -25,15 +25,11 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Remove default nginx config (will be replaced by ConfigMap)
 RUN rm /etc/nginx/nginx.conf
 
-# Create nginx user and set permissions
-RUN addgroup -g 101 -S nginx && \
-    adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx
+# Set ownership of React app files to nginx user
+RUN chown -R nginx:nginx /usr/share/nginx/html
 
-# Set correct ownership
-RUN chown -R nginx:nginx /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx
-
-# Create required directories
-RUN mkdir -p /var/run && chown nginx:nginx /var/run
+# Create tmp directory for nginx (required for non-root execution)
+RUN mkdir -p /tmp/nginx && chown -R nginx:nginx /tmp/nginx
 
 # Expose port
 EXPOSE 80
