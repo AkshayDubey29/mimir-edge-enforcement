@@ -48,6 +48,23 @@ rateLimit:
 proxy:
   upstreamTimeout: "30s"
 
+# Resource limits and overload management
+resourceLimits:
+  # Maximum number of active downstream connections
+  maxDownstreamConnections: 10000
+  
+  # Maximum heap size (should be ~80% of container memory limit)
+  # For 512Mi container limit: ~400MB, for 1Gi: ~800MB
+  maxHeapSizeBytes: 838860800  # 800 MiB (for 1Gi container limit)
+  
+  # Connection-based overload thresholds (0.0 - 1.0)
+  disableKeepaliveThreshold: 0.8     # Disable keepalive at 80% of max connections
+  stopAcceptingRequestsThreshold: 0.95  # Stop accepting at 95% of max connections
+  
+  # Heap-based overload thresholds (0.0 - 1.0)
+  shrinkHeapThreshold: 0.8           # Start shrinking heap at 80%
+  heapStopAcceptingThreshold: 0.95   # Stop accepting requests at 95% heap
+
 # Deployment configuration
 replicaCount: 1
 
