@@ -197,8 +197,26 @@ func handleHealth(rls *service.RLS) http.HandlerFunc {
 
 func handleOverview(rls *service.RLS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleOverview")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		
+		log.Debug().Msg("handling /api/overview request")
 		stats := rls.OverviewSnapshot()
-		writeJSON(w, http.StatusOK, map[string]any{"stats": stats})
+		
+		response := map[string]any{"stats": stats}
+		log.Info().
+			Int64("total_requests", stats.TotalRequests).
+			Int64("allowed_requests", stats.AllowedRequests).
+			Int64("denied_requests", stats.DeniedRequests).
+			Float64("allow_percentage", stats.AllowPercentage).
+			Int("active_tenants", stats.ActiveTenants).
+			Msg("overview API response")
+			
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
@@ -213,8 +231,34 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 		
 		log.Debug().Msg("handling /api/tenants request")
 		tenants := rls.ListTenantsWithMetrics()
-		log.Debug().Int("tenant_count", len(tenants)).Msg("retrieved tenants")
-		writeJSON(w, http.StatusOK, map[string]any{"tenants": tenants})
+		
+		// Log detailed tenant information
+		tenantLogger := log.Info().Int("tenant_count", len(tenants))
+		
+		if len(tenants) == 0 {
+			tenantLogger.Msg("tenants API response: NO TENANTS FOUND - this explains zero active tenants!")
+		} else {
+			// Log first few tenants for debugging
+			for i, tenant := range tenants {
+				if i >= 3 { // Only log first 3 tenants to avoid spam
+					break
+				}
+				tenantLogger = tenantLogger.
+					Str(fmt.Sprintf("tenant_%d_id", i), tenant.ID).
+					Str(fmt.Sprintf("tenant_%d_name", i), tenant.Name).
+					Float64(fmt.Sprintf("tenant_%d_samples_limit", i), tenant.Limits.SamplesPerSecond).
+					Float64(fmt.Sprintf("tenant_%d_allow_rate", i), tenant.Metrics.AllowRate).
+					Float64(fmt.Sprintf("tenant_%d_deny_rate", i), tenant.Metrics.DenyRate).
+					Bool(fmt.Sprintf("tenant_%d_enforcement", i), tenant.Enforcement.Enabled)
+			}
+			if len(tenants) > 3 {
+				tenantLogger = tenantLogger.Int("additional_tenants", len(tenants)-3)
+			}
+			tenantLogger.Msg("tenants API response with tenant details")
+		}
+		
+		response := map[string]any{"tenants": tenants}
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
