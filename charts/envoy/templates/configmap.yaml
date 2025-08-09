@@ -25,7 +25,7 @@ data:
         address:
           socket_address:
             address: 0.0.0.0
-            port_value: {{ .Values.service.port }}
+            port_value: {{ .Values.service.port | int }}
         filter_chains:
         - filters:
           - name: envoy.filters.network.http_connection_manager
@@ -50,7 +50,7 @@ data:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
                   transport_api_version: V3
                   with_request_body:
-                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes }}
+                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
                     allow_partial_message: true
                   failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
                   grpc_service:
@@ -84,7 +84,7 @@ data:
                 address:
                   socket_address:
                     address: {{ .Values.mimir.distributorHost }}
-                    port_value: {{ .Values.mimir.distributorPort }}
+                    port_value: {{ .Values.mimir.distributorPort | int }}
 
       - name: rls_ext_authz
         connect_timeout: 0.25s
@@ -99,7 +99,7 @@ data:
                 address:
                   socket_address:
                     address: {{ .Values.rls.host }}
-                    port_value: {{ .Values.rls.extAuthzPort }}
+                    port_value: {{ .Values.rls.extAuthzPort | int }}
 
       - name: rls_ratelimit
         connect_timeout: 0.25s
@@ -114,5 +114,5 @@ data:
                 address:
                   socket_address:
                     address: {{ .Values.rls.host }}
-                    port_value: {{ .Values.rls.rateLimitPort }}
+                    port_value: {{ .Values.rls.rateLimitPort | int }}
 {{- end }} 
