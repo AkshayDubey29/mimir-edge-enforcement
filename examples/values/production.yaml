@@ -1,0 +1,304 @@
+# Production values template for mimir-edge-enforcement
+# Copy and customize this file for your environment
+
+# =================================================================
+# RLS (Rate Limiting Service) Configuration
+# =================================================================
+rls:
+  replicaCount: 3
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-rls
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production (e.g., "abc123def")
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 1000m      # 🔧 CUSTOMIZE: Based on your load
+      memory: 1Gi     # 🔧 CUSTOMIZE: Based on your memory needs
+    requests:
+      cpu: 500m
+      memory: 512Mi
+  
+  # Auto-scaling
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10   # 🔧 CUSTOMIZE: Max pods for your cluster
+    targetCPUUtilizationPercentage: 70
+  
+  # High availability
+  pdb:
+    enabled: true
+    minAvailable: 2
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # Mimir integration
+  mimir:
+    namespace: "mimir"                    # 🔴 CHANGE: Your Mimir namespace
+    overridesConfigMap: "mimir-overrides" # 🔴 CHANGE: Your ConfigMap name
+  
+  # Default limits (0 = ConfigMap driven)
+  defaultSamplesPerSecond: 0
+  defaultBurstPercent: 0
+  maxBodyBytes: 0
+  
+  # Logging
+  log:
+    level: "info"     # 🔧 CUSTOMIZE: debug/info/warn/error
+    format: "json"    # json or text
+  
+  # Monitoring
+  metrics:
+    enabled: true
+    port: 9090
+  
+  # Network security
+  networkPolicy:
+    enabled: true
+  
+  # Image pull secrets (if using private registry)
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Overrides Sync Controller Configuration  
+# =================================================================
+overridesSync:
+  replicaCount: 2
+  
+  image:
+    repository: ghcr.io/akshaydubey29/overrides-sync
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Controller settings
+  mimir:
+    namespace: "mimir"                    # 🔴 CHANGE: Your Mimir namespace
+    overridesConfigMap: "mimir-overrides" # 🔴 CHANGE: Your ConfigMap name
+  
+  rls:
+    host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"  # 🔧 CUSTOMIZE: Namespace
+    adminPort: "8082"
+  
+  # Polling configuration
+  pollFallbackSeconds: 30  # 🔧 CUSTOMIZE: How often to check ConfigMap
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # RBAC
+  serviceAccount:
+    create: true
+    annotations: {}
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Envoy Proxy Configuration
+# =================================================================
+envoy:
+  replicaCount: 3
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-envoy
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 1000m    # 🔧 CUSTOMIZE: Envoy can be CPU intensive
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+  
+  # Auto-scaling
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 15   # 🔧 CUSTOMIZE: Scale based on traffic
+    targetCPUUtilizationPercentage: 80
+  
+  # High availability
+  pdb:
+    enabled: true
+    minAvailable: 2
+  
+  # Service configuration
+  service:
+    type: ClusterIP  # 🔧 CUSTOMIZE: LoadBalancer if direct access needed
+    port: 8080
+  
+  # Mimir distributor (upstream)
+  mimir:
+    distributorHost: "mimir-distributor.mimir.svc.cluster.local"  # 🔴 CHANGE: Your Mimir service
+    distributorPort: 8080
+  
+  # RLS integration
+  rls:
+    host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"  # 🔧 CUSTOMIZE: Namespace
+    extAuthzPort: 8080
+    rateLimitPort: 8081
+  
+  # External authorization
+  extAuthz:
+    maxRequestBytes: 4194304  # 4 MiB - 🔧 CUSTOMIZE: Max request size
+    failureModeAllow: false   # 🔴 SECURITY: false = fail closed (recommended)
+  
+  # Rate limiting
+  rateLimit:
+    failureModeDeny: true     # 🔴 SECURITY: true = deny on RLS failure (recommended)
+  
+  # Tenant identification
+  tenantHeader: "X-Scope-OrgID"  # 🔧 CUSTOMIZE: Your tenant header
+  
+  # Remote write path
+  remoteWrite:
+    path: "/api/v1/push"  # 🔧 CUSTOMIZE: Your Prometheus remote_write path
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Admin UI Configuration (Optional)
+# =================================================================
+adminUI:
+  enabled: false  # 🔧 CUSTOMIZE: Set to true if you want Admin UI
+  
+  replicaCount: 2
+  
+  image:
+    repository: ghcr.io/akshaydubey29/mimir-edge-admin
+    tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
+    pullPolicy: IfNotPresent
+  
+  # Resource configuration
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+  
+  # Ingress configuration
+  ingress:
+    enabled: true   # 🔧 CUSTOMIZE: Enable if you want external access
+    className: "nginx"  # 🔴 CHANGE: Your ingress controller class
+    annotations:
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"  # 🔧 CUSTOMIZE: Your cert issuer
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/auth-type: basic        # 🔴 SECURITY: Add authentication
+      nginx.ingress.kubernetes.io/auth-secret: admin-auth
+    hosts:
+      - host: mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: mimir-admin-tls
+        hosts:
+          - mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+  
+  # Security
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 101  # nginx user
+  
+  # Image pull secrets
+  imagePullSecrets:
+    - name: ghcr-secret
+
+# =================================================================
+# Global Configuration
+# =================================================================
+global:
+  # Container registry credentials
+  imageCredentials:
+    registry: ghcr.io
+    username: ""        # 🔴 CHANGE: Your GitHub username
+    password: ""        # 🔴 CHANGE: Your GitHub token (use secret in production)
+    email: ""           # 🔴 CHANGE: Your email
+  
+  # Cluster-specific settings
+  cluster:
+    name: "production"  # 🔧 CUSTOMIZE: Your cluster name
+    region: "us-west-2" # 🔧 CUSTOMIZE: Your region
+  
+  # Monitoring
+  monitoring:
+    enabled: true
+    namespace: "monitoring"  # 🔧 CUSTOMIZE: Your monitoring namespace
+  
+  # Security
+  security:
+    networkPolicies: true
+    podSecurityStandards: true
+
+# =================================================================
+# Environment-specific overrides
+# =================================================================
+
+# Example staging overrides:
+# staging:
+#   rls:
+#     replicaCount: 1
+#     resources:
+#       limits:
+#         cpu: 500m
+#         memory: 512Mi
+#   envoy:
+#     replicaCount: 2
+#   adminUI:
+#     enabled: true
+
+# Example development overrides:
+# development:
+#   rls:
+#     replicaCount: 1
+#     log:
+#       level: "debug"
+#   envoy:
+#     replicaCount: 1
+#   adminUI:
+#     enabled: true
+#     ingress:
+#       annotations:
+#         nginx.ingress.kubernetes.io/auth-type: ""  # No auth for dev
