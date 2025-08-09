@@ -20,6 +20,26 @@ resourceLimits:
   stopAcceptingRequestsThreshold: 0.95  # Stop accepting at 95%
 ```
 
+### Generated Envoy Configuration Structure
+```yaml
+overload_manager:
+  refresh_interval: 0.25s
+  resource_monitors:
+  - name: "envoy.resource_monitors.downstream_connections"
+  - name: "envoy.resource_monitors.fixed_heap"
+  actions:
+  - name: "envoy.overload_actions.disable_http_keepalive"
+    triggers:
+    - name: "envoy.resource_monitors.downstream_connections"
+      threshold:
+        value: 0.8
+  - name: "envoy.overload_actions.stop_accepting_requests"
+    triggers:
+    - name: "envoy.resource_monitors.downstream_connections"
+      threshold:
+        value: 0.95
+```
+
 ### Memory Limits
 ```yaml
 resourceLimits:
