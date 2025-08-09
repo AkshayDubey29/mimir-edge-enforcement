@@ -59,9 +59,21 @@ data:
             add_header Referrer-Policy "no-referrer-when-downgrade" always;
             add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: {{ .Values.config.apiBaseUrl }}" always;
             
-            # Handle client-side routing
+            # Handle client-side routing for React app
             location / {
                 try_files $uri $uri/ /index.html;
+                
+                # Additional headers for React app
+                add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+                add_header Pragma "no-cache" always;
+                add_header Expires "0" always;
+            }
+            
+            # Serve index.html for all non-API routes (React Router)
+            location ~* ^.+\.(html)$ {
+                add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+                add_header Pragma "no-cache" always;
+                add_header Expires "0" always;
             }
             
             # API proxy to RLS service
@@ -98,6 +110,13 @@ data:
                 add_header X-Frame-Options "SAMEORIGIN" always;
                 add_header X-XSS-Protection "1; mode=block" always;
                 add_header X-Content-Type-Options "nosniff" always;
+            }
+            
+            # Debug endpoint
+            location /debug {
+                access_log off;
+                return 200 "Admin UI Debug: NGINX serving from /usr/share/nginx/html\n";
+                add_header Content-Type text/plain;
             }
             
             # Health check endpoints
