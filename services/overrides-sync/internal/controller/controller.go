@@ -9,11 +9,11 @@ import (
 
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/overrides-sync/internal/limits"
 	"github.com/rs/zerolog"
+	"gopkg.in/yaml.v2"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	"gopkg.in/yaml.v2"
 )
 
 // Config holds the controller configuration
@@ -189,8 +189,6 @@ type MimirOverridesConfig struct {
 
 // parseOverrides parses overrides from ConfigMap data
 func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.TenantLimits, error) {
-	overrides := make(map[string]limits.TenantLimits)
-
 	c.logger.Debug().
 		Int("configmap_keys", len(data)).
 		Msg("parsing ConfigMap data")
@@ -217,7 +215,7 @@ func (c *Controller) parseOverrides(data map[string]string) (map[string]limits.T
 // parseMimirYamlOverrides parses the actual Mimir overrides.yaml format
 func (c *Controller) parseMimirYamlOverrides(yamlContent string) (map[string]limits.TenantLimits, error) {
 	var config MimirOverridesConfig
-	
+
 	c.logger.Debug().
 		Str("yaml_content", yamlContent[:min(500, len(yamlContent))]).
 		Msg("parsing Mimir YAML overrides")
@@ -251,7 +249,7 @@ func (c *Controller) parseMimirYamlOverrides(yamlContent string) (map[string]lim
 		// Parse each field in the tenant config
 		for fieldName, fieldValue := range tenantConfig {
 			valueStr := fmt.Sprintf("%v", fieldValue)
-			
+
 			c.logger.Debug().
 				Str("tenant", tenantID).
 				Str("field", fieldName).
@@ -289,7 +287,7 @@ func (c *Controller) parseFlatOverrides(data map[string]string) (map[string]limi
 
 	for key, value := range data {
 		var tenantID, limitName string
-		
+
 		// Try colon separator first
 		if strings.Contains(key, ":") {
 			parts := strings.SplitN(key, ":", 2)
@@ -365,7 +363,7 @@ func min(a, b int) int {
 func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, value string) error {
 	// Normalize limit name to handle different naming conventions
 	normalizedLimitName := strings.ToLower(strings.TrimSpace(limitName))
-	
+
 	c.logger.Debug().
 		Str("original_limit", limitName).
 		Str("normalized_limit", normalizedLimitName).
@@ -391,7 +389,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 		} else {
 			return fmt.Errorf("invalid burst_percent: %s", value)
 		}
-	
+
 	case "ingestion_burst_size":
 		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			// Convert absolute burst size to percentage of ingestion_rate
@@ -445,12 +443,12 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 		} else {
 			return fmt.Errorf("invalid max_series_per_request: %s", value)
 		}
-	
+
 	// Additional Mimir fields (log but don't error - these are not part of our core limits yet)
-	case "max_global_series_per_user", "max_global_series_per_metric", "max_global_metadata_per_user", 
-		 "max_global_metadata_per_metric", "ingestion_tenant_shard_size", "cardinality_analysis_enabled",
-		 "accept_ha_samples", "ha_cluster_label", "ha_replica_label", "max_cache_freshness",
-		 "ruler_max_rule_groups_per_tenant", "ruler_max_rules_per_rule_group":
+	case "max_global_series_per_user", "max_global_series_per_metric", "max_global_metadata_per_user",
+		"max_global_metadata_per_metric", "ingestion_tenant_shard_size", "cardinality_analysis_enabled",
+		"accept_ha_samples", "ha_cluster_label", "ha_replica_label", "max_cache_freshness",
+		"ruler_max_rule_groups_per_tenant", "ruler_max_rules_per_rule_group":
 		c.logger.Debug().
 			Str("field", limitName).
 			Str("value", value).
