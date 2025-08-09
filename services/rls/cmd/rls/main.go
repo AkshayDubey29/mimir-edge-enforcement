@@ -204,7 +204,16 @@ func handleOverview(rls *service.RLS) http.HandlerFunc {
 
 func handleListTenants(rls *service.RLS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleListTenants")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+		
+		log.Debug().Msg("handling /api/tenants request")
 		tenants := rls.ListTenantsWithMetrics()
+		log.Debug().Int("tenant_count", len(tenants)).Msg("retrieved tenants")
 		writeJSON(w, http.StatusOK, map[string]any{"tenants": tenants})
 	}
 }
@@ -279,5 +288,7 @@ func handleExportCSV(rls *service.RLS) http.HandlerFunc {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Error().Err(err).Msg("failed to encode JSON response")
+	}
 }
