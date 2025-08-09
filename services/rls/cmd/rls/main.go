@@ -165,6 +165,7 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants", handleListTenants(rls)).Methods("GET")
 	router.HandleFunc("/api/tenants/{id}", handleGetTenant(rls)).Methods("GET")
 	router.HandleFunc("/api/tenants/{id}/enforcement", handleSetEnforcement(rls)).Methods("POST")
+	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
 
@@ -301,6 +302,47 @@ func handleSetEnforcement(rls *service.RLS) http.HandlerFunc {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	}
+}
+
+func handleSetTenantLimits(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleSetTenantLimits")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		id := mux.Vars(r)["id"]
+		
+		// Parse request body
+		var tenantLimits limits.TenantLimits
+		if err := json.NewDecoder(r.Body).Decode(&tenantLimits); err != nil {
+			log.Error().Err(err).Str("tenant_id", id).Msg("failed to decode tenant limits JSON")
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
+			return
+		}
+
+		// Set tenant limits in RLS
+		if err := rls.SetTenantLimits(id, tenantLimits); err != nil {
+			log.Error().Err(err).Str("tenant_id", id).Msg("failed to set tenant limits")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		log.Info().
+			Str("tenant_id", id).
+			Float64("samples_per_second", tenantLimits.SamplesPerSecond).
+			Float64("burst_percent", tenantLimits.BurstPercent).
+			Int64("max_body_bytes", tenantLimits.MaxBodyBytes).
+			Msg("RLS: tenant limits set via HTTP API from overrides-sync")
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"tenant_id": id,
+			"limits": tenantLimits,
+		})
 	}
 }
 
