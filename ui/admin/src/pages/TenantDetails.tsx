@@ -95,7 +95,54 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
     if (!response.ok) {
       throw new Error(`Failed to fetch tenant details: ${response.statusText}`);
     }
-    return await response.json();
+    const data = await response.json();
+    
+    // Backend returns {tenant: {...}, recent_denials: [...]}
+    // We need to extract the tenant data and convert it to our format
+    const tenant = data.tenant;
+    const denials = data.recent_denials || [];
+    
+    // Convert backend tenant format to frontend format
+    return {
+      id: tenant.id || tenantId,
+      name: tenant.name || tenantId,
+      status: tenant.status || 'unknown',
+      created_at: tenant.created_at || '',
+      last_activity: tenant.last_activity || '',
+      limits: {
+        samples_per_second: tenant.limits?.samples_per_second || 0,
+        burst_percent: tenant.limits?.burst_percent || 0,
+        max_body_bytes: tenant.limits?.max_body_bytes || 0,
+        max_series_per_query: tenant.limits?.max_series_per_query || 0,
+        max_global_series_per_user: tenant.limits?.max_global_series_per_user || 0,
+        max_global_series_per_metric: tenant.limits?.max_global_series_per_metric || 0,
+        max_global_exemplars_per_user: tenant.limits?.max_global_exemplars_per_user || 0,
+        ingestion_rate: tenant.limits?.ingestion_rate || 0,
+        ingestion_burst_size: tenant.limits?.ingestion_burst_size || 0
+      },
+      metrics: {
+        current_samples_per_second: tenant.metrics?.current_samples_per_second || 0,
+        current_series: tenant.metrics?.current_series || 0,
+        total_requests: tenant.metrics?.total_requests || 0,
+        allowed_requests: tenant.metrics?.allowed_requests || 0,
+        denied_requests: tenant.metrics?.denied_requests || 0,
+        allow_rate: tenant.metrics?.allow_rate || 0,
+        deny_rate: tenant.metrics?.deny_rate || 0,
+        avg_response_time: tenant.metrics?.avg_response_time || 0,
+        error_rate: tenant.metrics?.error_rate || 0,
+        utilization_pct: tenant.metrics?.utilization_pct || 0
+      },
+      request_history: tenant.request_history || [],
+      enforcement_history: denials.map((denial: any) => ({
+        timestamp: denial.timestamp || '',
+        reason: denial.reason || '',
+        limit_type: denial.limit_type || '',
+        current_value: denial.observed_samples || 0,
+        limit_value: denial.limit_value || 0,
+        action: 'denied'
+      })),
+      alerts: tenant.alerts || []
+    };
   } catch (error) {
     console.error('Error fetching tenant details:', error);
     // Return empty data structure on error
@@ -215,21 +262,40 @@ export function TenantDetails() {
           <div className="text-sm text-gray-500">
             {error instanceof Error ? error.message : 'Unknown error occurred'}
           </div>
+          <div className="mt-4">
+            <button 
+              onClick={() => window.history.back()} 
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Go Back
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (!tenantDetails) {
+  if (!tenantDetails || tenantDetails.status === 'unknown') {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-600">Tenant not found</div>
+        <div className="text-center">
+          <div className="text-lg text-gray-600 mb-2">Tenant not found</div>
+          <div className="text-sm text-gray-500 mb-4">
+            The tenant "{tenantId}" does not exist or has no limits configured.
+          </div>
+          <button 
+            onClick={() => window.history.back()} 
+            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
 
   // Prepare chart data
-  const requestHistoryData = tenantDetails.request_history.map(item => ({
+  const requestHistoryData = (tenantDetails.request_history || []).map(item => ({
     time: new Date(item.timestamp).toLocaleTimeString(),
     requests: item.requests,
     samples: item.samples,
