@@ -1,0 +1,148 @@
+# Envoy Proxy Values with Debugging Configuration
+# Use this file for deploying Envoy with enhanced debugging and monitoring
+
+# Deployment configuration
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Service configuration
+service:
+  port: 8080
+  type: ClusterIP
+  annotations: {}
+
+# Remote write configuration
+remoteWrite:
+  path: "/api/v1/push"
+
+# Tenant identification
+tenantHeader: "X-Scope-OrgID"
+
+# Mimir distributor configuration
+mimir:
+  distributorHost: "mimir-distributor.mimir.svc.cluster.local"
+  distributorPort: 8080
+
+# RLS service configuration
+rls:
+  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  extAuthzPort: 8080
+  rateLimitPort: 8081
+
+# 🔧 DEBUG: External authorization configuration with debugging
+extAuthz:
+  maxRequestBytes: 4194304  # 4 MiB
+  failureModeAllow: true    # 🔧 DEBUG: Temporarily set to true for debugging
+  timeout: "10s"            # 🔧 DEBUG: Increased timeout for debugging
+
+# Rate limiting configuration
+rateLimit:
+  failureModeDeny: true
+  domain: "mimir_remote_write"
+  grpcTimeout: "5s"         # 🔧 DEBUG: Increased timeout for debugging
+
+# Proxy configuration
+proxy:
+  upstreamTimeout: "30s"
+  httpProtocol:
+    acceptHttp10: true
+    useRemoteAddress: true
+    xffNumTrustedHops: 1
+
+# 🔧 DEBUG: Enhanced logging configuration for troubleshooting
+logging:
+  level: "debug"                # Set to debug for troubleshooting
+  enableAccessLogs: true        # Enable HTTP access logs
+  enableDebugLogs: true         # Enable debug logging for filters
+
+# Resource limits and overload management
+resourceLimits:
+  maxHeapSizeBytes: 402653184  # 384 MiB (75% of 512Mi container limit)
+  shrinkHeapThreshold: 0.8     # Start shrinking heap at 80%
+  heapStopAcceptingThreshold: 0.95  # Stop accepting at 95% heap
+
+# Image configuration
+image:
+  repository: ghcr.io/AkshayDubey29/mimir-envoy
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# 🔧 DEBUG: Pod annotations for debugging
+podAnnotations:
+  debug: "true"
+  logging: "debug"
+  ext_authz_debug: "true"
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# 🔧 DEBUG: Enhanced resource configuration for debugging
+resources:
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+
+# ConfigMap configuration
+configMap:
+  create: true
+
+# Volume mounts and volumes
+volumeMounts: []
+volumes: []

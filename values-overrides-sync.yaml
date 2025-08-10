@@ -1,0 +1,200 @@
+# Overrides-Sync Values with Debugging Configuration
+# Use this file for deploying Overrides-Sync with enhanced debugging and monitoring
+
+# Deployment configuration
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Image configuration
+image:
+  repository: ghcr.io/AkshayDubey29/mimir-overrides-sync
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  annotations: {}
+
+# 🔧 DEBUG: Enhanced resource configuration for debugging
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  capabilities:
+    drop:
+      - ALL
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+
+# 🔧 DEBUG: Pod annotations for debugging
+podAnnotations:
+  debug: "true"
+  logging: "debug"
+  sync_debug: "true"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+
+# RBAC configuration
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["configmaps"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["events"]
+      verbs: ["create", "patch"]
+
+# 🔧 DEBUG: Enhanced logging configuration for troubleshooting
+log:
+  level: "debug"  # Set to debug for troubleshooting
+  format: "json"
+
+# Controller configuration
+mimir:
+  namespace: "mimir"
+  overridesConfigMap: "mimir-overrides"
+
+rls:
+  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  adminPort: "8082"
+
+# 🔧 DEBUG: Polling configuration with debugging
+pollFallbackSeconds: 30
+
+# 🔧 DEBUG: Additional environment variables for debugging
+env:
+  - name: DEBUG
+    value: "true"
+  - name: LOG_LEVEL
+    value: "debug"
+  - name: SYNC_DEBUG
+    value: "true"
+
+# 🔧 DEBUG: Enhanced liveness and readiness probes
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: metrics
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+
+# Image pull secrets
+imagePullSecrets: []
+
+# 🔧 DEBUG: Network Policy for debugging access
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: monitoring
+      ports:
+      - protocol: TCP
+        port: 8080
+  egress:
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: mimir
+      ports:
+      - protocol: TCP
+        port: 443
+    - to:
+      - namespaceSelector:
+          matchLabels:
+            name: mimir-edge-enforcement
+      ports:
+      - protocol: TCP
+        port: 8082
+    - to: []  # Allow DNS resolution
+      ports:
+      - protocol: UDP
+        port: 53
+
+# 🔧 DEBUG: Additional configuration for debugging
+config:
+  # Debug mode
+  debug: true
+  
+  # Enhanced error reporting
+  errorReporting: true
+  
+  # Detailed logging
+  detailedLogging: true
+  
+  # Connection pooling (already configured in controller)
+  connectionPooling: true
