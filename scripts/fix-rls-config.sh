@@ -55,7 +55,7 @@ limits:
   enforceBodyParsing: true
   
   # 🔧 FIX: Add missing RLS configuration options
-  maxRequestBytes: 4194304      # 4 MiB - Maximum request body size for gRPC
+  maxRequestBytes: 4000000      # 4 MiB - Maximum request body size for gRPC
   failureModeAllow: false       # Fail closed for security (set true for debugging)
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048

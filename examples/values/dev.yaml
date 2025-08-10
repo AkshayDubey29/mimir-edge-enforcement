@@ -68,7 +68,7 @@ mimir-envoy:
     rateLimitPort: 8081
   
   extAuthz:
-    maxRequestBytes: 4194304
+    maxRequestBytes: 4000000
     failureModeAllow: false
   
   rateLimit:
