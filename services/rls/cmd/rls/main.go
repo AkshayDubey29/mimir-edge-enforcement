@@ -130,15 +130,15 @@ func startExtAuthzServer(ctx context.Context, rls *service.RLS, port string, log
 	}
 
 	grpcServer := grpc.NewServer()
-	
+
 	// Register ext_authz service
 	envoy_service_auth_v3.RegisterAuthorizationServer(grpcServer, rls)
-	
+
 	// 🔧 FIX: Add gRPC health check service
 	healthServer := health.NewServer()
 	healthServer.SetServingStatus("envoy.service.auth.v3.Authorization", grpc_health_v1.HealthCheckResponse_SERVING)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
-	
+
 	// Enable reflection for debugging
 	reflection.Register(grpcServer)
 
@@ -164,15 +164,15 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 	}
 
 	grpcServer := grpc.NewServer()
-	
+
 	// Register rate limit service
 	envoy_service_ratelimit_v3.RegisterRateLimitServiceServer(grpcServer, rls)
-	
+
 	// 🔧 FIX: Add gRPC health check service
 	healthServer := health.NewServer()
 	healthServer.SetServingStatus("envoy.service.ratelimit.v3.RateLimitService", grpc_health_v1.HealthCheckResponse_SERVING)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
-	
+
 	// Enable reflection for debugging
 	reflection.Register(grpcServer)
 
