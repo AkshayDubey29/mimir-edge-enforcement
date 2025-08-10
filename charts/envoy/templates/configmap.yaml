@@ -104,19 +104,11 @@ data:
                     max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
                     allow_partial_message: true
                   failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-                  {{- if .Values.extAuthz.enableDebugLogging }}
-                  # 🔧 DEBUG: Enable status on error for debugging
-                  status_on_error:
-                    code: 503
-                    message: "External authorization service unavailable"
-                  {{- end }}
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
                     # 🔧 FIX: Add timeout to prevent hanging requests
                     timeout: {{ .Values.extAuthz.timeout | default "5s" }}
-                  # 🔧 DEBUG: Clear route cache on authorization response
-                  clear_route_cache: true
               - name: envoy.filters.http.ratelimit
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit

@@ -40,8 +40,6 @@ extAuthz:
   failureModeAllow: false   # Set to true for debugging if RLS is unreachable
   # 🔧 FIX: Timeout settings to prevent hanging requests
   timeout: "5s"             # gRPC service timeout
-  # 🔧 DEBUG: Enable verbose logging for troubleshooting
-  enableDebugLogging: false # Set to true to enable debug logs for ext_authz
 
 # Rate limiting configuration
 rateLimit:

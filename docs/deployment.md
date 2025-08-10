@@ -405,8 +405,6 @@ extAuthz:
   failureModeAllow: false   # Fail closed for security - set to true for debugging
   # 🔧 TIMEOUT FIXES:
   timeout: "5s"             # gRPC service timeout - prevents hanging requests
-  # 🔧 DEBUG: Enable for troubleshooting
-  enableDebugLogging: false # Set to true to enable debug logs and error responses
 
 # Rate limiting (with timeout fixes)
 rateLimit:
@@ -859,8 +857,6 @@ envoy:
       failureModeAllow: false   # Fail closed for security - set to true for debugging
       # 🔧 TIMEOUT FIXES:
       timeout: "5s"             # gRPC service timeout prevents hanging
-      # 🔧 DEBUG: Enable for troubleshooting (set to true if needed)
-      enableDebugLogging: false # Enable debug logs and error responses
     
     rateLimit:
       failureModeDeny: true     # Deny on rate limit service failure
@@ -1330,18 +1326,18 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    kubectl exec -it deployment/mimir-envoy -n mimir-edge-enforcement -- \
      nc -z mimir-rls.mimir-edge-enforcement.svc.cluster.local 8080
    
-   # Enable debug logging temporarily
+   # Enable access logging temporarily (if not already enabled)
    helm upgrade mimir-envoy charts/envoy \
-     --set extAuthz.enableDebugLogging=true \
      --set logging.enableAccessLogs=true \
+     --set logging.level=debug \
      --namespace mimir-edge-enforcement
    
    # Check logs for actual request processing
    kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement --tail=50
    
-   # Restore debug settings
+   # Restore normal logging settings
    helm upgrade mimir-envoy charts/envoy \
-     --set extAuthz.enableDebugLogging=false \
+     --set logging.level=info \
      --namespace mimir-edge-enforcement
    ```
 
