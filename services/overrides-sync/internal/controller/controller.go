@@ -59,9 +59,13 @@ func (c *Controller) Run(ctx context.Context) error {
 		Str("configmap", c.config.OverridesConfigMap).
 		Msg("starting overrides sync controller")
 
-	// Initial sync
-	if err := c.syncOverrides(); err != nil {
-		c.logger.Error().Err(err).Msg("initial sync failed")
+	// 🔧 FIX: Add startup delay to wait for RLS to be ready
+	c.logger.Info().Msg("waiting 10 seconds for RLS to be ready...")
+	time.Sleep(10 * time.Second)
+
+	// Initial sync with retry
+	if err := c.syncOverridesWithRetry(); err != nil {
+		c.logger.Error().Err(err).Msg("initial sync failed after retries")
 	}
 
 	// Start watching
@@ -160,6 +164,43 @@ func (c *Controller) syncOverrides() error {
 	return c.syncOverridesFromConfigMap(configMap)
 }
 
+// syncOverridesWithRetry performs a full sync with retry logic
+func (c *Controller) syncOverridesWithRetry() error {
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		c.logger.Info().
+			Int("attempt", attempt).
+			Int("max_retries", maxRetries).
+			Msg("attempting to sync overrides to RLS")
+
+		if err := c.syncOverrides(); err != nil {
+			c.logger.Warn().
+				Err(err).
+				Int("attempt", attempt).
+				Int("max_retries", maxRetries).
+				Msg("sync attempt failed")
+
+			if attempt < maxRetries {
+				c.logger.Info().
+					Dur("retry_delay", retryDelay).
+					Msg("retrying after delay")
+				time.Sleep(retryDelay)
+				continue
+			}
+			return fmt.Errorf("sync failed after %d attempts: %w", maxRetries, err)
+		}
+
+		c.logger.Info().
+			Int("attempt", attempt).
+			Msg("successfully synced overrides to RLS")
+		return nil
+	}
+
+	return fmt.Errorf("sync failed after %d attempts", maxRetries)
+}
+
 // syncOverridesFromConfigMap syncs overrides from a ConfigMap
 func (c *Controller) syncOverridesFromConfigMap(configMap *v1.ConfigMap) error {
 	c.lastResourceVersion = configMap.ResourceVersion
@@ -234,6 +275,10 @@ func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		// 🔧 FIX: Provide more detailed error information for connection issues
+		if strings.Contains(err.Error(), "connection refused") {
+			return fmt.Errorf("connection refused to RLS at %s - RLS may not be ready yet: %w", rlsURL, err)
+		}
 		return fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
