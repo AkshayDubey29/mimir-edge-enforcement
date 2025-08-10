@@ -25,11 +25,11 @@ limits:
   # To enforce only tenants present in the ConfigMap by default, keep defaults at 0 (disabled)
   defaultSamplesPerSecond: 0    # 0 means no default cap; limits must come from ConfigMap
   defaultBurstPercent: 0        # unused until samples_per_second > 0
-  maxBodyBytes: 0               # 0 means no default body size cap
   enforceBodyParsing: true      # parsing can stay enabled for metrics/visibility
   
-  # 🔧 FIX: Add missing RLS configuration options
-  maxRequestBytes: 4194304      # 4 MiB - Maximum request body size for gRPC
+  # 🔧 FIX: Add missing RLS configuration options that were causing tenant discovery to fail
+  maxBodyBytes: 0               # 0 means no default body size cap (tenant-specific limits from ConfigMap)
+  maxRequestBytes: 4194304      # 4 MiB - Maximum request body size for gRPC (global safety limit)
   failureModeAllow: false       # Fail closed for security (set true for debugging)
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048
