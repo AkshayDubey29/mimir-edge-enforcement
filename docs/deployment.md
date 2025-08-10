@@ -402,15 +402,23 @@ resourceLimits:
 # External authorization (with buffer overflow fixes)
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB (provides buffer management for large requests)
-  failureModeAllow: false   # Fail closed for security
+  failureModeAllow: false   # Fail closed for security - set to true for debugging
   # 🔧 TIMEOUT FIXES:
   timeout: "5s"             # gRPC service timeout - prevents hanging requests
+  # 🔧 DEBUG: Enable for troubleshooting
+  enableDebugLogging: false # Set to true to enable debug logs and error responses
 
 # Rate limiting (with timeout fixes)
 rateLimit:
   failureModeDeny: true     # Deny on rate limit service failure
   # 🔧 TIMEOUT FIXES:
   grpcTimeout: "2s"         # gRPC call timeout
+
+# Logging configuration for troubleshooting
+logging:
+  level: "info"             # info, debug, trace, warn, error
+  enableAccessLogs: true    # Enable HTTP access logs to see all requests
+  enableDebugLogs: false    # Enable debug logging for filters
 
 # Tenant configuration
 tenantHeader: "X-Scope-OrgID"
@@ -572,11 +580,15 @@ Use this checklist to verify all fixes are working:
 - [ ] **Heap Size**: 384MB (75% of 512MB container) configured
 - [ ] **Health Checks**: RLS clusters have health check endpoints
 - [ ] **Circuit Breakers**: Connection limits configured for RLS clusters
+- [ ] **Access Logs**: HTTP access logs enabled and showing all requests
+- [ ] **RLS Connectivity**: Envoy can reach RLS on port 8080 (test with nc -z)
+- [ ] **ext_authz Working**: Authorization requests appear in RLS logs
 - [ ] **No Buffer Warnings**: No "buffer size limit exceeded" in logs
 - [ ] **Memory Usage**: Heap usage stays under 384MB limit
 - [ ] **Request Processing**: Large requests (up to 4MB) processed successfully
 - [ ] **Concurrent Handling**: Multiple concurrent requests handled without overflow
 - [ ] **Timeout Handling**: No hanging requests or indefinite retries
+- [ ] **Logs Show Traffic**: Actual /api/v1/push requests visible in Envoy logs (not just /ready)
 
 #### **Production Readiness Validation**
 
@@ -844,14 +856,22 @@ envoy:
     
     extAuthz:
       maxRequestBytes: 4194304  # 4 MiB (provides buffer management)
-      failureModeAllow: false   # Fail closed for security
+      failureModeAllow: false   # Fail closed for security - set to true for debugging
       # 🔧 TIMEOUT FIXES:
       timeout: "5s"             # gRPC service timeout prevents hanging
+      # 🔧 DEBUG: Enable for troubleshooting (set to true if needed)
+      enableDebugLogging: false # Enable debug logs and error responses
     
     rateLimit:
       failureModeDeny: true     # Deny on rate limit service failure
       # 🔧 TIMEOUT FIXES:
       grpcTimeout: "2s"         # gRPC call timeout
+    
+    # 🔧 DEBUG: Logging configuration for troubleshooting
+    logging:
+      level: "info"             # Change to "debug" for verbose logging
+      enableAccessLogs: true    # Enable to see all HTTP requests
+      enableDebugLogs: false    # Enable for detailed filter debugging
     
     tenantHeader: "X-Scope-OrgID"
   
@@ -1295,7 +1315,37 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
      curl -s http://mimir-rls:8080/health
    ```
 
-5. **Rate limits not applied**:
+5. **ext_authz denying all requests (only /ready logs visible)**:
+   ```bash
+   # Quick diagnosis of ext_authz issues
+   ./scripts/check-ext-authz-rls-connectivity.sh
+   
+   # Comprehensive diagnosis
+   ./scripts/diagnose-envoy-ext-authz-issue.sh
+   
+   # Temporarily bypass ext_authz for testing
+   ./scripts/temporarily-bypass-ext-authz.sh
+   
+   # Check if RLS is reachable from Envoy
+   kubectl exec -it deployment/mimir-envoy -n mimir-edge-enforcement -- \
+     nc -z mimir-rls.mimir-edge-enforcement.svc.cluster.local 8080
+   
+   # Enable debug logging temporarily
+   helm upgrade mimir-envoy charts/envoy \
+     --set extAuthz.enableDebugLogging=true \
+     --set logging.enableAccessLogs=true \
+     --namespace mimir-edge-enforcement
+   
+   # Check logs for actual request processing
+   kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement --tail=50
+   
+   # Restore debug settings
+   helm upgrade mimir-envoy charts/envoy \
+     --set extAuthz.enableDebugLogging=false \
+     --namespace mimir-edge-enforcement
+   ```
+
+6. **Rate limits not applied**:
    ```bash
    # Check overrides-sync is running and syncing
    kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement
@@ -1305,7 +1355,7 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
      wget -qO- http://localhost:8082/api/tenants
    ```
 
-6. **NGINX canary not routing correctly**:
+7. **NGINX canary not routing correctly**:
    ```bash
    # Check canary status
    ./scripts/manage-canary.sh status
@@ -1317,7 +1367,7 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    kubectl logs -l app=mimir-nginx -n mimir --tail=100 | grep "X-Canary-Route"
    ```
 
-7. **Envoy overload actions triggered**:
+8. **Envoy overload actions triggered**:
    ```bash
    # Check overload status
    kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement
