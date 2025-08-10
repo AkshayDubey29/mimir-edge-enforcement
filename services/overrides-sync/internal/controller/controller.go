@@ -243,7 +243,7 @@ func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.
 		// Read response body for debugging
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		bodyStr := string(bodyBytes)
-		
+
 		c.logger.Error().
 			Str("tenant_id", tenantID).
 			Str("url", rlsURL).
@@ -251,7 +251,7 @@ func (c *Controller) sendTenantLimitsToRLS(tenantID string, tenantLimits limits.
 			Str("status", resp.Status).
 			Str("response_body", bodyStr).
 			Msg("RLS API request failed")
-			
+
 		return fmt.Errorf("RLS returned status %d: %s, body: %s", resp.StatusCode, resp.Status, bodyStr)
 	}
 

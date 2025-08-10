@@ -58,7 +58,7 @@ func parseOverrides(data map[string]string, logger zerolog.Logger) (map[string]T
 // parseMimirYamlOverrides parses the actual Mimir overrides.yaml format
 func parseMimirYamlOverrides(yamlContent string, logger zerolog.Logger) (map[string]TenantLimits, error) {
 	var config MimirOverridesConfig
-	
+
 	logger.Debug().Str("yaml_content", yamlContent[:min(500, len(yamlContent))]).Msg("parsing Mimir YAML overrides")
 
 	if err := yaml.Unmarshal([]byte(yamlContent), &config); err != nil {
@@ -85,7 +85,7 @@ func parseMimirYamlOverrides(yamlContent string, logger zerolog.Logger) (map[str
 		// Parse each field in the tenant config
 		for fieldName, fieldValue := range tenantConfig {
 			valueStr := fmt.Sprintf("%v", fieldValue)
-			
+
 			logger.Debug().Str("tenant", tenantID).Str("field", fieldName).Str("value", valueStr).Msg("parsing tenant field")
 
 			if err := parseLimitValue(&tenantLimits, fieldName, valueStr, logger); err != nil {

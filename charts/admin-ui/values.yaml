@@ -166,7 +166,7 @@ volumeMounts:
 volumes:
   - name: nginx-config
     configMap:
-      name: "{{ include \"admin-ui.fullname\" . }}-nginx"
+      name: admin-ui-nginx
       defaultMode: 0644
   - name: tmp
     emptyDir: {}

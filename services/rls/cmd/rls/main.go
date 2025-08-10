@@ -181,7 +181,7 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
-	
+
 	// Debug endpoint to list all routes
 	router.HandleFunc("/api/debug/routes", func(w http.ResponseWriter, r *http.Request) {
 		routes := []map[string]interface{}{}
