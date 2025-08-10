@@ -126,7 +126,8 @@ if [ "$RLS_GRPC_TEST" = "NOT_REACHABLE" ]; then
     echo "   kubectl get endpoints mimir-rls -n mimir-edge-enforcement"
     echo ""
     echo "3. Temporarily bypass ext_authz to confirm:"
-    echo "   kubectl patch configmap mimir-envoy-config -n mimir-edge-enforcement --type='json' -p='[{\"op\": \"replace\", \"path\": \"/data/envoy.yaml\", \"value\": \"'$(kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o jsonpath='{.data.envoy\.yaml}' | sed 's/failure_mode_allow: false/failure_mode_allow: true/g')'"}]'"
+    echo "   kubectl patch configmap mimir-envoy-config -n mimir-edge-enforcement --type='json'"
+    echo "   # Set failure_mode_allow: true to bypass ext_authz temporarily"
     echo "   kubectl rollout restart deployment/mimir-envoy -n mimir-edge-enforcement"
 
 elif [ "$RLS_HTTP_TEST" = "NOT_REACHABLE" ]; then

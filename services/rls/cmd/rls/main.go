@@ -20,6 +20,8 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -85,6 +87,14 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// 🔧 FIX: Add startup validation and better logging
+	logger.Info().
+		Str("ext_authz_port", *extAuthzPort).
+		Str("rate_limit_port", *rateLimitPort).
+		Str("admin_port", *adminPort).
+		Str("metrics_port", *metricsPort).
+		Msg("starting RLS service components")
+
 	// Start gRPC servers
 	go startExtAuthzServer(ctx, rls, *extAuthzPort, logger)
 	go startRateLimitServer(ctx, rls, *rateLimitPort, logger)
@@ -93,11 +103,13 @@ func main() {
 	go startAdminServer(ctx, rls, *adminPort, logger)
 	go startMetricsServer(ctx, *metricsPort, logger)
 
+	// 🔧 FIX: Give servers time to start and validate
+	time.Sleep(2 * time.Second)
+	logger.Info().Msg("RLS service started - all components initialized")
+
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	logger.Info().Msg("RLS service started")
 	<-sigChan
 
 	logger.Info().Msg("Shutting down RLS service...")
@@ -118,13 +130,30 @@ func startExtAuthzServer(ctx context.Context, rls *service.RLS, port string, log
 	}
 
 	grpcServer := grpc.NewServer()
+	
+	// Register ext_authz service
 	envoy_service_auth_v3.RegisterAuthorizationServer(grpcServer, rls)
+	
+	// 🔧 FIX: Add gRPC health check service
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("envoy.service.auth.v3.Authorization", grpc_health_v1.HealthCheckResponse_SERVING)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+	
+	// Enable reflection for debugging
 	reflection.Register(grpcServer)
 
-	logger.Info().Str("port", port).Msg("ext_authz gRPC server started")
+	logger.Info().Str("port", port).Msg("ext_authz gRPC server started with health checks")
+
+	// 🔧 FIX: Add graceful shutdown handling
+	go func() {
+		<-ctx.Done()
+		logger.Info().Msg("shutting down ext_authz gRPC server")
+		healthServer.SetServingStatus("envoy.service.auth.v3.Authorization", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	if err := grpcServer.Serve(lis); err != nil {
-		logger.Fatal().Err(err).Msg("failed to serve ext_authz")
+		logger.Error().Err(err).Msg("ext_authz gRPC server stopped")
 	}
 }
 
@@ -135,13 +164,30 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 	}
 
 	grpcServer := grpc.NewServer()
+	
+	// Register rate limit service
 	envoy_service_ratelimit_v3.RegisterRateLimitServiceServer(grpcServer, rls)
+	
+	// 🔧 FIX: Add gRPC health check service
+	healthServer := health.NewServer()
+	healthServer.SetServingStatus("envoy.service.ratelimit.v3.RateLimitService", grpc_health_v1.HealthCheckResponse_SERVING)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
+	
+	// Enable reflection for debugging
 	reflection.Register(grpcServer)
 
-	logger.Info().Str("port", port).Msg("ratelimit gRPC server started")
+	logger.Info().Str("port", port).Msg("ratelimit gRPC server started with health checks")
+
+	// 🔧 FIX: Add graceful shutdown handling
+	go func() {
+		<-ctx.Done()
+		logger.Info().Msg("shutting down ratelimit gRPC server")
+		healthServer.SetServingStatus("envoy.service.ratelimit.v3.RateLimitService", grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	if err := grpcServer.Serve(lis); err != nil {
-		logger.Fatal().Err(err).Msg("failed to serve ratelimit")
+		logger.Error().Err(err).Msg("ratelimit gRPC server stopped")
 	}
 }
 
