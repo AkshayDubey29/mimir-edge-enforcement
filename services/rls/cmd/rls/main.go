@@ -105,7 +105,7 @@ func main() {
 
 	// 🔧 FIX: Give servers time to start and validate
 	time.Sleep(2 * time.Second)
-	logger.Info().Msg("RLS service started - all components initialized")
+	logger.Info().Msg("RLS service started - all components initialized")("RLS service started - all components initialized")
 
 	// Wait for shutdown signal
 	sigChan := make(chan os.Signal, 1)

@@ -27,6 +27,13 @@ limits:
   defaultBurstPercent: 0        # unused until samples_per_second > 0
   maxBodyBytes: 0               # 0 means no default body size cap
   enforceBodyParsing: true      # parsing can stay enabled for metrics/visibility
+  
+  # 🔧 FIX: Add missing RLS configuration options
+  maxRequestBytes: 4194304      # 4 MiB - Maximum request body size for gRPC
+  failureModeAllow: false       # Fail closed for security (set true for debugging)
+  defaultMaxLabelsPerSeries: 60
+  defaultMaxLabelValueLength: 2048
+  defaultMaxSeriesPerRequest: 100000
 
 # Store configuration
 store:

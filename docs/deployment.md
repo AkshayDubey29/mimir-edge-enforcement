@@ -209,6 +209,15 @@ defaultSamplesPerSecond: 0
 defaultBurstPercent: 0
 maxBodyBytes: 0
 
+# 🔧 Enhanced RLS Configuration (required for gRPC health checks)
+limits:
+  maxRequestBytes: 4194304      # 4 MiB - Maximum request body size for gRPC
+  failureModeAllow: false       # Fail closed for security (set true for debugging)
+  defaultMaxLabelsPerSeries: 60
+  defaultMaxLabelValueLength: 2048
+  defaultMaxSeriesPerRequest: 100000
+  enforceBodyParsing: true
+
 # Logging
 log:
   level: "info"
@@ -228,7 +237,7 @@ imagePullSecrets:
   - name: ghcr-secret
 EOF
 
-# Deploy RLS
+# Deploy RLS with enhanced configuration
 helm install mimir-rls charts/mimir-rls \
   --namespace mimir-edge-enforcement \
   --values values-rls.yaml \

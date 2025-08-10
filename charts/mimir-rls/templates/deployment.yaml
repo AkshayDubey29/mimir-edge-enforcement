@@ -44,15 +44,27 @@ spec:
             - name: metrics
               containerPort: {{ .Values.service.ports.metrics }}
           args:
-            - "--tenant-header={{ .Values.tenantHeader }}"
-            - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
-            - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
-            - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
-            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            # Server ports
             - "--ext-authz-port={{ .Values.service.ports.extAuthz }}"
             - "--rate-limit-port={{ .Values.service.ports.rateLimit }}"
             - "--admin-port={{ .Values.service.ports.admin }}"
             - "--metrics-port={{ .Values.service.ports.metrics }}"
+            
+            # Tenant and request configuration
+            - "--tenant-header={{ .Values.tenantHeader }}"
+            - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
+            - "--max-request-bytes={{ .Values.limits.maxRequestBytes | default 4194304 }}"
+            - "--failure-mode-allow={{ .Values.limits.failureModeAllow | default false }}"
+            
+            # Default tenant limits
+            - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
+            - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
+            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            - "--default-max-labels-per-series={{ .Values.limits.defaultMaxLabelsPerSeries | default 60 }}"
+            - "--default-max-label-value-length={{ .Values.limits.defaultMaxLabelValueLength | default 2048 }}"
+            - "--default-max-series-per-request={{ .Values.limits.defaultMaxSeriesPerRequest | default 100000 }}"
+            
+            # Logging
             - "--log-level={{ .Values.log.level }}"
           livenessProbe:
             httpGet:
