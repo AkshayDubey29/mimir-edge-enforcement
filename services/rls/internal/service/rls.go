@@ -113,37 +113,34 @@ func (rls *RLS) startPeriodicStatusLog() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ticker.C:
-			rls.tenantsMu.RLock()
-			tenantCount := len(rls.tenants)
-			tenantIDs := make([]string, 0, tenantCount)
-			for id := range rls.tenants {
-				tenantIDs = append(tenantIDs, id)
-			}
-			rls.tenantsMu.RUnlock()
+	for range ticker.C {
+		rls.tenantsMu.RLock()
+		tenantCount := len(rls.tenants)
+		tenantIDs := make([]string, 0, tenantCount)
+		for id := range rls.tenants {
+			tenantIDs = append(tenantIDs, id)
+		}
+		rls.tenantsMu.RUnlock()
 
-			rls.countersMu.RLock()
-			activeCounters := len(rls.counters)
-			rls.countersMu.RUnlock()
+		rls.countersMu.RLock()
+		activeCounters := len(rls.counters)
+		rls.countersMu.RUnlock()
 
-			logger := rls.logger.Info().
-				Int("tenant_count", tenantCount).
-				Int("active_counters", activeCounters)
+		logger := rls.logger.Info().
+			Int("tenant_count", tenantCount).
+			Int("active_counters", activeCounters)
 
-			if tenantCount > 0 {
-				if tenantCount <= 5 {
-					// Log all tenant IDs if there are few
-					logger = logger.Strs("tenant_ids", tenantIDs)
-				} else {
-					// Log just the first 5 tenant IDs if there are many
-					logger = logger.Strs("sample_tenant_ids", tenantIDs[:5])
-				}
-				logger.Msg("RLS: periodic tenant status - TENANTS LOADED")
+		if tenantCount > 0 {
+			if tenantCount <= 5 {
+				// Log all tenant IDs if there are few
+				logger = logger.Strs("tenant_ids", tenantIDs)
 			} else {
-				logger.Msg("RLS: periodic tenant status - NO TENANTS (check overrides-sync)")
+				// Log just the first 5 tenant IDs if there are many
+				logger = logger.Strs("sample_tenant_ids", tenantIDs[:5])
 			}
+			logger.Msg("RLS: periodic tenant status - TENANTS LOADED")
+		} else {
+			logger.Msg("RLS: periodic tenant status - NO TENANTS (check overrides-sync)")
 		}
 	}
 }
@@ -614,9 +611,16 @@ func (rls *RLS) checkRateLimit(tenant *TenantState, entries []*envoy_extensions_
 
 // updateBucketMetrics updates the bucket metrics
 func (rls *RLS) updateBucketMetrics(tenant *TenantState) {
-	rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "samples").Set(tenant.SamplesBucket.Available())
-	rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "bytes").Set(tenant.BytesBucket.Available())
-	rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "requests").Set(tenant.RequestsBucket.Available())
+	// 🔧 FIX: Check for nil buckets before accessing them (prevents panic with zero limits)
+	if tenant.SamplesBucket != nil {
+		rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "samples").Set(tenant.SamplesBucket.Available())
+	}
+	if tenant.BytesBucket != nil {
+		rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "bytes").Set(tenant.BytesBucket.Available())
+	}
+	if tenant.RequestsBucket != nil {
+		rls.metrics.TenantBuckets.WithLabelValues(tenant.Info.ID, "requests").Set(tenant.RequestsBucket.Available())
+	}
 }
 
 // allowResponse creates an allow response
@@ -677,6 +681,9 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 		Msg("RLS: received tenant limits from overrides-sync")
 
 	tenant.Info.Limits = newLimits
+
+	// 🔧 FIX: Enable enforcement when limits are set from overrides-sync
+	tenant.Info.Enforcement.Enabled = true
 
 	// Update buckets only for non-zero limits; nil buckets mean no enforcement for that dimension
 	if newLimits.SamplesPerSecond > 0 {
