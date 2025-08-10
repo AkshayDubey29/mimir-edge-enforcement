@@ -321,7 +321,7 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 
 		id := mux.Vars(r)["id"]
 		log.Debug().Str("tenant_id", id).Msg("handling /api/tenants/{id} request")
-		
+
 		tenant, ok := rls.GetTenantSnapshot(id)
 		if !ok {
 			log.Info().Str("tenant_id", id).Msg("tenant not found")
@@ -332,13 +332,13 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 			})
 			return
 		}
-		
+
 		denials := rls.RecentDenials(id, 24*time.Hour)
 		log.Info().
 			Str("tenant_id", id).
 			Int("denials_count", len(denials)).
 			Msg("tenant details API response")
-		
+
 		writeJSON(w, http.StatusOK, map[string]any{"tenant": tenant, "recent_denials": denials})
 	}
 }
