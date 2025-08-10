@@ -38,11 +38,18 @@ rls:
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB
   failureModeAllow: false
+  # 🔧 FIX: Buffer and timeout settings to prevent overflow
+  bufferSizeBytes: 131072   # 128KB (double the default 64KB)
+  timeout: "5s"             # Overall ext_authz timeout
+  grpcTimeout: "4s"         # gRPC call timeout (should be less than overall timeout)
 
 # Rate limiting configuration
 rateLimit:
   failureModeDeny: true
   domain: "mimir_remote_write"
+  # 🔧 FIX: Add timeout settings for rate limit service
+  timeout: "3s"             # Overall rate limit timeout
+  grpcTimeout: "2s"         # gRPC call timeout
 
 # Proxy configuration
 proxy:
@@ -58,16 +65,13 @@ proxy:
 
 # Resource limits and overload management
 resourceLimits:
-  # Maximum heap size (should be ~80% of container memory limit)
-  # For 512Mi container limit: ~400MB, for 1Gi: ~800MB
-  maxHeapSizeBytes: 838860800  # 800 MiB (for 1Gi container limit)
+  # 🔧 FIX: Maximum heap size (should be ~75% of container memory limit)
+  # For 512Mi container limit: ~384MB (75% of 512Mi = 384MB)
+  maxHeapSizeBytes: 402653184  # 384 MiB (75% of 512Mi container limit)
   
   # Heap-based overload thresholds (0.0 - 1.0)
   shrinkHeapThreshold: 0.8           # Start shrinking heap at 80%
   heapStopAcceptingThreshold: 0.95   # Stop accepting requests at 95% heap
-
-# Deployment configuration
-replicaCount: 1
 
 image:
   repository: ghcr.io/AkshayDubey29/mimir-envoy
@@ -75,8 +79,6 @@ image:
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
 
 serviceAccount:
   create: true
@@ -155,20 +157,6 @@ configMap:
 
 # Additional environment variables
 env: []
-
-# Auto-scaling configuration
-hpa:
-  enabled: false
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
-
-# Pod Disruption Budget
-pdb:
-  enabled: false
-  minAvailable: 1
-  # maxUnavailable: 1
 
 # Additional volume mounts
 volumeMounts: []
