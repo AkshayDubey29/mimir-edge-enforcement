@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
 import { 
   BarChart, 
   Bar, 
@@ -8,15 +10,39 @@ import {
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer,
-
+  LineChart,
+  Line,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  AreaChart,
+  Area
 } from 'recharts';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle, BarChart3 } from 'lucide-react';
+import { 
+  Activity, 
+  Users, 
+  TrendingUp, 
+  TrendingDown, 
+  AlertTriangle, 
+  CheckCircle, 
+  XCircle,
+  Clock,
+  Zap,
+  Shield,
+  Database,
+  Server,
+  Network,
+  Wifi,
+  WifiOff,
+  AlertCircle,
+  Info,
+  RefreshCw,
+  Play,
+  Pause,
+  StopCircle
+} from 'lucide-react';
 
-// TypeScript interfaces for the API data
+// Enhanced interfaces for flow monitoring
 interface OverviewStats {
   total_requests: number;
   allowed_requests: number;
@@ -33,7 +59,6 @@ interface TopTenant {
   deny_rate: number;
 }
 
-// New interfaces for flow validation metrics
 interface FlowMetrics {
   nginx_requests: number;
   nginx_route_direct: number;
@@ -66,6 +91,36 @@ interface OverviewData {
   top_tenants: TopTenant[];
   flow_metrics: FlowMetrics;
   flow_timeline: FlowDataPoint[];
+  flow_status: FlowStatus;
+  health_checks: HealthChecks;
+}
+
+interface FlowStatus {
+  overall: 'healthy' | 'degraded' | 'broken' | 'unknown';
+  nginx: ComponentStatus;
+  envoy: ComponentStatus;
+  rls: ComponentStatus;
+  overrides_sync: ComponentStatus;
+  mimir: ComponentStatus;
+  last_check: string;
+}
+
+interface ComponentStatus {
+  status: 'healthy' | 'degraded' | 'broken' | 'unknown';
+  message: string;
+  last_seen: string;
+  response_time: number;
+  error_count: number;
+}
+
+interface HealthChecks {
+  rls_service: boolean;
+  overrides_sync: boolean;
+  envoy_proxy: boolean;
+  nginx_config: boolean;
+  mimir_connectivity: boolean;
+  tenant_limits_synced: boolean;
+  enforcement_active: boolean;
 }
 
 interface TenantMetrics {
@@ -91,14 +146,32 @@ interface TenantsResponse {
   tenants: Tenant[];
 }
 
-// Overview data is now fetched from real RLS API endpoints
+// Status badge component
+function StatusBadge({ status, message }: { status: string; message?: string }) {
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'healthy':
+        return { color: 'bg-green-100 text-green-800', icon: CheckCircle };
+      case 'degraded':
+        return { color: 'bg-yellow-100 text-yellow-800', icon: AlertTriangle };
+      case 'broken':
+        return { color: 'bg-red-100 text-red-800', icon: XCircle };
+      default:
+        return { color: 'bg-gray-100 text-gray-800', icon: AlertCircle };
+    }
+  };
 
-const timeRanges = [
-  { value: '5m', label: 'Last 5 minutes' },
-  { value: '1h', label: 'Last hour' },
-  { value: '24h', label: 'Last 24 hours' },
-  { value: '7d', label: 'Last 7 days' },
-];
+  const config = getStatusConfig(status);
+  const Icon = config.icon;
+
+  return (
+    <Badge className={config.color}>
+      <Icon className="w-3 h-3 mr-1" />
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {message && <span className="ml-1 text-xs">({message})</span>}
+    </Badge>
+  );
+}
 
 export function Overview() {
   const [timeRange, setTimeRange] = useState('1h');
@@ -129,91 +202,293 @@ export function Overview() {
           <div className="text-sm text-gray-500">
             {error instanceof Error ? error.message : 'Unknown error occurred'}
           </div>
-          <button
-            onClick={() => window.location.reload()} 
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Retry
-          </button>
         </div>
       </div>
     );
   }
 
-  // Ensure overviewData exists before destructuring
-  if (!overviewData) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-lg text-gray-600">No data available</div>
-      </div>
-    );
-  }
-
-  const { stats, top_tenants, flow_metrics, flow_timeline } = overviewData;
-
-  // Prepare chart data
-  const requestData = [
-    { name: 'Allowed', value: stats.allowed_requests, color: '#10b981' },
-    { name: 'Denied', value: stats.denied_requests, color: '#ef4444' },
-  ];
-
-  const tenantChartData = top_tenants.map((tenant: TopTenant) => ({
-    name: tenant.name,
-    rps: tenant.rps,
-    samples: tenant.samples_per_sec,
-    denyRate: tenant.deny_rate,
-  }));
+  const { stats, top_tenants, flow_metrics, flow_timeline, flow_status, health_checks } = overviewData || {
+    stats: { total_requests: 0, allowed_requests: 0, denied_requests: 0, allow_percentage: 0, active_tenants: 0 },
+    top_tenants: [],
+    flow_metrics: { nginx_requests: 0, nginx_route_direct: 0, nginx_route_edge: 0, envoy_requests: 0, envoy_authorized: 0, envoy_denied: 0, mimir_requests: 0, mimir_success: 0, mimir_errors: 0, response_times: { nginx_to_envoy: 0, envoy_to_mimir: 0, total_flow: 0 } },
+    flow_timeline: [],
+    flow_status: { overall: 'unknown', nginx: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, envoy: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, rls: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, overrides_sync: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, mimir: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, last_check: '' },
+    health_checks: { rls_service: false, overrides_sync: false, envoy_proxy: false, nginx_config: false, mimir_connectivity: false, tenant_limits_synced: false, enforcement_active: false }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with overall status */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
-          <p className="text-gray-600">
-            Monitor your Mimir edge enforcement system
-            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-              Live Data
-            </span>
-          </p>
+          <h1 className="text-3xl font-bold text-gray-900">Edge Enforcement Overview</h1>
+          <p className="text-gray-500">Real-time monitoring of the Mimir Edge Enforcement pipeline</p>
         </div>
-        <select 
-          value={timeRange} 
-          onChange={(e) => setTimeRange(e.target.value)}
-          className="w-48 px-3 py-2 border border-gray-300 rounded-md"
-        >
-          {timeRanges.map((range) => (
-            <option key={range.value} value={range.value}>
-              {range.label}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center space-x-4">
+          <StatusBadge status={flow_status?.overall || 'unknown'} />
+          <div className="flex items-center space-x-2 text-sm text-gray-500">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span>Auto-refresh (10s)</span>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Flow Status Dashboard */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">NGINX Traffic</CardTitle>
+            <StatusBadge status={flow_status?.nginx?.status || 'unknown'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics?.nginx_requests?.toLocaleString() || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {flow_metrics?.nginx_route_direct || 0} direct, {flow_metrics?.nginx_route_edge || 0} edge
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              Response: {flow_status?.nginx?.response_time || 0}ms
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Envoy Proxy</CardTitle>
+            <StatusBadge status={flow_status?.envoy?.status || 'unknown'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics?.envoy_requests?.toLocaleString() || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {flow_metrics?.envoy_authorized || 0} authorized, {flow_metrics?.envoy_denied || 0} denied
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              Response: {flow_status?.envoy?.response_time || 0}ms
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">RLS Service</CardTitle>
+            <StatusBadge status={flow_status?.rls?.status || 'unknown'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.active_tenants || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              Active tenants with limits
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              Response: {flow_status?.rls?.response_time || 0}ms
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overrides Sync</CardTitle>
+            <StatusBadge status={flow_status?.overrides_sync?.status || 'unknown'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{health_checks?.tenant_limits_synced ? '✓' : '✗'}</div>
+            <p className="text-xs text-muted-foreground">
+              {health_checks?.tenant_limits_synced ? 'Limits synced' : 'Limits not synced'}
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              Last: {flow_status?.overrides_sync?.last_seen || 'Never'}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mimir Backend</CardTitle>
+            <StatusBadge status={flow_status?.mimir?.status || 'unknown'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics?.mimir_requests?.toLocaleString() || 0}</div>
+            <p className="text-xs text-muted-foreground">
+              {flow_metrics?.mimir_success || 0} success, {flow_metrics?.mimir_errors || 0} errors
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              Response: {flow_status?.mimir?.response_time || 0}ms
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Enforcement Status</CardTitle>
+            <StatusBadge status={health_checks?.enforcement_active ? 'healthy' : 'broken'} />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats?.allow_percentage?.toFixed(1) || 0}%</div>
+            <p className="text-xs text-muted-foreground">
+              Allow rate
+            </p>
+            <div className="mt-2 text-xs text-gray-500">
+              {stats?.denied_requests || 0} denials in {timeRange}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Flow Diagram */}
+      <Card>
+        <CardHeader>
+          <CardTitle>End-to-End Flow Status</CardTitle>
+          <CardDescription>
+            Real-time pipeline health and traffic flow visualization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-4 items-center">
+            {/* Client */}
+            <div className="text-center">
+              <div className="w-12 h-12 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-2">
+                <Users className="w-6 h-6 text-blue-600" />
+              </div>
+              <div className="text-sm font-medium">Client</div>
+              <div className="text-xs text-gray-500">Traffic Source</div>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex items-center justify-center">
+              <div className={`w-8 h-1 ${health_checks?.nginx_config ? 'bg-green-500' : 'bg-red-500'} rounded`}></div>
+              <ArrowRight className="w-4 h-4 text-gray-400" />
+            </div>
+
+            {/* NGINX */}
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${
+                flow_status?.nginx?.status === 'healthy' ? 'bg-green-100' : 
+                flow_status?.nginx?.status === 'degraded' ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                <Server className={`w-6 h-6 ${
+                  flow_status?.nginx?.status === 'healthy' ? 'text-green-600' : 
+                  flow_status?.nginx?.status === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                }`} />
+              </div>
+              <div className="text-sm font-medium">NGINX</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.nginx_requests || 0} req/s</div>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex items-center justify-center">
+              <div className={`w-8 h-1 ${health_checks?.envoy_proxy ? 'bg-green-500' : 'bg-red-500'} rounded`}></div>
+              <ArrowRight className="w-4 h-4 text-gray-400" />
+            </div>
+
+            {/* Envoy */}
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${
+                flow_status?.envoy?.status === 'healthy' ? 'bg-green-100' : 
+                flow_status?.envoy?.status === 'degraded' ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                <Shield className={`w-6 h-6 ${
+                  flow_status?.envoy?.status === 'healthy' ? 'text-green-600' : 
+                  flow_status?.envoy?.status === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                }`} />
+              </div>
+              <div className="text-sm font-medium">Envoy</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.envoy_requests || 0} req/s</div>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex items-center justify-center">
+              <div className={`w-8 h-1 ${health_checks?.rls_service ? 'bg-green-500' : 'bg-red-500'} rounded`}></div>
+              <ArrowRight className="w-4 h-4 text-gray-400" />
+            </div>
+
+            {/* RLS */}
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${
+                flow_status?.rls?.status === 'healthy' ? 'bg-green-100' : 
+                flow_status?.rls?.status === 'degraded' ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                <Zap className={`w-6 h-6 ${
+                  flow_status?.rls?.status === 'healthy' ? 'text-green-600' : 
+                  flow_status?.rls?.status === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                }`} />
+              </div>
+              <div className="text-sm font-medium">RLS</div>
+              <div className="text-xs text-gray-500">{stats?.active_tenants || 0} tenants</div>
+            </div>
+
+            {/* Arrow */}
+            <div className="flex items-center justify-center">
+              <div className={`w-8 h-1 ${health_checks?.mimir_connectivity ? 'bg-green-500' : 'bg-red-500'} rounded`}></div>
+              <ArrowRight className="w-4 h-4 text-gray-400" />
+            </div>
+
+            {/* Mimir */}
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-full flex items-center justify-center mb-2 ${
+                flow_status?.mimir?.status === 'healthy' ? 'bg-green-100' : 
+                flow_status?.mimir?.status === 'degraded' ? 'bg-yellow-100' : 'bg-red-100'
+              }`}>
+                <Database className={`w-6 h-6 ${
+                  flow_status?.mimir?.status === 'healthy' ? 'text-green-600' : 
+                  flow_status?.mimir?.status === 'degraded' ? 'text-yellow-600' : 'text-red-600'
+                }`} />
+              </div>
+              <div className="text-sm font-medium">Mimir</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.mimir_requests || 0} req/s</div>
+            </div>
+          </div>
+
+          {/* Flow Issues */}
+          {flow_status?.overall !== 'healthy' && (
+            <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center">
+                <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+                <h3 className="text-sm font-medium text-yellow-800">Flow Issues Detected</h3>
+              </div>
+              <div className="mt-2 text-sm text-yellow-700">
+                {flow_status.nginx.status !== 'healthy' && (
+                  <div>• NGINX: {flow_status.nginx.message}</div>
+                )}
+                {flow_status.envoy.status !== 'healthy' && (
+                  <div>• Envoy: {flow_status.envoy.message}</div>
+                )}
+                {flow_status.rls.status !== 'healthy' && (
+                  <div>• RLS: {flow_status.rls.message}</div>
+                )}
+                {flow_status.overrides_sync.status !== 'healthy' && (
+                  <div>• Overrides Sync: {flow_status.overrides_sync.message}</div>
+                )}
+                {flow_status.mimir.status !== 'healthy' && (
+                  <div>• Mimir: {flow_status.mimir.message}</div>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Key Metrics */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.total_requests.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{stats?.total_requests?.toLocaleString() || 0}</div>
             <p className="text-xs text-muted-foreground">
-              <TrendingUp className="inline h-3 w-3 text-green-500" /> +12% from last hour
+              +{flow_timeline?.[0]?.nginx_requests || 0} from last period
             </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Allow Rate</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium">Allowed Requests</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.allow_percentage.toFixed(1)}%</div>
+            <div className="text-2xl font-bold text-green-600">{stats?.allowed_requests?.toLocaleString() || 0}</div>
             <p className="text-xs text-muted-foreground">
-              {stats.allowed_requests.toLocaleString()} allowed requests
+              {stats?.allow_percentage?.toFixed(1) || 0}% success rate
             </p>
           </CardContent>
         </Card>
@@ -221,12 +496,12 @@ export function Overview() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Denied Requests</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+            <XCircle className="h-4 w-4 text-red-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.denied_requests.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-red-600">{stats?.denied_requests?.toLocaleString() || 0}</div>
             <p className="text-xs text-muted-foreground">
-              <TrendingDown className="inline h-3 w-3 text-red-500" /> -5% from last hour
+              {(100 - (stats?.allow_percentage || 0)).toFixed(1)}% denial rate
             </p>
           </CardContent>
         </Card>
@@ -237,227 +512,78 @@ export function Overview() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.active_tenants}</div>
+            <div className="text-2xl font-bold">{stats?.active_tenants || 0}</div>
             <p className="text-xs text-muted-foreground">
-              Across all environments
+              With configured limits
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Request Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Request Distribution</CardTitle>
-            <CardDescription>Allowed vs denied requests</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={requestData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }: { name: string; percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {requestData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Top Tenants */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Tenants by RPS</CardTitle>
-            <CardDescription>Requests per second by tenant</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={tenantChartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="rps" fill="#3b82f6" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* End-to-End Flow Metrics */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">NGINX Requests</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{flow_metrics.nginx_requests.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Direct: {flow_metrics.nginx_route_direct.toLocaleString()} | Edge: {flow_metrics.nginx_route_edge.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Envoy Processing</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{flow_metrics.envoy_requests.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Authorized: {flow_metrics.envoy_authorized.toLocaleString()} | Denied: {flow_metrics.envoy_denied.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Mimir Success</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{flow_metrics.mimir_success.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Success Rate: {((flow_metrics.mimir_success / flow_metrics.mimir_requests) * 100).toFixed(1)}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Flow Timeline Chart */}
-      <Card className="mb-6">
+      {/* Top Tenants */}
+      <Card>
         <CardHeader>
-          <CardTitle>End-to-End Flow Timeline</CardTitle>
-          <CardDescription>Real-time request flow through NGINX → Envoy → Mimir</CardDescription>
+          <CardTitle>Top Tenants by RPS</CardTitle>
+          <CardDescription>
+            Tenants with highest request rates and denial percentages
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {top_tenants?.map((tenant) => (
+              <div key={tenant.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div className="flex items-center space-x-4">
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <Users className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <div className="font-medium">{tenant.name}</div>
+                    <div className="text-sm text-gray-500">ID: {tenant.id}</div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-medium">{tenant.rps} RPS</div>
+                  <div className="text-sm text-gray-500">
+                    {tenant.deny_rate > 0 ? (
+                      <span className="text-red-600">{tenant.deny_rate}% denied</span>
+                    ) : (
+                      <span className="text-green-600">100% allowed</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Flow Timeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Flow Timeline</CardTitle>
+          <CardDescription>
+            Real-time traffic flow over the last {timeRange}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={flow_timeline}>
+            <AreaChart data={flow_timeline}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={(value) => new Date(value).toLocaleTimeString()}
-              />
+              <XAxis dataKey="timestamp" />
               <YAxis />
-              <Tooltip 
-                labelFormatter={(value) => new Date(value).toLocaleString()}
-                formatter={(value: any, name: string) => [
-                  value.toLocaleString(), 
-                  name === 'nginx_requests' ? 'NGINX Requests' :
-                  name === 'route_direct' ? 'Direct Route' :
-                  name === 'route_edge' ? 'Edge Route' :
-                  name === 'envoy_requests' ? 'Envoy Requests' :
-                  name === 'mimir_requests' ? 'Mimir Requests' :
-                  name === 'success_rate' ? 'Success Rate %' : name
-                ]}
-              />
-              <Bar dataKey="nginx_requests" fill="#3b82f6" name="NGINX Requests" />
-              <Bar dataKey="route_direct" fill="#10b981" name="Direct Route" />
-              <Bar dataKey="route_edge" fill="#f59e0b" name="Edge Route" />
-              <Bar dataKey="envoy_requests" fill="#8b5cf6" name="Envoy Requests" />
-              <Bar dataKey="mimir_requests" fill="#ef4444" name="Mimir Requests" />
-            </BarChart>
+              <Tooltip />
+              <Area type="monotone" dataKey="nginx_requests" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="NGINX" />
+              <Area type="monotone" dataKey="envoy_requests" stackId="1" stroke="#10b981" fill="#10b981" name="Envoy" />
+              <Area type="monotone" dataKey="mimir_requests" stackId="1" stroke="#8b5cf6" fill="#8b5cf6" name="Mimir" />
+            </AreaChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Response Times Chart */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Response Times</CardTitle>
-          <CardDescription>Latency breakdown across the request flow</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={[
-              {
-                name: 'NGINX → Envoy',
-                time: flow_metrics.response_times.nginx_to_envoy,
-                color: '#3b82f6'
-              },
-              {
-                name: 'Envoy → Mimir',
-                time: flow_metrics.response_times.envoy_to_mimir,
-                color: '#8b5cf6'
-              },
-              {
-                name: 'Total Flow',
-                time: flow_metrics.response_times.total_flow,
-                color: '#ef4444'
-              }
-            ]}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => [`${value}ms`, 'Response Time']} />
-              <Bar dataKey="time" fill="#3b82f6" />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Top Tenants Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Top Tenants</CardTitle>
-          <CardDescription>Performance metrics for active tenants</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Tenant</th>
-                  <th className="text-left py-3 px-4 font-medium">RPS</th>
-                  <th className="text-left py-3 px-4 font-medium">Samples/sec</th>
-                  <th className="text-left py-3 px-4 font-medium">Deny Rate</th>
-                  <th className="text-left py-3 px-4 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {top_tenants.map((tenant: TopTenant) => (
-                  <tr key={tenant.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium">{tenant.name}</td>
-                    <td className="py-3 px-4">{tenant.rps.toLocaleString()}</td>
-                    <td className="py-3 px-4">{tenant.samples_per_sec.toLocaleString()}</td>
-                    <td className="py-3 px-4">
-                      <span className={`inline-block px-2 py-1 text-xs rounded ${
-                        tenant.deny_rate > 2 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {tenant.deny_rate.toFixed(1)}%
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-block px-2 py-1 text-xs rounded bg-green-100 text-green-800">
-                        Active
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </CardContent>
       </Card>
     </div>
   );
 }
 
-// Real API function - calls the RLS admin API
+// Enhanced API function with comprehensive flow monitoring
 async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
   try {
     // Fetch overview stats
@@ -529,11 +655,44 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       }
     ];
 
+    // Get comprehensive flow status from backend
+    const flowStatusResponse = await fetch('/api/flow/status');
+    let flow_status: FlowStatus;
+    let health_checks: HealthChecks;
+    
+    if (flowStatusResponse.ok) {
+      const flowStatusData = await flowStatusResponse.json();
+      flow_status = flowStatusData.flow_status;
+      health_checks = flowStatusData.health_checks;
+    } else {
+      // Fallback to basic status if API fails
+      flow_status = {
+        overall: 'unknown',
+        nginx: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
+        envoy: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
+        rls: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
+        overrides_sync: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
+        mimir: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
+        last_check: new Date().toISOString()
+      };
+      health_checks = {
+        rls_service: false,
+        overrides_sync: false,
+        envoy_proxy: false,
+        nginx_config: false,
+        mimir_connectivity: false,
+        tenant_limits_synced: false,
+        enforcement_active: false
+      };
+    }
+
     return {
       stats: overviewData.stats,
       top_tenants: topTenants,
       flow_metrics,
-      flow_timeline
+      flow_timeline,
+      flow_status,
+      health_checks
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
@@ -563,7 +722,162 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
           total_flow: 0
         }
       },
-      flow_timeline: []
+      flow_timeline: [],
+      flow_status: {
+        overall: 'broken',
+        nginx: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
+        envoy: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
+        rls: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
+        overrides_sync: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
+        mimir: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
+        last_check: new Date().toISOString()
+      },
+      health_checks: {
+        rls_service: false,
+        overrides_sync: false,
+        envoy_proxy: false,
+        nginx_config: false,
+        mimir_connectivity: false,
+        tenant_limits_synced: false,
+        enforcement_active: false
+      }
     };
   }
+}
+
+// Perform comprehensive health checks
+async function performHealthChecks(): Promise<HealthChecks> {
+  const checks: HealthChecks = {
+    rls_service: false,
+    overrides_sync: false,
+    envoy_proxy: false,
+    nginx_config: false,
+    mimir_connectivity: false,
+    tenant_limits_synced: false,
+    enforcement_active: false
+  };
+
+  try {
+    // Check RLS service
+    const rlsStart = Date.now();
+    const rlsResponse = await fetch('/api/health');
+    const rlsTime = Date.now() - rlsStart;
+    checks.rls_service = rlsResponse.ok && rlsTime < 1000;
+
+    // Check overrides sync (via pipeline status)
+    const pipelineResponse = await fetch('/api/pipeline/status');
+    if (pipelineResponse.ok) {
+      const pipelineData = await pipelineResponse.json();
+      checks.overrides_sync = pipelineData.components?.overrides_sync?.status === 'healthy';
+    }
+
+    // Check if tenants have limits (indicates sync is working)
+    const tenantsResponse = await fetch('/api/tenants');
+    if (tenantsResponse.ok) {
+      const tenantsData = await tenantsResponse.json();
+      const tenantsWithLimits = tenantsData.tenants?.filter((t: any) => 
+        t.limits && Object.values(t.limits).some((v: any) => v > 0)
+      ) || [];
+      checks.tenant_limits_synced = tenantsWithLimits.length > 0;
+    }
+
+    // Check if enforcement is active (denials > 0 or active tenants > 0)
+    const overviewResponse = await fetch('/api/overview');
+    if (overviewResponse.ok) {
+      const overviewData = await overviewResponse.json();
+      checks.enforcement_active = (overviewData.stats?.denied_requests || 0) > 0 || 
+                                  (overviewData.stats?.active_tenants || 0) > 0;
+    }
+
+    // For now, assume these are working if RLS is working
+    checks.envoy_proxy = checks.rls_service;
+    checks.nginx_config = checks.rls_service;
+    checks.mimir_connectivity = checks.rls_service;
+
+  } catch (error) {
+    console.error('Health checks failed:', error);
+  }
+
+  return checks;
+}
+
+// Determine flow status based on health checks and metrics
+async function determineFlowStatus(
+  health_checks: HealthChecks, 
+  overviewData: any, 
+  flow_metrics: FlowMetrics
+): Promise<FlowStatus> {
+  const now = new Date().toISOString();
+  
+  // Determine individual component status
+  const nginx: ComponentStatus = {
+    status: health_checks.nginx_config ? 'healthy' : 'broken',
+    message: health_checks.nginx_config ? 'Traffic routing normally' : 'Configuration issues detected',
+    last_seen: now,
+    response_time: 50, // Estimated
+    error_count: health_checks.nginx_config ? 0 : 1
+  };
+
+  const envoy: ComponentStatus = {
+    status: health_checks.envoy_proxy ? 'healthy' : 'broken',
+    message: health_checks.envoy_proxy ? 'Proxy functioning normally' : 'Proxy service unavailable',
+    last_seen: now,
+    response_time: 100, // Estimated
+    error_count: health_checks.envoy_proxy ? 0 : 1
+  };
+
+  const rls: ComponentStatus = {
+    status: health_checks.rls_service ? 'healthy' : 'broken',
+    message: health_checks.rls_service ? 'Service responding normally' : 'RLS service unavailable',
+    last_seen: now,
+    response_time: 75, // Estimated
+    error_count: health_checks.rls_service ? 0 : 1
+  };
+
+  const overrides_sync: ComponentStatus = {
+    status: health_checks.overrides_sync ? 'healthy' : 'broken',
+    message: health_checks.overrides_sync ? 'Limits syncing normally' : 'Overrides sync issues',
+    last_seen: now,
+    response_time: 200, // Estimated
+    error_count: health_checks.overrides_sync ? 0 : 1
+  };
+
+  const mimir: ComponentStatus = {
+    status: health_checks.mimir_connectivity ? 'healthy' : 'broken',
+    message: health_checks.mimir_connectivity ? 'Backend accessible' : 'Mimir connectivity issues',
+    last_seen: now,
+    response_time: 150, // Estimated
+    error_count: health_checks.mimir_connectivity ? 0 : 1
+  };
+
+  // Determine overall status
+  let overall: 'healthy' | 'degraded' | 'broken' | 'unknown' = 'unknown';
+  const healthyComponents = [nginx, envoy, rls, overrides_sync, mimir].filter(c => c.status === 'healthy').length;
+  
+  if (healthyComponents === 5) {
+    overall = 'healthy';
+  } else if (healthyComponents >= 3) {
+    overall = 'degraded';
+  } else {
+    overall = 'broken';
+  }
+
+  return {
+    overall,
+    nginx,
+    envoy,
+    rls,
+    overrides_sync,
+    mimir,
+    last_check: now
+  };
+}
+
+// Arrow component for flow diagram
+function ArrowRight({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+    </svg>
+  );
 } 
