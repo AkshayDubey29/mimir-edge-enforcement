@@ -39,13 +39,13 @@ var (
 	// Configuration
 	tenantHeader       = flag.String("tenant-header", "X-Scope-OrgID", "Header name for tenant identification")
 	enforceBodyParsing = flag.Bool("enforce-body-parsing", true, "Whether to parse request body for sample counting")
-	maxRequestBytes    = flag.Int64("max-request-bytes", 500000, "Maximum request body size in bytes")
+	maxRequestBytes    = flag.Int64("max-request-bytes", 4194304, "Maximum request body size in bytes")
 	failureModeAllow   = flag.Bool("failure-mode-allow", false, "Whether to allow requests when body parsing fails")
 
 	// Default limits
 	defaultSamplesPerSecond    = flag.Float64("default-samples-per-second", 10000, "Default samples per second limit")
 	defaultBurstPercent        = flag.Float64("default-burst-percent", 0.2, "Default burst percentage")
-	defaultMaxBodyBytes        = flag.Int64("default-max-body-bytes", 500000, "Default maximum body size in bytes")
+	defaultMaxBodyBytes        = flag.Int64("default-max-body-bytes", 4194304, "Default maximum body size in bytes")
 	defaultMaxLabelsPerSeries  = flag.Int("default-max-labels-per-series", 60, "Default maximum labels per series")
 	defaultMaxLabelValueLength = flag.Int("default-max-label-value-length", 2048, "Default maximum label value length")
 	defaultMaxSeriesPerRequest = flag.Int("default-max-series-per-request", 100000, "Default maximum series per request")
