@@ -1,6 +1,6 @@
 # Fixed values for mimir-rls to resolve 4e+06 scientific notation error
 limits:
-  maxRequestBytes: 4000000  # Fixed: Use 4000000 instead of 4194304
+  maxRequestBytes: 3000000  # Fixed: Use 3000000 instead of 4194304
   maxBodyBytes: 0
   failureModeAllow: false
   defaultSamplesPerSecond: 0
