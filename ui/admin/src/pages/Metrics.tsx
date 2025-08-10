@@ -49,7 +49,7 @@ interface SystemMetrics {
     avg_response_time: number;
     active_tenants: number;
     total_denials: number;
-    system_health: 'healthy' | 'warning' | 'error';
+    system_health: 'healthy' | 'warning' | 'error' | 'unknown';
   };
   component_metrics: {
     nginx: ComponentMetrics;
@@ -100,154 +100,107 @@ interface ComponentMetrics {
   memory_usage: number;
   cpu_usage: number;
   uptime: string;
-  status: 'healthy' | 'warning' | 'error';
+  status: 'healthy' | 'warning' | 'error' | 'unknown';
 }
 
-// Mock data for system metrics
-const mockSystemMetrics: SystemMetrics = {
-  timestamp: new Date().toISOString(),
-  overview: {
-    total_requests_per_second: 1250,
-    total_errors_per_second: 12,
-    overall_success_rate: 99.04,
-    avg_response_time: 165,
-    active_tenants: 8,
-    total_denials: 47,
-    system_health: 'healthy'
-  },
-  component_metrics: {
-    nginx: {
-      requests_per_second: 1250,
-      error_rate: 0.2,
-      response_time: 45,
-      memory_usage: 85.2,
-      cpu_usage: 12.8,
-      uptime: '15d 8h 32m',
-      status: 'healthy'
-    },
-    envoy: {
-      requests_per_second: 125,
-      error_rate: 0.8,
-      response_time: 120,
-      memory_usage: 92.1,
-      cpu_usage: 18.5,
-      uptime: '15d 8h 30m',
-      status: 'healthy'
-    },
-    rls: {
-      requests_per_second: 125,
-      error_rate: 0.1,
-      response_time: 25,
-      memory_usage: 45.8,
-      cpu_usage: 8.2,
-      uptime: '15d 8h 28m',
-      status: 'healthy'
-    },
-    overrides_sync: {
-      requests_per_second: 0.1,
-      error_rate: 0,
-      response_time: 150,
-      memory_usage: 23.4,
-      cpu_usage: 2.1,
-      uptime: '15d 8h 25m',
-      status: 'healthy'
-    },
-    mimir: {
-      requests_per_second: 1243,
-      error_rate: 0.4,
-      response_time: 85,
-      memory_usage: 78.9,
-      cpu_usage: 15.3,
-      uptime: '15d 8h 35m',
-      status: 'healthy'
-    }
-  },
-  performance_metrics: {
-    cpu_usage: 15.2,
-    memory_usage: 78.5,
-    disk_usage: 45.8,
-    network_throughput: 125.5,
-    error_rate: 0.96,
-    latency_p95: 245,
-    latency_p99: 389
-  },
-  traffic_metrics: {
-    requests_per_minute: Array.from({ length: 60 }, (_, i) => ({
-      timestamp: new Date(Date.now() - (59 - i) * 60000).toISOString(),
-      value: Math.floor(Math.random() * 2000) + 1000
-    })),
-    samples_per_minute: Array.from({ length: 60 }, (_, i) => ({
-      timestamp: new Date(Date.now() - (59 - i) * 60000).toISOString(),
-      value: Math.floor(Math.random() * 5000) + 3000
-    })),
-    denials_per_minute: Array.from({ length: 60 }, (_, i) => ({
-      timestamp: new Date(Date.now() - (59 - i) * 60000).toISOString(),
-      value: Math.floor(Math.random() * 50) + 10
-    })),
-    response_times: Array.from({ length: 60 }, (_, i) => ({
-      timestamp: new Date(Date.now() - (59 - i) * 60000).toISOString(),
-      value: Math.floor(Math.random() * 100) + 100
-    }))
-  },
-  tenant_metrics: {
-    top_tenants_by_requests: [
-      { tenant_id: 'tenant-1', requests: 450, samples: 1200 },
-      { tenant_id: 'tenant-2', requests: 380, samples: 950 },
-      { tenant_id: 'tenant-3', requests: 320, samples: 800 },
-      { tenant_id: 'tenant-4', requests: 280, samples: 700 },
-      { tenant_id: 'tenant-5', requests: 250, samples: 600 }
-    ],
-    top_tenants_by_denials: [
-      { tenant_id: 'tenant-3', denials: 25, deny_rate: 7.8 },
-      { tenant_id: 'tenant-1', denials: 18, deny_rate: 4.0 },
-      { tenant_id: 'tenant-2', denials: 12, deny_rate: 3.2 },
-      { tenant_id: 'tenant-4', denials: 8, deny_rate: 2.9 },
-      { tenant_id: 'tenant-5', denials: 5, deny_rate: 2.0 }
-    ],
-    utilization_distribution: [
-      { range: '0-20%', count: 2, percentage: 25 },
-      { range: '20-40%', count: 1, percentage: 12.5 },
-      { range: '40-60%', count: 2, percentage: 25 },
-      { range: '60-80%', count: 2, percentage: 25 },
-      { range: '80-100%', count: 1, percentage: 12.5 }
-    ]
-  },
-  alert_metrics: {
-    total_alerts: 8,
-    critical_alerts: 1,
-    warning_alerts: 3,
-    info_alerts: 4,
-    recent_alerts: [
-      {
-        id: 'alert-1',
-        severity: 'warning',
-        message: 'High memory usage detected on Envoy',
-        timestamp: '2024-01-15T10:25:00Z',
-        component: 'envoy'
-      },
-      {
-        id: 'alert-2',
-        severity: 'info',
-        message: 'Tenant limits updated successfully',
-        timestamp: '2024-01-15T10:20:00Z',
-        component: 'overrides-sync'
-      },
-      {
-        id: 'alert-3',
-        severity: 'critical',
-        message: 'RLS service not responding',
-        timestamp: '2024-01-15T10:15:00Z',
-        component: 'rls'
-      }
-    ]
-  }
-};
-
-// Mock API function
+// Real API function - fetches actual system metrics
 async function fetchSystemMetrics(): Promise<SystemMetrics> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return mockSystemMetrics;
+  try {
+    const response = await fetch('/api/metrics/system');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch system metrics: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching system metrics:', error);
+    // Return empty data structure on error
+    return {
+      timestamp: new Date().toISOString(),
+      overview: {
+        total_requests_per_second: 0,
+        total_errors_per_second: 0,
+        overall_success_rate: 0,
+        avg_response_time: 0,
+        active_tenants: 0,
+        total_denials: 0,
+        system_health: 'unknown'
+      },
+      component_metrics: {
+        nginx: {
+          requests_per_second: 0,
+          error_rate: 0,
+          response_time: 0,
+          memory_usage: 0,
+          cpu_usage: 0,
+          uptime: '0s',
+          status: 'unknown'
+        },
+        envoy: {
+          requests_per_second: 0,
+          error_rate: 0,
+          response_time: 0,
+          memory_usage: 0,
+          cpu_usage: 0,
+          uptime: '0s',
+          status: 'unknown'
+        },
+        rls: {
+          requests_per_second: 0,
+          error_rate: 0,
+          response_time: 0,
+          memory_usage: 0,
+          cpu_usage: 0,
+          uptime: '0s',
+          status: 'unknown'
+        },
+        overrides_sync: {
+          requests_per_second: 0,
+          error_rate: 0,
+          response_time: 0,
+          memory_usage: 0,
+          cpu_usage: 0,
+          uptime: '0s',
+          status: 'unknown'
+        },
+        mimir: {
+          requests_per_second: 0,
+          error_rate: 0,
+          response_time: 0,
+          memory_usage: 0,
+          cpu_usage: 0,
+          uptime: '0s',
+          status: 'unknown'
+        }
+      },
+      performance_metrics: {
+        cpu_usage: 0,
+        memory_usage: 0,
+        disk_usage: 0,
+        network_throughput: 0,
+        error_rate: 0,
+        latency_p95: 0,
+        latency_p99: 0
+      },
+      traffic_metrics: {
+        requests_per_minute: [],
+        samples_per_minute: [],
+        denials_per_minute: [],
+        response_times: []
+      },
+      tenant_metrics: {
+        top_tenants_by_requests: [],
+        top_tenants_by_denials: [],
+        utilization_distribution: []
+      },
+      alert_metrics: {
+        total_alerts: 0,
+        critical_alerts: 0,
+        warning_alerts: 0,
+        info_alerts: 0,
+        recent_alerts: []
+      }
+    };
+  }
 }
 
 // Status badge component

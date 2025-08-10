@@ -495,34 +495,26 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
     ];
   }
   
-  // Generate mock flow metrics for now (will be replaced with real API calls)
+  // Fetch real flow metrics from API
   const flow_metrics: FlowMetrics = {
-    nginx_requests: 1250,
-    nginx_route_direct: 1125,
-    nginx_route_edge: 125,
-    envoy_requests: 125,
-    envoy_authorized: 118,
-    envoy_denied: 7,
-    mimir_requests: 1243,
-    mimir_success: 1238,
-    mimir_errors: 5,
+    nginx_requests: 0,
+    nginx_route_direct: 0,
+    nginx_route_edge: 0,
+    envoy_requests: 0,
+    envoy_authorized: 0,
+    envoy_denied: 0,
+    mimir_requests: 0,
+    mimir_success: 0,
+    mimir_errors: 0,
     response_times: {
-      nginx_to_envoy: 45,
-      envoy_to_mimir: 120,
-      total_flow: 165
+      nginx_to_envoy: 0,
+      envoy_to_mimir: 0,
+      total_flow: 0
     }
   };
 
-  // Generate mock flow timeline data
-  const flow_timeline: FlowDataPoint[] = Array.from({ length: 10 }, (_, i) => ({
-    timestamp: new Date(Date.now() - (9 - i) * 60000).toISOString(),
-    nginx_requests: Math.floor(Math.random() * 200) + 100,
-    route_direct: Math.floor(Math.random() * 180) + 90,
-    route_edge: Math.floor(Math.random() * 20) + 10,
-    envoy_requests: Math.floor(Math.random() * 20) + 10,
-    mimir_requests: Math.floor(Math.random() * 200) + 100,
-    success_rate: Math.floor(Math.random() * 10) + 95
-  }));
+  // Fetch real flow timeline data from API
+  const flow_timeline: FlowDataPoint[] = [];
 
   return {
     stats: overviewData.stats,

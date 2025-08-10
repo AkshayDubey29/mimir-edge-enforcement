@@ -9,7 +9,8 @@ import {
   Download,
   Server,
   Database,
-  Gauge
+  Gauge,
+  BookOpen
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Recent Denials', href: '/denials', icon: AlertTriangle },
   { name: 'System Health', href: '/health', icon: Activity },
   { name: 'Metrics', href: '/metrics', icon: Gauge },
+  { name: 'Wiki', href: '/wiki', icon: BookOpen },
 ];
 
 export function Layout({ children }: LayoutProps) {
