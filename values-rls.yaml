@@ -1,0 +1,105 @@
+# RLS (Rate Limit Service) Values with Debugging Configuration
+# Use this file for deploying RLS with enhanced debugging and monitoring
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+    extAuthz: 8080
+    rateLimit: 8081
+    admin: 8082
+    metrics: 9090
+
+# Tenant identification
+tenantHeader: "X-Scope-OrgID"
+
+# Limits configuration with debugging
+limits:
+  # 🔧 DEBUG: Fixed maxRequestBytes to prevent scientific notation error
+  maxRequestBytes: "4194304"  # 4 MiB - quoted string to force literal value
+  maxBodyBytes: 0             # 0 means no default body size cap
+  failureModeAllow: false     # 🔴 SECURITY: Fail closed for security
+  defaultSamplesPerSecond: 0  # 0 means no default cap; limits must come from ConfigMap
+  defaultBurstPercent: 0      # unused until samples_per_second > 0
+  enforceBodyParsing: true    # parsing enabled for metrics/visibility
+  defaultMaxLabelsPerSeries: 60
+  defaultMaxLabelValueLength: 2048
+  defaultMaxSeriesPerRequest: 100000
+
+# Store configuration
+store:
+  backend: "memory"  # memory or redis
+
+# 🔧 DEBUG: Enhanced logging for troubleshooting
+log:
+  level: "debug"  # Set to debug for troubleshooting
+
+# Deployment configuration
+replicaCount: 1
+
+image:
+  repository: ghcr.io/AkshayDubey29/mimir-rls
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# 🔧 DEBUG: Enhanced resource configuration for debugging
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 200m
+    memory: 256Mi
+
+# Security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Horizontal Pod Autoscaler
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Pod annotations for debugging
+podAnnotations:
+  debug: "true"
+  logging: "debug"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Service Monitor for Prometheus
+serviceMonitor:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+  labels: {}
+  annotations: {}
+
+# Image pull secrets
+imagePullSecrets: []
