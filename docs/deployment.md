@@ -68,7 +68,7 @@ cd mimir-edge-enforcement
 # This deploys:
 # ✅ RLS (Rate Limiting Service)
 # ✅ Overrides-Sync Controller  
-# ✅ Envoy Proxy
+# ✅ Envoy Proxy (v0.2.0+ with HTTP protocol fix)
 # ✅ Admin UI with Ingress
 # ✅ Production-ready configurations
 ```
@@ -323,6 +323,14 @@ kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement 
 
 ### Step 5: Deploy Envoy Proxy
 
+> **🔧 IMPORTANT**: The Envoy chart now includes a **permanent fix for 426 Upgrade Required errors** when NGINX routes HTTP/1.1 traffic to Envoy. This fix ensures proper protocol compatibility for canary deployments.
+
+#### **HTTP Protocol Configuration (v0.2.0+)**
+The Envoy chart automatically configures:
+- **Downstream**: Accepts HTTP/1.1 from NGINX (prevents 426 errors)
+- **Upstream to Mimir**: Uses HTTP/1.1 (standard for Mimir deployments)  
+- **Upstream to RLS**: Uses HTTP/2 (required for gRPC communication)
+
 ```bash
 # Create values file for Envoy
 cat > values-envoy.yaml <<EOF
@@ -371,6 +379,14 @@ rls:
   host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
   extAuthzPort: 8080
   rateLimitPort: 8081
+
+# 🔧 HTTP Protocol Settings (fixes 426 Upgrade Required errors)
+proxy:
+  upstreamTimeout: "30s"
+  httpProtocol:
+    acceptHttp10: true          # Accept HTTP/1.0 and HTTP/1.1 from NGINX
+    useRemoteAddress: true      # Use client IP from NGINX proxy
+    xffNumTrustedHops: 1        # Trust X-Forwarded-For from NGINX
 
 # Resource limits and overload protection
 resourceLimits:
@@ -1070,6 +1086,23 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    curl http://localhost:8001/clusters | grep mimir-rls
    ```
 
+3. **426 Upgrade Required errors (NGINX → Envoy)**:
+   ```bash
+   # Check if using latest Envoy chart (v0.2.0+)
+   helm list -n mimir-edge-enforcement | grep mimir-envoy
+   
+   # Verify HTTP protocol configuration
+   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 10 "http_protocol_options"
+   
+   # Apply emergency fix if needed
+   ./scripts/fix-envoy-426.sh
+   
+   # Test protocol compatibility
+   kubectl port-forward svc/mimir-envoy 8080:8080 -n mimir-edge-enforcement &
+   curl -v --http1.1 http://localhost:8080/api/v1/push
+   # Should NOT return 426 Upgrade Required
+   ```
+
 3. **Rate limits not applied**:
    ```bash
    # Check overrides-sync is running and syncing
@@ -1141,6 +1174,7 @@ kubectl rollout restart deployment/mimir-nginx -n mimir
 - **[NGINX Canary Setup Guide](nginx-canary-setup.md)**: Detailed canary rollout procedures
 - **[Overrides-Sync Troubleshooting](troubleshooting-overrides-sync.md)**: Fix ConfigMap parsing issues
 - **[Envoy Resource Limits](envoy-resource-limits.md)**: Configure overload protection and monitoring
+- **[Envoy HTTP Protocol Fix](envoy-http-protocol-fix.md)**: Permanent solution for 426 Upgrade Required errors
 - **[Production Values Examples](../examples/values/)**: Template configurations
 - **[Monitoring & Dashboards](../examples/monitoring/)**: Grafana dashboards and alerts
 
