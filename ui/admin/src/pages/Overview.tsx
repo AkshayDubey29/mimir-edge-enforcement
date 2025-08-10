@@ -396,7 +396,7 @@ export function Overview() {
                 }`} />
               </div>
               <div className="text-sm font-medium">Envoy</div>
-              <div className="text-xs text-gray-500">{flow_metrics?.envoy_requests || 0} req/s</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.envoy_requests || 0} → RLS</div>
             </div>
 
             {/* Arrow */}
@@ -417,7 +417,7 @@ export function Overview() {
                 }`} />
               </div>
               <div className="text-sm font-medium">RLS</div>
-              <div className="text-xs text-gray-500">{stats?.active_tenants || 0} tenants</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.envoy_authorized || 0} ✓ {flow_metrics?.envoy_denied || 0} ✗</div>
             </div>
 
             {/* Arrow */}
@@ -438,7 +438,7 @@ export function Overview() {
                 }`} />
               </div>
               <div className="text-sm font-medium">Mimir</div>
-              <div className="text-xs text-gray-500">{flow_metrics?.mimir_requests || 0} req/s</div>
+              <div className="text-xs text-gray-500">{flow_metrics?.mimir_requests || 0} (allowed)</div>
             </div>
           </div>
 
@@ -721,60 +721,60 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
                     const responseTimes = flowData.response_times;
                     
                     flow_metrics = {
-                      nginx_requests: flowData.nginx_requests || 0,
-                      nginx_route_direct: flowData.nginx_route_direct || 0,
-                      nginx_route_edge: flowData.nginx_route_edge || 0,
-                      envoy_requests: flowData.envoy_requests || 0,
-                      envoy_authorized: flowData.envoy_authorized || 0,
-                      envoy_denied: flowData.envoy_denied || 0,
-                      mimir_requests: flowData.mimir_requests || 0,
-                      mimir_success: flowData.mimir_success || 0,
+                      nginx_requests: 0, // We don't track NGINX directly
+                      nginx_route_direct: 0,
+                      nginx_route_edge: flowData.envoy_to_rls_requests || 0,
+                      envoy_requests: flowData.envoy_to_rls_requests || 0,
+                      envoy_authorized: flowData.rls_allowed || 0,
+                      envoy_denied: flowData.rls_denied || 0,
+                      mimir_requests: flowData.rls_to_mimir_requests || 0,
+                      mimir_success: flowData.rls_to_mimir_requests || 0,
                       mimir_errors: flowData.mimir_errors || 0,
                       response_times: {
-                        nginx_to_envoy: responseTimes?.nginx_to_envoy || 0,
-                        envoy_to_mimir: responseTimes?.envoy_to_mimir || 0,
+                        nginx_to_envoy: 0, // We don't track NGINX directly
+                        envoy_to_mimir: responseTimes?.rls_to_mimir || 0,
                         total_flow: responseTimes?.total_flow || 0
                       }
                     };
-                  } else {
-                    // Fallback to calculated metrics
-                    flow_metrics = {
-                      nginx_requests: overviewData.stats?.total_requests || 0,
-                      nginx_route_direct: 0, // No direct traffic in edge enforcement
-                      nginx_route_edge: overviewData.stats?.total_requests || 0, // All traffic goes through edge
-                      envoy_requests: overviewData.stats?.total_requests || 0,
-                      envoy_authorized: overviewData.stats?.allowed_requests || 0,
-                      envoy_denied: overviewData.stats?.denied_requests || 0,
-                      mimir_requests: overviewData.stats?.allowed_requests || 0,
-                      mimir_success: overviewData.stats?.allowed_requests || 0,
-                      mimir_errors: 0,
-                      response_times: {
-                        nginx_to_envoy: 0,
-                        envoy_to_mimir: 0,
-                        total_flow: 0
-                      }
-                    };
-                  }
-                } catch (error) {
-                  console.error('Error fetching traffic flow data:', error);
-                  // Fallback to calculated metrics
-                  flow_metrics = {
-                    nginx_requests: overviewData.stats?.total_requests || 0,
-                    nginx_route_direct: 0,
-                    nginx_route_edge: overviewData.stats?.total_requests || 0,
-                    envoy_requests: overviewData.stats?.total_requests || 0,
-                    envoy_authorized: overviewData.stats?.allowed_requests || 0,
-                    envoy_denied: overviewData.stats?.denied_requests || 0,
-                    mimir_requests: overviewData.stats?.allowed_requests || 0,
-                    mimir_success: overviewData.stats?.allowed_requests || 0,
-                    mimir_errors: 0,
-                    response_times: {
-                      nginx_to_envoy: 0,
-                      envoy_to_mimir: 0,
-                      total_flow: 0
-                    }
-                  };
-                }
+                                     } else {
+                     // Fallback to calculated metrics
+                     flow_metrics = {
+                       nginx_requests: 0, // We don't track NGINX directly
+                       nginx_route_direct: 0,
+                       nginx_route_edge: overviewData.stats?.total_requests || 0,
+                       envoy_requests: overviewData.stats?.total_requests || 0,
+                       envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                       envoy_denied: overviewData.stats?.denied_requests || 0,
+                       mimir_requests: overviewData.stats?.allowed_requests || 0,
+                       mimir_success: overviewData.stats?.allowed_requests || 0,
+                       mimir_errors: 0,
+                       response_times: {
+                         nginx_to_envoy: 0,
+                         envoy_to_mimir: 0,
+                         total_flow: 0
+                       }
+                     };
+                   }
+                                 } catch (error) {
+                   console.error('Error fetching traffic flow data:', error);
+                   // Fallback to calculated metrics
+                   flow_metrics = {
+                     nginx_requests: 0, // We don't track NGINX directly
+                     nginx_route_direct: 0,
+                     nginx_route_edge: overviewData.stats?.total_requests || 0,
+                     envoy_requests: overviewData.stats?.total_requests || 0,
+                     envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                     envoy_denied: overviewData.stats?.denied_requests || 0,
+                     mimir_requests: overviewData.stats?.allowed_requests || 0,
+                     mimir_success: overviewData.stats?.allowed_requests || 0,
+                     mimir_errors: 0,
+                     response_times: {
+                       nginx_to_envoy: 0,
+                       envoy_to_mimir: 0,
+                       total_flow: 0
+                     }
+                   };
+                 }
 
     // Generate flow timeline data based on current stats
     const flow_timeline: FlowDataPoint[] = [
