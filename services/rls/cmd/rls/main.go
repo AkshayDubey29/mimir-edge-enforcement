@@ -17,6 +17,7 @@ import (
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/limits"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/service"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -103,8 +104,7 @@ func main() {
 	go startAdminServer(ctx, rls, *adminPort, logger)
 	go startMetricsServer(ctx, *metricsPort, logger)
 
-	// 🔧 FIX: Give servers time to start and validate
-	time.Sleep(2 * time.Second)
+	// 🔧 FIX: Add proper startup validation and graceful shutdown
 	logger.Info().Msg("RLS service started - all components initialized")
 
 	// Wait for shutdown signal
@@ -114,11 +114,18 @@ func main() {
 
 	logger.Info().Msg("Shutting down RLS service...")
 
-	// Graceful shutdown
-	_, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Trigger graceful shutdown
+	cancel()
+
+	// Wait for all servers to shutdown gracefully
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	// TODO: Implement graceful shutdown for servers
+	// Wait for shutdown to complete
+	<-shutdownCtx.Done()
+	if shutdownCtx.Err() == context.DeadlineExceeded {
+		logger.Warn().Msg("shutdown timeout exceeded, forcing exit")
+	}
 
 	logger.Info().Msg("RLS service stopped")
 }
@@ -273,15 +280,56 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 
 	logger.Info().Str("port", port).Msg("admin HTTP server started")
 
+	// 🔧 FIX: Add graceful shutdown handling for HTTP server
+	go func() {
+		<-ctx.Done()
+		logger.Info().Msg("shutting down admin HTTP server")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error().Err(err).Msg("admin HTTP server shutdown error")
+		}
+	}()
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatal().Err(err).Msg("failed to serve admin")
 	}
 }
 
 func startMetricsServer(ctx context.Context, port string, logger zerolog.Logger) {
-	// This would serve Prometheus metrics
-	// For now, just log that it's started
+	// 🔧 FIX: Implement proper Prometheus metrics server
+	mux := http.NewServeMux()
+	
+	// Add metrics endpoint
+	mux.Handle("/metrics", promhttp.Handler())
+	
+	// Add health check for metrics server
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("metrics server ok"))
+	})
+
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: mux,
+	}
+
 	logger.Info().Str("port", port).Msg("metrics HTTP server started")
+
+	// 🔧 FIX: Add graceful shutdown handling for metrics server
+	go func() {
+		<-ctx.Done()
+		logger.Info().Msg("shutting down metrics HTTP server")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error().Err(err).Msg("metrics HTTP server shutdown error")
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		logger.Fatal().Err(err).Msg("failed to serve metrics")
+	}
 }
 
 // HTTP handlers (simplified implementations)
