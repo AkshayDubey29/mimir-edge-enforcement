@@ -210,7 +210,7 @@ envoy:
   
   # External authorization settings
   extAuthz:
-    maxRequestBytes: 4194304  # 4 MiB
+    maxRequestBytes: 4000000  # 4 MiB
     failureModeAllow: false   # 🔴 SECURITY: Fail closed
   
   # Rate limiting settings
