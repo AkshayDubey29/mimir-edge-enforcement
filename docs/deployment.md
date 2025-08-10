@@ -325,8 +325,9 @@ kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement 
 
 > **🔧 IMPORTANT**: The Envoy chart now includes:
 > - **Permanent fix for 426 Upgrade Required errors** when NGINX routes HTTP/1.1 traffic to Envoy
-> - **Buffer overflow fixes** that resolve "buffer size limit (64KB) exceeded" errors
-> - **Timeout configurations** preventing hanging requests and improving reliability
+> - **Buffer overflow fixes** using 4MB max_request_bytes and proper timeouts
+> - **gRPC timeout configurations** preventing hanging requests (5s ext_authz, 2s ratelimit)
+> - **HTTP connection manager timeouts** for overall request handling (10s request, 300s stream idle)
 > - **Resource limit corrections** matching container memory to heap size
 
 #### **HTTP Protocol Configuration (v0.2.0+)**
@@ -400,18 +401,15 @@ resourceLimits:
 
 # External authorization (with buffer overflow fixes)
 extAuthz:
-  maxRequestBytes: 4194304  # 4 MiB
+  maxRequestBytes: 4194304  # 4 MiB (provides buffer management for large requests)
   failureModeAllow: false   # Fail closed for security
-  # 🔧 BUFFER OVERFLOW FIXES:
-  bufferSizeBytes: 131072   # 128KB (double default 64KB) - prevents overflow
-  timeout: "5s"             # Overall ext_authz timeout - prevents hanging
-  grpcTimeout: "4s"         # gRPC call timeout
+  # 🔧 TIMEOUT FIXES:
+  timeout: "5s"             # gRPC service timeout - prevents hanging requests
 
 # Rate limiting (with timeout fixes)
 rateLimit:
   failureModeDeny: true     # Deny on rate limit service failure
   # 🔧 TIMEOUT FIXES:
-  timeout: "3s"             # Overall rate limit timeout
   grpcTimeout: "2s"         # gRPC call timeout
 
 # Tenant configuration
@@ -449,15 +447,15 @@ curl http://localhost:8001/stats | grep -E "(ready|healthy)"
 # 🔧 VERIFY BUFFER OVERFLOW FIXES:
 echo "=== Verifying Buffer Overflow Fixes ==="
 
-# 1. Check ext_authz configuration includes buffer size and timeouts
-echo "Checking ext_authz buffer configuration..."
+# 1. Check ext_authz configuration includes request buffer and timeouts
+echo "Checking ext_authz request buffer configuration..."
 kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
-  grep -A 10 -B 5 "buffer_size_bytes"
+  grep -A 10 -B 5 "max_request_bytes"
 
-# 2. Verify timeout configurations
-echo "Checking timeout configurations..."
+# 2. Verify timeout configurations in gRPC services
+echo "Checking gRPC timeout configurations..."
 kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
-  grep -A 3 -B 3 "timeout:"
+  grep -A 5 -B 5 "timeout:"
 
 # 3. Check heap size matches container memory
 echo "Checking heap size configuration..."
@@ -487,11 +485,10 @@ pkill -f "kubectl port-forward.*8001"
 
 # ✅ Expected Results:
 echo "=== Expected Configuration Verification ==="
-echo "✅ buffer_size_bytes: 131072 (128KB)"
-echo "✅ timeout: 5s (ext_authz)"
-echo "✅ grpcTimeout: 4s (ext_authz)"  
-echo "✅ timeout: 3s (ratelimit)"
-echo "✅ grpcTimeout: 2s (ratelimit)"
+echo "✅ max_request_bytes: 4194304 (4MB request buffer)"
+echo "✅ timeout: 5s (ext_authz gRPC service)"
+echo "✅ grpcTimeout: 2s (ratelimit gRPC service)"
+echo "✅ request_timeout: 10s (HTTP connection manager)"
 echo "✅ maxHeapSizeBytes: 402653184 (384MB)"
 echo "✅ health_checks configured for RLS clusters"
 echo "✅ No buffer overflow warnings in logs"
@@ -568,9 +565,10 @@ echo "=== Buffer Overflow Testing Complete ==="
 
 Use this checklist to verify all fixes are working:
 
-- [ ] **Buffer Size**: `buffer_size_bytes: 131072` configured in ext_authz
-- [ ] **Timeouts**: 5s ext_authz timeout, 4s gRPC timeout configured  
-- [ ] **Rate Limit Timeouts**: 3s timeout, 2s gRPC timeout configured
+- [ ] **Request Buffer**: `max_request_bytes: 4194304` (4MB) configured in ext_authz
+- [ ] **ext_authz Timeout**: 5s gRPC service timeout configured  
+- [ ] **Rate Limit Timeout**: 2s gRPC timeout configured
+- [ ] **HTTP Timeouts**: 10s request_timeout, 300s stream_idle_timeout configured
 - [ ] **Heap Size**: 384MB (75% of 512MB container) configured
 - [ ] **Health Checks**: RLS clusters have health check endpoints
 - [ ] **Circuit Breakers**: Connection limits configured for RLS clusters
@@ -845,18 +843,15 @@ envoy:
       rateLimitPort: 8081
     
     extAuthz:
-      maxRequestBytes: 4194304  # 4 MiB
+      maxRequestBytes: 4194304  # 4 MiB (provides buffer management)
       failureModeAllow: false   # Fail closed for security
-      # 🔧 BUFFER OVERFLOW FIXES:
-      bufferSizeBytes: 131072   # 128KB buffer prevents overflow
-      timeout: "5s"             # Overall timeout prevents hanging
-      grpcTimeout: "4s"         # gRPC timeout
+      # 🔧 TIMEOUT FIXES:
+      timeout: "5s"             # gRPC service timeout prevents hanging
     
     rateLimit:
       failureModeDeny: true     # Deny on rate limit service failure
       # 🔧 TIMEOUT FIXES:
-      timeout: "3s"             # Rate limit timeout
-      grpcTimeout: "2s"         # gRPC timeout
+      grpcTimeout: "2s"         # gRPC call timeout
     
     tenantHeader: "X-Scope-OrgID"
   
@@ -1137,7 +1132,7 @@ curl https://mimir-admin.your-domain.com/api/tenants
 ### Key Metrics to Monitor
 - **RLS**: `tenant_requests_total`, `rate_limit_decisions_total`, `denied_requests_total`
 - **Envoy**: `ext_authz.allowed`, `ext_authz.denied`, `ratelimit.ok`, `ratelimit.over_limit`
-- **Envoy Buffer**: `ext_authz.buffer_size_bytes`, `ext_authz.timeout`, `ext_authz.retry` (should be minimal)
+- **Envoy Buffer**: `ext_authz.max_request_bytes`, `ext_authz.timeout`, `http.request_timeout` (should be stable)
 - **Envoy Overload**: `overload.envoy.overload_actions.*.scale_timer`, `server.memory_heap_size`, `http.inbound.downstream_cx_active`
 - **Overrides-Sync**: `config_map_syncs_total`, `tenant_count`, `sync_errors_total`
 
@@ -1286,11 +1281,14 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    # Check for buffer overflow warnings in Envoy logs
    kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement | grep "buffer.*size.*limit"
    
-   # Verify buffer size configuration (should be 128KB)
-   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 5 "buffer_size_bytes"
+   # Verify request buffer configuration (should be 4MB)
+   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 5 "max_request_bytes"
    
-   # Check ext_authz timeout settings
+   # Check timeout settings in gRPC services
    kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 3 "timeout"
+   
+   # Verify HTTP connection manager timeouts
+   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 3 "request_timeout"
    
    # Verify RLS service health
    kubectl exec -it deployment/mimir-envoy -n mimir-edge-enforcement -- \
