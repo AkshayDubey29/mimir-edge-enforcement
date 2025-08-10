@@ -14,6 +14,29 @@ import {
 } from 'lucide-react';
 import { Button } from './ui/button';
 
+// Export CSV function
+const handleExportCSV = async () => {
+  try {
+    const response = await fetch('/api/export/csv');
+    if (!response.ok) {
+      throw new Error('Failed to export CSV');
+    }
+    
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mimir-denials-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
+    alert('Failed to export CSV. Please try again.');
+  }
+};
+
 interface LayoutProps {
   children: React.ReactNode;
 }
@@ -70,11 +93,21 @@ export function Layout({ children }: LayoutProps) {
         <div className="absolute bottom-0 left-0 right-0 p-4">
           <div className="border-t border-gray-200 mb-4" />
           <div className="space-y-2">
-            <Button variant="outline" size="sm" className="w-full justify-start">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full justify-start"
+              onClick={() => window.open('/settings', '_blank')}
+            >
               <Settings className="mr-2 h-4 w-4" />
               Settings
             </Button>
-            <Button variant="outline" size="sm" className="w-full justify-start">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full justify-start"
+              onClick={handleExportCSV}
+            >
               <Download className="mr-2 h-4 w-4" />
               Export CSV
             </Button>

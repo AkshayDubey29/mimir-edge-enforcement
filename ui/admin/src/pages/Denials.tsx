@@ -125,7 +125,9 @@ export function Denials() {
 async function fetchDenials() {
   const res = await fetch(`/api/denials?since=1h&tenant=*`);
   if (!res.ok) throw new Error('failed');
-  return res.json();
+  const data = await res.json();
+  // Backend returns {denials: [...]}, extract the denials array
+  return data.denials || [];
 }
 
 

@@ -144,7 +144,9 @@ export function Pipeline() {
     ['pipeline-status'],
     fetchPipelineStatus,
     {
-      refetchInterval: 10000, // Refetch every 10 seconds
+      refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
+      refetchIntervalInBackground: true,
+      staleTime: 5000, // Consider data stale after 5 seconds
     }
   );
 
