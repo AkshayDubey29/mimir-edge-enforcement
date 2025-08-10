@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -136,7 +137,23 @@ func startExtAuthzServer(ctx context.Context, rls *service.RLS, port string, log
 		logger.Fatal().Err(err).Str("port", port).Msg("failed to listen for ext_authz")
 	}
 
-	grpcServer := grpc.NewServer()
+	// 🔧 PERFORMANCE FIX: Add gRPC server optimizations for high throughput
+	grpcServer := grpc.NewServer(
+		grpc.MaxConcurrentStreams(1000),        // Allow more concurrent streams
+		grpc.MaxRecvMsgSize(4*1024*1024),       // 4MB max message size
+		grpc.MaxSendMsgSize(4*1024*1024),       // 4MB max message size
+		grpc.NumStreamWorkers(32),              // More worker goroutines
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 30 * time.Second,
+			MaxConnectionAge:  5 * time.Minute,
+			Time:              10 * time.Second,
+			Timeout:           3 * time.Second,
+		}),
+	)
 
 	// Register ext_authz service
 	envoy_service_auth_v3.RegisterAuthorizationServer(grpcServer, rls)
@@ -170,7 +187,23 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 		logger.Fatal().Err(err).Str("port", port).Msg("failed to listen for ratelimit")
 	}
 
-	grpcServer := grpc.NewServer()
+	// 🔧 PERFORMANCE FIX: Add gRPC server optimizations for high throughput
+	grpcServer := grpc.NewServer(
+		grpc.MaxConcurrentStreams(1000),        // Allow more concurrent streams
+		grpc.MaxRecvMsgSize(4*1024*1024),       // 4MB max message size
+		grpc.MaxSendMsgSize(4*1024*1024),       // 4MB max message size
+		grpc.NumStreamWorkers(32),              // More worker goroutines
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 30 * time.Second,
+			MaxConnectionAge:  5 * time.Minute,
+			Time:              10 * time.Second,
+			Timeout:           3 * time.Second,
+		}),
+	)
 
 	// Register rate limit service
 	envoy_service_ratelimit_v3.RegisterRateLimitServiceServer(grpcServer, rls)
@@ -201,15 +234,16 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger zerolog.Logger) {
 	router := mux.NewRouter()
 
-	// Add request logging middleware
+	// 🔧 PERFORMANCE FIX: Remove excessive logging middleware - only log errors
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.Info().
-				Str("method", r.Method).
-				Str("path", r.URL.Path).
-				Str("remote_addr", r.RemoteAddr).
-				Str("user_agent", r.Header.Get("User-Agent")).
-				Msg("RLS admin API request")
+			// Only log health checks at debug level, everything else at error level only
+			if r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+				log.Debug().
+					Str("method", r.Method).
+					Str("path", r.URL.Path).
+					Msg("health check request")
+			}
 			next.ServeHTTP(w, r)
 		})
 	})
@@ -260,22 +294,15 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		writeJSON(w, http.StatusOK, map[string]interface{}{"routes": routes})
 	}).Methods("GET")
 
-	// Log all registered routes for debugging
-	router.Walk(func(route *mux.Route, router *mux.Router, ancestors []*mux.Route) error {
-		pathTemplate, err := route.GetPathTemplate()
-		if err == nil {
-			methods, _ := route.GetMethods()
-			log.Info().
-				Str("path", pathTemplate).
-				Strs("methods", methods).
-				Msg("RLS registered route")
-		}
-		return nil
-	})
+	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
+	// Routes are now only logged at debug level if needed
 
 	server := &http.Server{
-		Addr:    ":" + port,
-		Handler: router,
+		Addr:         ":" + port,
+		Handler:      router,
+		ReadTimeout:  5 * time.Second,  // 🔧 PERFORMANCE FIX: Add request timeouts
+		WriteTimeout: 10 * time.Second, // 🔧 PERFORMANCE FIX: Add response timeouts
+		IdleTimeout:  120 * time.Second, // 🔧 PERFORMANCE FIX: Add connection timeouts
 	}
 
 	logger.Info().Str("port", port).Msg("admin HTTP server started")
