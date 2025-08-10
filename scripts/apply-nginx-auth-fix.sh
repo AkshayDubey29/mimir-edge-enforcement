@@ -26,8 +26,8 @@ echo ""
 # Apply the fix
 echo -e "${BLUE}[$(date +%H:%M:%S)] 🔧 Applying Authorization header fix${NC}"
 echo "------------------------"
-kubectl apply -f examples/nginx-10-percent-canary.yaml
-echo -e "${GREEN}✅ ConfigMap updated with 10% canary + auth fix${NC}"
+kubectl apply -f examples/nginx-auth-header-minimal-patch.yaml
+echo -e "${GREEN}✅ ConfigMap updated with minimal auth fix (no routing changes)${NC}"
 echo ""
 
 # Restart NGINX deployment
