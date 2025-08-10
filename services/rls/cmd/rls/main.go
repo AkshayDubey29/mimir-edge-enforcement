@@ -312,13 +312,33 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 
 func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleGetTenant")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
 		id := mux.Vars(r)["id"]
+		log.Debug().Str("tenant_id", id).Msg("handling /api/tenants/{id} request")
+		
 		tenant, ok := rls.GetTenantSnapshot(id)
 		if !ok {
-			http.Error(w, "tenant not found", http.StatusNotFound)
+			log.Info().Str("tenant_id", id).Msg("tenant not found")
+			writeJSON(w, http.StatusNotFound, map[string]any{
+				"error":     "tenant not found",
+				"tenant_id": id,
+				"message":   "The specified tenant does not exist or has no limits configured",
+			})
 			return
 		}
+		
 		denials := rls.RecentDenials(id, 24*time.Hour)
+		log.Info().
+			Str("tenant_id", id).
+			Int("denials_count", len(denials)).
+			Msg("tenant details API response")
+		
 		writeJSON(w, http.StatusOK, map[string]any{"tenant": tenant, "recent_denials": denials})
 	}
 }
