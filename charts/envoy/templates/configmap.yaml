@@ -159,14 +159,14 @@ data:
               http2_protocol_options: 
                 # 🔧 FIX: Configure HTTP/2 settings for better gRPC performance
                 max_concurrent_streams: 100
-        # 🔧 FIX: Add health checks for RLS service
+        # 🔧 FIX: Add gRPC health checks for RLS service
         health_checks:
-        - timeout: 1s
-          interval: 5s
+        - timeout: 3s
+          interval: 10s
           unhealthy_threshold: 2
           healthy_threshold: 1
-          http_health_check:
-            path: "/health"
+          grpc_health_check:
+            service_name: "envoy.service.auth.v3.Authorization"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
@@ -197,14 +197,14 @@ data:
               http2_protocol_options:
                 # 🔧 FIX: Configure HTTP/2 settings for better gRPC performance
                 max_concurrent_streams: 100
-        # 🔧 FIX: Add health checks for RLS rate limit service
+        # 🔧 FIX: Add gRPC health checks for RLS rate limit service
         health_checks:
-        - timeout: 1s
-          interval: 5s
+        - timeout: 3s
+          interval: 10s
           unhealthy_threshold: 2
           healthy_threshold: 1
-          http_health_check:
-            path: "/health"
+          grpc_health_check:
+            service_name: "envoy.service.ratelimit.v3.RateLimitService"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
