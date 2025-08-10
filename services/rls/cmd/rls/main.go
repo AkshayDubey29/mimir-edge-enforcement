@@ -186,6 +186,7 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	// Pipeline and Metrics endpoints for Admin UI
 	router.HandleFunc("/api/pipeline/status", handlePipelineStatus(rls)).Methods("GET")
 	router.HandleFunc("/api/metrics/system", handleSystemMetrics(rls)).Methods("GET")
+	router.HandleFunc("/api/flow/status", handleFlowStatus(rls)).Methods("GET")
 
 	// Debug endpoint to list all routes
 	router.HandleFunc("/api/debug/routes", func(w http.ResponseWriter, r *http.Request) {
@@ -513,5 +514,22 @@ func handleSystemMetrics(rls *service.RLS) http.HandlerFunc {
 		// Get real system metrics from RLS service
 		systemMetrics := rls.GetSystemMetrics()
 		writeJSON(w, http.StatusOK, systemMetrics)
+	}
+}
+
+func handleFlowStatus(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleFlowStatus")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		log.Debug().Msg("handling /api/flow/status request")
+
+		// Get comprehensive flow status
+		flowStatus := rls.GetFlowStatus()
+		writeJSON(w, http.StatusOK, flowStatus)
 	}
 }
