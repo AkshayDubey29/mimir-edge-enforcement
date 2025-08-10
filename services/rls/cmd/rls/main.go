@@ -348,7 +348,7 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 					break
 				}
 			}
-			
+
 			if foundTenant != nil {
 				log.Info().
 					Str("requested_tenant_id", id).
