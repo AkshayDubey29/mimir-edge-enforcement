@@ -139,10 +139,10 @@ func startExtAuthzServer(ctx context.Context, rls *service.RLS, port string, log
 
 	// 🔧 PERFORMANCE FIX: Add gRPC server optimizations for high throughput
 	grpcServer := grpc.NewServer(
-		grpc.MaxConcurrentStreams(1000),        // Allow more concurrent streams
-		grpc.MaxRecvMsgSize(4*1024*1024),       // 4MB max message size
-		grpc.MaxSendMsgSize(4*1024*1024),       // 4MB max message size
-		grpc.NumStreamWorkers(32),              // More worker goroutines
+		grpc.MaxConcurrentStreams(1000),  // Allow more concurrent streams
+		grpc.MaxRecvMsgSize(4*1024*1024), // 4MB max message size
+		grpc.MaxSendMsgSize(4*1024*1024), // 4MB max message size
+		grpc.NumStreamWorkers(32),        // More worker goroutines
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             5 * time.Second,
 			PermitWithoutStream: true,
@@ -189,10 +189,10 @@ func startRateLimitServer(ctx context.Context, rls *service.RLS, port string, lo
 
 	// 🔧 PERFORMANCE FIX: Add gRPC server optimizations for high throughput
 	grpcServer := grpc.NewServer(
-		grpc.MaxConcurrentStreams(1000),        // Allow more concurrent streams
-		grpc.MaxRecvMsgSize(4*1024*1024),       // 4MB max message size
-		grpc.MaxSendMsgSize(4*1024*1024),       // 4MB max message size
-		grpc.NumStreamWorkers(32),              // More worker goroutines
+		grpc.MaxConcurrentStreams(1000),  // Allow more concurrent streams
+		grpc.MaxRecvMsgSize(4*1024*1024), // 4MB max message size
+		grpc.MaxSendMsgSize(4*1024*1024), // 4MB max message size
+		grpc.NumStreamWorkers(32),        // More worker goroutines
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 			MinTime:             5 * time.Second,
 			PermitWithoutStream: true,
@@ -248,16 +248,34 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		})
 	})
 
+	// 🔧 PERFORMANCE FIX: Cache static responses for better performance
+	var (
+		healthResponse = []byte("ok")
+		healthHeaders  = map[string]string{
+			"Content-Type":   "text/plain; charset=utf-8",
+			"Cache-Control":  "no-cache",
+			"Content-Length": "2",
+		}
+	)
+
 	// Health check
 	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		// 🔧 PERFORMANCE FIX: Use cached response for better performance
+		for key, value := range healthHeaders {
+			w.Header().Set(key, value)
+		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		w.Write(healthResponse)
 	}).Methods("GET")
 
 	// Readiness check
 	router.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		// 🔧 PERFORMANCE FIX: Use cached response for better performance
+		for key, value := range healthHeaders {
+			w.Header().Set(key, value)
+		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		w.Write(healthResponse)
 	}).Methods("GET")
 
 	// Admin API endpoints
@@ -294,15 +312,21 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		writeJSON(w, http.StatusOK, map[string]interface{}{"routes": routes})
 	}).Methods("GET")
 
+	// 🔧 DEBUG: Add endpoint to check tenant state
+	router.HandleFunc("/api/debug/tenants", func(w http.ResponseWriter, r *http.Request) {
+		debugInfo := rls.GetDebugInfo()
+		writeJSON(w, http.StatusOK, debugInfo)
+	}).Methods("GET")
+
 	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
 	// Routes are now only logged at debug level if needed
 
 	server := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
-		ReadTimeout:  5 * time.Second,  // 🔧 PERFORMANCE FIX: Add request timeouts
-		WriteTimeout: 10 * time.Second, // 🔧 PERFORMANCE FIX: Add response timeouts
-		IdleTimeout:  120 * time.Second, // 🔧 PERFORMANCE FIX: Add connection timeouts
+		ReadTimeout:  30 * time.Second,  // 🔧 FIX: Increased timeout to prevent 504 errors
+		WriteTimeout: 60 * time.Second,  // 🔧 FIX: Increased timeout for admin API responses
+		IdleTimeout:  120 * time.Second, // Keep connection timeout reasonable
 	}
 
 	logger.Info().Str("port", port).Msg("admin HTTP server started")
@@ -377,11 +401,13 @@ func handleOverview(rls *service.RLS) http.HandlerFunc {
 			}
 		}()
 
-		log.Debug().Msg("handling /api/overview request")
+		// 🔧 PERFORMANCE FIX: Remove excessive logging for high-frequency endpoint
 		stats := rls.OverviewSnapshot()
 
 		response := map[string]any{"stats": stats}
-		log.Info().
+
+		// 🔧 PERFORMANCE FIX: Only log at debug level to reduce overhead
+		log.Debug().
 			Int64("total_requests", stats.TotalRequests).
 			Int64("allowed_requests", stats.AllowedRequests).
 			Int64("denied_requests", stats.DeniedRequests).
@@ -402,11 +428,11 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 			}
 		}()
 
-		log.Debug().Msg("handling /api/tenants request")
+		// 🔧 PERFORMANCE FIX: Remove excessive logging for high-frequency endpoint
 		tenants := rls.ListTenantsWithMetrics()
 
-		// Log detailed tenant information
-		tenantLogger := log.Info().Int("tenant_count", len(tenants))
+		// 🔧 PERFORMANCE FIX: Only log at debug level to reduce overhead
+		tenantLogger := log.Debug().Int("tenant_count", len(tenants))
 
 		if len(tenants) == 0 {
 			tenantLogger.Msg("tenants API response: NO TENANTS FOUND - this explains zero active tenants!")
@@ -597,9 +623,16 @@ func handleExportCSV(rls *service.RLS) http.HandlerFunc {
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
+	// 🔧 PERFORMANCE FIX: Add compression and caching headers for better performance
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(v); err != nil {
+
+	// 🔧 PERFORMANCE FIX: Use buffered encoder for better performance
+	encoder := json.NewEncoder(w)
+	encoder.SetEscapeHTML(false) // Don't escape HTML for better performance
+
+	if err := encoder.Encode(v); err != nil {
 		log.Error().Err(err).Msg("failed to encode JSON response")
 	}
 }

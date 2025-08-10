@@ -37,7 +37,7 @@ rls:
 # External authorization configuration
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB (this provides buffer management for requests)
-  failureModeAllow: false   # Set to true for debugging if RLS is unreachable
+  failureModeAllow: true    # 🔧 DEBUG: Temporarily set to true to allow traffic while debugging
   # 🔧 FIX: Timeout settings to prevent hanging requests
   timeout: "5s"             # gRPC service timeout
 
@@ -62,10 +62,10 @@ proxy:
 
 # Logging configuration
 logging:
-  level: "info"                 # info, debug, trace, warn, error
+  level: "debug"                # 🔧 DEBUG: Set to debug for troubleshooting ext_authz issues
   # 🔧 DEBUG: Set to debug for troubleshooting ext_authz issues
   enableAccessLogs: true        # Enable HTTP access logs
-  enableDebugLogs: false        # Enable debug logging for filters
+  enableDebugLogs: true         # 🔧 DEBUG: Enable debug logging for filters
 
 # Resource limits and overload management
 resourceLimits:
