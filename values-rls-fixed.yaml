@@ -1,0 +1,16 @@
+# Fixed values for mimir-rls to resolve 4e+06 scientific notation error
+limits:
+  maxRequestBytes: 4000000  # Fixed: Use 4000000 instead of 4194304
+  maxBodyBytes: 0
+  failureModeAllow: false
+  defaultSamplesPerSecond: 0
+  defaultBurstPercent: 0
+  enforceBodyParsing: true
+  defaultMaxLabelsPerSeries: 60
+  defaultMaxLabelValueLength: 2048
+  defaultMaxSeriesPerRequest: 100000
+
+# Ensure we use the latest image
+image:
+  tag: "latest"
+  pullPolicy: Always
