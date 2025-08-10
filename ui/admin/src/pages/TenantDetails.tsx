@@ -102,46 +102,54 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
     const tenant = data.tenant;
     const denials = data.recent_denials || [];
     
+    // Determine tenant status based on available data
+    let status: 'active' | 'inactive' | 'suspended' | 'unknown' = 'unknown';
+    if (tenant && tenant.limits && Object.values(tenant.limits).some((v: any) => v > 0)) {
+      status = 'active';
+    } else if (tenant && tenant.metrics && (tenant.metrics.allow_rate > 0 || tenant.metrics.deny_rate > 0)) {
+      status = 'active';
+    }
+    
     // Convert backend tenant format to frontend format
     return {
-      id: tenant.id || tenantId,
-      name: tenant.name || tenantId,
-      status: tenant.status || 'unknown',
-      created_at: tenant.created_at || '',
-      last_activity: tenant.last_activity || '',
+      id: tenant?.id || tenantId,
+      name: tenant?.name || tenantId,
+      status: status,
+      created_at: tenant?.created_at || new Date().toISOString(),
+      last_activity: tenant?.last_activity || new Date().toISOString(),
       limits: {
-        samples_per_second: tenant.limits?.samples_per_second || 0,
-        burst_percent: tenant.limits?.burst_percent || 0,
-        max_body_bytes: tenant.limits?.max_body_bytes || 0,
-        max_series_per_query: tenant.limits?.max_series_per_query || 0,
-        max_global_series_per_user: tenant.limits?.max_global_series_per_user || 0,
-        max_global_series_per_metric: tenant.limits?.max_global_series_per_metric || 0,
-        max_global_exemplars_per_user: tenant.limits?.max_global_exemplars_per_user || 0,
-        ingestion_rate: tenant.limits?.ingestion_rate || 0,
-        ingestion_burst_size: tenant.limits?.ingestion_burst_size || 0
+        samples_per_second: tenant?.limits?.samples_per_second || 0,
+        burst_percent: tenant?.limits?.burst_percent || 0,
+        max_body_bytes: tenant?.limits?.max_body_bytes || 0,
+        max_series_per_query: tenant?.limits?.max_series_per_query || 0,
+        max_global_series_per_user: tenant?.limits?.max_global_series_per_user || 0,
+        max_global_series_per_metric: tenant?.limits?.max_global_series_per_metric || 0,
+        max_global_exemplars_per_user: tenant?.limits?.max_global_exemplars_per_user || 0,
+        ingestion_rate: tenant?.limits?.ingestion_rate || 0,
+        ingestion_burst_size: tenant?.limits?.ingestion_burst_size || 0
       },
       metrics: {
-        current_samples_per_second: tenant.metrics?.current_samples_per_second || 0,
-        current_series: tenant.metrics?.current_series || 0,
-        total_requests: tenant.metrics?.total_requests || 0,
-        allowed_requests: tenant.metrics?.allowed_requests || 0,
-        denied_requests: tenant.metrics?.denied_requests || 0,
-        allow_rate: tenant.metrics?.allow_rate || 0,
-        deny_rate: tenant.metrics?.deny_rate || 0,
-        avg_response_time: tenant.metrics?.avg_response_time || 0,
-        error_rate: tenant.metrics?.error_rate || 0,
-        utilization_pct: tenant.metrics?.utilization_pct || 0
+        current_samples_per_second: tenant?.metrics?.current_samples_per_second || 0,
+        current_series: tenant?.metrics?.current_series || 0,
+        total_requests: tenant?.metrics?.total_requests || 0,
+        allowed_requests: tenant?.metrics?.allowed_requests || 0,
+        denied_requests: tenant?.metrics?.denied_requests || 0,
+        allow_rate: tenant?.metrics?.allow_rate || 0,
+        deny_rate: tenant?.metrics?.deny_rate || 0,
+        avg_response_time: tenant?.metrics?.avg_response_time || 0,
+        error_rate: tenant?.metrics?.error_rate || 0,
+        utilization_pct: tenant?.metrics?.utilization_pct || 0
       },
-      request_history: tenant.request_history || [],
+      request_history: tenant?.request_history || [],
       enforcement_history: denials.map((denial: any) => ({
-        timestamp: denial.timestamp || '',
+        timestamp: denial.timestamp || new Date().toISOString(),
         reason: denial.reason || '',
         limit_type: denial.limit_type || '',
         current_value: denial.observed_samples || 0,
         limit_value: denial.limit_value || 0,
         action: 'denied'
       })),
-      alerts: tenant.alerts || []
+      alerts: tenant?.alerts || []
     };
   } catch (error) {
     console.error('Error fetching tenant details:', error);
@@ -275,7 +283,7 @@ export function TenantDetails() {
     );
   }
 
-  if (!tenantDetails || tenantDetails.status === 'unknown') {
+  if (!tenantDetails) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
