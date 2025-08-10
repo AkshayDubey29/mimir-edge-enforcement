@@ -450,20 +450,20 @@ export function Overview() {
                 <h3 className="text-sm font-medium text-yellow-800">Flow Issues Detected</h3>
               </div>
               <div className="mt-2 text-sm text-yellow-700">
-                {flow_status.nginx.status !== 'healthy' && (
-                  <div>• NGINX: {flow_status.nginx.message}</div>
+                {flow_status?.nginx?.status !== 'healthy' && (
+                  <div>• NGINX: {flow_status.nginx?.message || 'Unknown issue'}</div>
                 )}
-                {flow_status.envoy.status !== 'healthy' && (
-                  <div>• Envoy: {flow_status.envoy.message}</div>
+                {flow_status?.envoy?.status !== 'healthy' && (
+                  <div>• Envoy: {flow_status.envoy?.message || 'Unknown issue'}</div>
                 )}
-                {flow_status.rls.status !== 'healthy' && (
-                  <div>• RLS: {flow_status.rls.message}</div>
+                {flow_status?.rls?.status !== 'healthy' && (
+                  <div>• RLS: {flow_status.rls?.message || 'Unknown issue'}</div>
                 )}
-                {flow_status.overrides_sync.status !== 'healthy' && (
-                  <div>• Overrides Sync: {flow_status.overrides_sync.message}</div>
+                {flow_status?.overrides_sync?.status !== 'healthy' && (
+                  <div>• Overrides Sync: {flow_status.overrides_sync?.message || 'Unknown issue'}</div>
                 )}
-                {flow_status.mimir.status !== 'healthy' && (
-                  <div>• Mimir: {flow_status.mimir.message}</div>
+                {flow_status?.mimir?.status !== 'healthy' && (
+                  <div>• Mimir: {flow_status.mimir?.message || 'Unknown issue'}</div>
                 )}
               </div>
             </div>
@@ -579,13 +579,13 @@ export function Overview() {
                 <div key={service} className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-medium capitalize">{service}</h3>
-                    <StatusBadge status={data.status} />
+                    <StatusBadge status={data?.status || 'unknown'} />
                   </div>
-                  <p className="text-sm text-gray-600 mb-2">{data.message}</p>
+                  <p className="text-sm text-gray-600 mb-2">{data?.message || 'Status unknown'}</p>
                   <div className="text-xs text-gray-500">
-                    <div>Version: {data.version}</div>
-                    <div>Uptime: {data.uptime}</div>
-                    <div>Last Check: {new Date(data.last_check).toLocaleTimeString()}</div>
+                    <div>Version: {data?.version || 'Unknown'}</div>
+                    <div>Uptime: {data?.uptime || 'Unknown'}</div>
+                    <div>Last Check: {data?.last_check ? new Date(data.last_check).toLocaleTimeString() : 'Unknown'}</div>
                   </div>
                 </div>
               ))}
@@ -602,13 +602,13 @@ export function Overview() {
                       <div key={endpoint} className="p-3 border rounded bg-gray-50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium">{endpoint}</span>
-                          <StatusBadge status={data.status} />
+                          <StatusBadge status={data?.status || 'unknown'} />
                         </div>
-                        <p className="text-xs text-gray-600 mb-1">{data.message}</p>
+                        <p className="text-xs text-gray-600 mb-1">{data?.message || 'Status unknown'}</p>
                         <div className="text-xs text-gray-500">
-                          <div>Response: {data.response_time}ms</div>
-                          <div>Status: {data.actual_status}/{data.expected_status}</div>
-                          <div>Size: {data.response_size} bytes</div>
+                          <div>Response: {data?.response_time || 0}ms</div>
+                          <div>Status: {data?.actual_status || 0}/{data?.expected_status || 0}</div>
+                          <div>Size: {data?.response_size || 0} bytes</div>
                         </div>
                       </div>
                     ))}
@@ -628,11 +628,11 @@ export function Overview() {
                       <div key={validation} className="p-3 border rounded bg-gray-50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-medium">{validation.replace('_', ' ')}</span>
-                          <StatusBadge status={data.status} />
+                          <StatusBadge status={data?.status || 'unknown'} />
                         </div>
-                        <p className="text-xs text-gray-600 mb-1">{data.message}</p>
+                        <p className="text-xs text-gray-600 mb-1">{data?.message || 'Status unknown'}</p>
                         <div className="text-xs text-gray-500">
-                          Last Check: {new Date(data.last_check).toLocaleTimeString()}
+                          Last Check: {data?.last_check ? new Date(data.last_check).toLocaleTimeString() : 'Unknown'}
                         </div>
                       </div>
                     ))}
@@ -752,8 +752,63 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
     
     if (systemStatusResponse.ok) {
       const systemStatusData = await systemStatusResponse.json();
-      flow_status = systemStatusData.flow_status;
-      health_checks = systemStatusData.health_checks;
+      
+      // Extract flow_status from the new structure
+      const overallHealth = systemStatusData.overall_health || {};
+      const services = systemStatusData.services || {};
+      
+      // Convert the new structure to the expected FlowStatus format
+      flow_status = {
+        overall: overallHealth.status || 'unknown',
+        nginx: {
+          status: services.nginx?.status || 'unknown',
+          message: services.nginx?.message || 'Status unknown',
+          last_seen: services.nginx?.last_check || '',
+          response_time: 0,
+          error_count: 0
+        },
+        envoy: {
+          status: services.envoy?.status || 'unknown',
+          message: services.envoy?.message || 'Status unknown',
+          last_seen: services.envoy?.last_check || '',
+          response_time: 0,
+          error_count: 0
+        },
+        rls: {
+          status: services.rls?.status || 'unknown',
+          message: services.rls?.message || 'Status unknown',
+          last_seen: services.rls?.last_check || '',
+          response_time: 0,
+          error_count: 0
+        },
+        overrides_sync: {
+          status: services.overrides_sync?.status || 'unknown',
+          message: services.overrides_sync?.message || 'Status unknown',
+          last_seen: services.overrides_sync?.last_check || '',
+          response_time: 0,
+          error_count: 0
+        },
+        mimir: {
+          status: services.mimir?.status || 'unknown',
+          message: services.mimir?.message || 'Status unknown',
+          last_seen: services.mimir?.last_check || '',
+          response_time: 0,
+          error_count: 0
+        },
+        last_check: overallHealth.last_check || new Date().toISOString()
+      };
+      
+      // Convert health_checks from the new structure
+      health_checks = {
+        rls_service: services.rls?.status === 'healthy',
+        overrides_sync: services.overrides_sync?.status === 'healthy',
+        envoy_proxy: services.envoy?.status === 'healthy',
+        nginx_config: services.nginx?.status === 'healthy',
+        mimir_connectivity: services.mimir?.status === 'healthy',
+        tenant_limits_synced: services.overrides_sync?.status === 'healthy',
+        enforcement_active: overallHealth.health_percentage > 80
+      };
+      
       endpoint_status = systemStatusData.endpoints || {};
       service_status = systemStatusData.services || {};
       validation_results = systemStatusData.validations || {};
