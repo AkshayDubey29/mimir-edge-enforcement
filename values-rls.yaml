@@ -83,6 +83,9 @@ serviceAccount:
 podAnnotations:
   debug: "true"
   logging: "debug"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
 
 # Node selector
 nodeSelector: {}
