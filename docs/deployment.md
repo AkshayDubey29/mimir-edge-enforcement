@@ -323,7 +323,11 @@ kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement 
 
 ### Step 5: Deploy Envoy Proxy
 
-> **🔧 IMPORTANT**: The Envoy chart now includes a **permanent fix for 426 Upgrade Required errors** when NGINX routes HTTP/1.1 traffic to Envoy. This fix ensures proper protocol compatibility for canary deployments.
+> **🔧 IMPORTANT**: The Envoy chart now includes:
+> - **Permanent fix for 426 Upgrade Required errors** when NGINX routes HTTP/1.1 traffic to Envoy
+> - **Buffer overflow fixes** that resolve "buffer size limit (64KB) exceeded" errors
+> - **Timeout configurations** preventing hanging requests and improving reliability
+> - **Resource limit corrections** matching container memory to heap size
 
 #### **HTTP Protocol Configuration (v0.2.0+)**
 The Envoy chart automatically configures:
@@ -342,11 +346,11 @@ image:
   tag: "latest"  # 🔴 CHANGE: Use specific SHA in production
   pullPolicy: IfNotPresent
 
-# Resource configuration
+# Resource configuration (adjusted for heap size fix)
 resources:
   limits:
     cpu: 1000m
-    memory: 1Gi
+    memory: 512Mi          # Matches heap size (384Mi = 75% of 512Mi)
   requests:
     cpu: 200m
     memory: 256Mi
@@ -388,20 +392,27 @@ proxy:
     useRemoteAddress: true      # Use client IP from NGINX proxy
     xffNumTrustedHops: 1        # Trust X-Forwarded-For from NGINX
 
-# Resource limits and overload protection
+# Resource limits and overload protection (fixed for buffer overflow)
 resourceLimits:
-  maxHeapSizeBytes: 838860800          # 800 MiB (80% of 1Gi container)
+  maxHeapSizeBytes: 402653184          # 384 MiB (75% of 512Mi container) - FIXED
   shrinkHeapThreshold: 0.8             # Shrink heap at 80%
   heapStopAcceptingThreshold: 0.95     # Stop accepting at 95% heap
 
-# External authorization
+# External authorization (with buffer overflow fixes)
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB
   failureModeAllow: false   # Fail closed for security
+  # 🔧 BUFFER OVERFLOW FIXES:
+  bufferSizeBytes: 131072   # 128KB (double default 64KB) - prevents overflow
+  timeout: "5s"             # Overall ext_authz timeout - prevents hanging
+  grpcTimeout: "4s"         # gRPC call timeout
 
-# Rate limiting
+# Rate limiting (with timeout fixes)
 rateLimit:
   failureModeDeny: true     # Deny on rate limit service failure
+  # 🔧 TIMEOUT FIXES:
+  timeout: "3s"             # Overall rate limit timeout
+  grpcTimeout: "2s"         # gRPC call timeout
 
 # Tenant configuration
 tenantHeader: "X-Scope-OrgID"
@@ -641,7 +652,7 @@ envoy:
   resources:
     limits:
       cpu: 1000m
-      memory: 1Gi
+      memory: 512Mi          # Fixed to match heap size configuration
     requests:
       cpu: 200m
       memory: 256Mi
@@ -674,18 +685,22 @@ envoy:
     extAuthz:
       maxRequestBytes: 4194304  # 4 MiB
       failureModeAllow: false   # Fail closed for security
+      # 🔧 BUFFER OVERFLOW FIXES:
+      bufferSizeBytes: 131072   # 128KB buffer prevents overflow
+      timeout: "5s"             # Overall timeout prevents hanging
+      grpcTimeout: "4s"         # gRPC timeout
     
     rateLimit:
       failureModeDeny: true     # Deny on rate limit service failure
+      # 🔧 TIMEOUT FIXES:
+      timeout: "3s"             # Rate limit timeout
+      grpcTimeout: "2s"         # gRPC timeout
     
     tenantHeader: "X-Scope-OrgID"
   
-  # Resource limits and overload protection
+  # Resource limits and overload protection (fixed for buffer overflow)
   resourceLimits:
-    maxDownstreamConnections: 25000      # High for production traffic
-    maxHeapSizeBytes: 838860800          # 800 MiB (80% of 1Gi container)
-    disableKeepaliveThreshold: 0.8       # Disable keepalive at 80%
-    stopAcceptingRequestsThreshold: 0.95 # Stop accepting at 95%
+    maxHeapSizeBytes: 402653184          # 384 MiB (75% of 512Mi container) - FIXED
     shrinkHeapThreshold: 0.8             # Shrink heap at 80%
     heapStopAcceptingThreshold: 0.95     # Stop accepting at 95% heap
 
@@ -960,6 +975,7 @@ curl https://mimir-admin.your-domain.com/api/tenants
 ### Key Metrics to Monitor
 - **RLS**: `tenant_requests_total`, `rate_limit_decisions_total`, `denied_requests_total`
 - **Envoy**: `ext_authz.allowed`, `ext_authz.denied`, `ratelimit.ok`, `ratelimit.over_limit`
+- **Envoy Buffer**: `ext_authz.buffer_size_bytes`, `ext_authz.timeout`, `ext_authz.retry` (should be minimal)
 - **Envoy Overload**: `overload.envoy.overload_actions.*.scale_timer`, `server.memory_heap_size`, `http.inbound.downstream_cx_active`
 - **Overrides-Sync**: `config_map_syncs_total`, `tenant_count`, `sync_errors_total`
 
@@ -1103,7 +1119,23 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    # Should NOT return 426 Upgrade Required
    ```
 
-3. **Rate limits not applied**:
+4. **Buffer overflow errors (ext_authz retries exceeded)**:
+   ```bash
+   # Check for buffer overflow warnings in Envoy logs
+   kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement | grep "buffer.*size.*limit"
+   
+   # Verify buffer size configuration (should be 128KB)
+   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 5 "buffer_size_bytes"
+   
+   # Check ext_authz timeout settings
+   kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | grep -A 3 "timeout"
+   
+   # Verify RLS service health
+   kubectl exec -it deployment/mimir-envoy -n mimir-edge-enforcement -- \
+     curl -s http://mimir-rls:8080/health
+   ```
+
+5. **Rate limits not applied**:
    ```bash
    # Check overrides-sync is running and syncing
    kubectl logs -l app.kubernetes.io/name=overrides-sync -n mimir-edge-enforcement
@@ -1113,7 +1145,7 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
      wget -qO- http://localhost:8082/api/tenants
    ```
 
-4. **NGINX canary not routing correctly**:
+6. **NGINX canary not routing correctly**:
    ```bash
    # Check canary status
    ./scripts/manage-canary.sh status
@@ -1125,7 +1157,7 @@ kubectl patch hpa mimir-rls-hpa -n mimir-edge-enforcement -p '{"spec":{"maxRepli
    kubectl logs -l app=mimir-nginx -n mimir --tail=100 | grep "X-Canary-Route"
    ```
 
-5. **Envoy overload actions triggered**:
+7. **Envoy overload actions triggered**:
    ```bash
    # Check overload status
    kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement
@@ -1175,6 +1207,7 @@ kubectl rollout restart deployment/mimir-nginx -n mimir
 - **[Overrides-Sync Troubleshooting](troubleshooting-overrides-sync.md)**: Fix ConfigMap parsing issues
 - **[Envoy Resource Limits](envoy-resource-limits.md)**: Configure overload protection and monitoring
 - **[Envoy HTTP Protocol Fix](envoy-http-protocol-fix.md)**: Permanent solution for 426 Upgrade Required errors
+- **[Envoy Buffer Overflow Fixes](envoy-buffer-overflow-fixes.md)**: Critical fixes for buffer size limit errors
 - **[Production Values Examples](../examples/values/)**: Template configurations
 - **[Monitoring & Dashboards](../examples/monitoring/)**: Grafana dashboards and alerts
 
