@@ -57,6 +57,9 @@ data:
               http_protocol_options:
                 accept_http_10: {{ .Values.proxy.httpProtocol.acceptHttp10 }}
                 default_host_for_http_10: {{ include "mimir-envoy.fullname" . | quote }}
+              # 🔧 FIX: Add timeouts to prevent hanging requests and buffer issues
+              request_timeout: {{ .Values.extAuthz.timeout | default "10s" }}
+              stream_idle_timeout: 300s
               # Enable proper handling of forwarded headers from NGINX
               use_remote_address: {{ .Values.proxy.httpProtocol.useRemoteAddress }}
               xff_num_trusted_hops: {{ .Values.proxy.httpProtocol.xffNumTrustedHops | int }}
@@ -80,28 +83,22 @@ data:
                     max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
                     allow_partial_message: true
                   failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-                  # 🔧 FIX: Add buffer size configuration to prevent overflow
-                  buffer_size_bytes: {{ .Values.extAuthz.bufferSizeBytes | default 131072 | int }}
-                  # 🔧 FIX: Add timeout configuration to prevent hanging requests
-                  timeout: {{ .Values.extAuthz.timeout | default "5s" }}
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
-                      # 🔧 FIX: Add gRPC-specific timeout
-                      timeout: {{ .Values.extAuthz.grpcTimeout | default "4s" }}
+                    # 🔧 FIX: Add timeout to prevent hanging requests
+                    timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               - name: envoy.filters.http.ratelimit
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
                   domain: {{ .Values.rateLimit.domain }}
-                  # 🔧 FIX: Add timeout for rate limit service
-                  timeout: {{ .Values.rateLimit.timeout | default "3s" }}
                   rate_limit_service:
                     transport_api_version: V3
                     grpc_service:
                       envoy_grpc:
                         cluster_name: rls_ratelimit
-                        # 🔧 FIX: Add gRPC timeout for rate limit
-                        timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
+                      # 🔧 FIX: Add gRPC timeout for rate limit
+                      timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
                   failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
                 typed_config:

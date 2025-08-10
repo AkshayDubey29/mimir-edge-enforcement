@@ -17,29 +17,32 @@ The buffer overflow error was caused by several configuration issues:
 
 **Problem**: No buffer size or timeout configuration causing indefinite retries.
 
-**Fix**: Added buffer and timeout settings in `charts/envoy/templates/configmap.yaml`:
+**Fix**: Added timeout and buffer management settings in `charts/envoy/templates/configmap.yaml`:
 
 ```yaml
+# HTTP Connection Manager level timeouts
+http_connection_manager:
+  request_timeout: "10s"        # Overall request timeout
+  stream_idle_timeout: 300s     # Stream idle timeout
+  
+# ext_authz configuration  
 - name: envoy.filters.http.ext_authz
   typed_config:
     "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-    # 🔧 FIX: Add buffer size configuration to prevent overflow
-    buffer_size_bytes: 131072  # 128KB (double the default 64KB)
-    # 🔧 FIX: Add timeout configuration to prevent hanging requests
-    timeout: "5s"
+    with_request_body:
+      max_request_bytes: 4194304  # 4MB buffer for large requests
     grpc_service:
       envoy_grpc:
         cluster_name: rls_ext_authz
-        # 🔧 FIX: Add gRPC-specific timeout
-        timeout: "4s"
+      # 🔧 FIX: Add gRPC timeout to prevent hanging
+      timeout: "5s"
 ```
 
 **Configuration in `values.yaml`**:
 ```yaml
 extAuthz:
-  bufferSizeBytes: 131072   # 128KB (double the default 64KB)
-  timeout: "5s"             # Overall ext_authz timeout
-  grpcTimeout: "4s"         # gRPC call timeout
+  maxRequestBytes: 4194304  # 4 MiB (provides buffer management)
+  timeout: "5s"             # gRPC service timeout
 ```
 
 ### 2. **Rate Limit Timeout Configuration**
@@ -52,14 +55,12 @@ extAuthz:
 - name: envoy.filters.http.ratelimit
   typed_config:
     "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
-    # 🔧 FIX: Add timeout for rate limit service
-    timeout: "3s"
     rate_limit_service:
       grpc_service:
         envoy_grpc:
           cluster_name: rls_ratelimit
-          # 🔧 FIX: Add gRPC timeout for rate limit
-          timeout: "2s"
+        # 🔧 FIX: Add gRPC timeout for rate limit
+        timeout: "2s"
 ```
 
 ### 3. **Resource Limits Fix**
@@ -115,7 +116,7 @@ After applying these fixes:
 
 ### ✅ **Buffer Overflow Resolution**
 - **Before**: "buffer size limit (64KB) exceeded"
-- **After**: 128KB buffer prevents overflow
+- **After**: 4MB max_request_bytes + timeouts prevent overflow
 
 ### ✅ **Timeout Handling**
 - **Before**: Requests hung indefinitely
@@ -174,16 +175,13 @@ kubectl exec -n mimir-edge-enforcement <envoy-pod> -- \
 ```yaml
 # External authorization
 extAuthz:
-  maxRequestBytes: 4194304  # 4 MiB
-  bufferSizeBytes: 131072   # 128KB
-  timeout: "5s"
-  grpcTimeout: "4s"
+  maxRequestBytes: 4194304  # 4 MiB (provides buffer management)
+  timeout: "5s"             # gRPC timeout
   failureModeAllow: false
 
 # Rate limiting
 rateLimit:
-  timeout: "3s"
-  grpcTimeout: "2s"
+  grpcTimeout: "2s"         # gRPC timeout
   failureModeDeny: true
   domain: "mimir_remote_write"
 
@@ -208,17 +206,17 @@ resources:
 resourceLimits:
   maxHeapSizeBytes: 805306368  # 768 MiB (75% of 1Gi)
 
-# Increase buffer size if needed
+# Increase request buffer if needed
 extAuthz:
-  bufferSizeBytes: 262144  # 256KB for high traffic
+  maxRequestBytes: 8388608  # 8MB for very high traffic
 ```
 
 ## 🔍 Troubleshooting
 
 ### **If Buffer Overflow Still Occurs**
-1. Increase buffer size: `bufferSizeBytes: 262144` (256KB)
-2. Reduce timeout: `timeout: "3s"`
-3. Check RLS service health
+1. Increase request buffer: `maxRequestBytes: 8388608` (8MB)
+2. Add request timeout: `request_timeout: "15s"`
+3. Check RLS service health and response times
 4. Scale RLS pods if overwhelmed
 
 ### **If Timeouts Occur**

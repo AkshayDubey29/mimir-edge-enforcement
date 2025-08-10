@@ -36,19 +36,16 @@ rls:
 
 # External authorization configuration
 extAuthz:
-  maxRequestBytes: 4194304  # 4 MiB
+  maxRequestBytes: 4194304  # 4 MiB (this provides buffer management for requests)
   failureModeAllow: false
-  # 🔧 FIX: Buffer and timeout settings to prevent overflow
-  bufferSizeBytes: 131072   # 128KB (double the default 64KB)
-  timeout: "5s"             # Overall ext_authz timeout
-  grpcTimeout: "4s"         # gRPC call timeout (should be less than overall timeout)
+  # 🔧 FIX: Timeout settings to prevent hanging requests
+  timeout: "5s"             # gRPC service timeout
 
 # Rate limiting configuration
 rateLimit:
   failureModeDeny: true
   domain: "mimir_remote_write"
-  # 🔧 FIX: Add timeout settings for rate limit service
-  timeout: "3s"             # Overall rate limit timeout
+  # 🔧 FIX: gRPC timeout for rate limit service
   grpcTimeout: "2s"         # gRPC call timeout
 
 # Proxy configuration
