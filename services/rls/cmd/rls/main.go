@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -322,15 +323,48 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 		id := mux.Vars(r)["id"]
 		log.Debug().Str("tenant_id", id).Msg("handling /api/tenants/{id} request")
 
+		// Debug: Check what tenants are available
+		allTenants := rls.ListTenantsWithMetrics()
+		log.Info().
+			Str("requested_tenant_id", id).
+			Int("total_tenants", len(allTenants)).
+			Strs("available_tenant_ids", func() []string {
+				ids := make([]string, len(allTenants))
+				for i, t := range allTenants {
+					ids[i] = t.ID
+				}
+				return ids
+			}()).
+			Msg("debug: checking tenant availability")
+
+		// Try to get tenant snapshot
 		tenant, ok := rls.GetTenantSnapshot(id)
 		if !ok {
-			log.Info().Str("tenant_id", id).Msg("tenant not found")
-			writeJSON(w, http.StatusNotFound, map[string]any{
-				"error":     "tenant not found",
-				"tenant_id": id,
-				"message":   "The specified tenant does not exist or has no limits configured",
-			})
-			return
+			// Fallback: Try to find the tenant in the list (case-insensitive search)
+			var foundTenant *limits.TenantInfo
+			for _, t := range allTenants {
+				if strings.EqualFold(t.ID, id) {
+					foundTenant = &t
+					break
+				}
+			}
+			
+			if foundTenant != nil {
+				log.Info().
+					Str("requested_tenant_id", id).
+					Str("found_tenant_id", foundTenant.ID).
+					Msg("tenant found in list but not in snapshot (case sensitivity issue)")
+				tenant = *foundTenant
+				ok = true
+			} else {
+				log.Info().Str("tenant_id", id).Msg("tenant not found in GetTenantSnapshot or list")
+				writeJSON(w, http.StatusNotFound, map[string]any{
+					"error":     "tenant not found",
+					"tenant_id": id,
+					"message":   "The specified tenant does not exist or has no limits configured",
+				})
+				return
+			}
 		}
 
 		denials := rls.RecentDenials(id, 24*time.Hour)
