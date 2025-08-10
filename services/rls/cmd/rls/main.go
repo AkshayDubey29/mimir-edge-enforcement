@@ -181,6 +181,10 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
+	
+	// Pipeline and Metrics endpoints for Admin UI
+	router.HandleFunc("/api/pipeline/status", handlePipelineStatus(rls)).Methods("GET")
+	router.HandleFunc("/api/metrics/system", handleSystemMetrics(rls)).Methods("GET")
 
 	// Debug endpoint to list all routes
 	router.HandleFunc("/api/debug/routes", func(w http.ResponseWriter, r *http.Request) {
@@ -419,5 +423,41 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		log.Error().Err(err).Msg("failed to encode JSON response")
+	}
+}
+
+// handlePipelineStatus returns pipeline status for Admin UI
+func handlePipelineStatus(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handlePipelineStatus")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		log.Debug().Msg("handling /api/pipeline/status request")
+		
+		// Get real pipeline status from RLS service
+		pipelineStatus := rls.GetPipelineStatus()
+		writeJSON(w, http.StatusOK, pipelineStatus)
+	}
+}
+
+// handleSystemMetrics returns comprehensive system metrics for Admin UI
+func handleSystemMetrics(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleSystemMetrics")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		log.Debug().Msg("handling /api/metrics/system request")
+		
+		// Get real system metrics from RLS service
+		systemMetrics := rls.GetSystemMetrics()
+		writeJSON(w, http.StatusOK, systemMetrics)
 	}
 }
