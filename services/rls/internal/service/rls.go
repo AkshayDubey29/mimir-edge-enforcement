@@ -87,10 +87,10 @@ func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
 	}
 
 	rls.metrics = rls.createMetrics()
-	
+
 	// Start periodic tenant status logging
 	go rls.startPeriodicStatusLog()
-	
+
 	return rls
 }
 
@@ -98,7 +98,7 @@ func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
 func (rls *RLS) startPeriodicStatusLog() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -109,15 +109,15 @@ func (rls *RLS) startPeriodicStatusLog() {
 				tenantIDs = append(tenantIDs, id)
 			}
 			rls.tenantsMu.RUnlock()
-			
+
 			rls.countersMu.RLock()
 			activeCounters := len(rls.counters)
 			rls.countersMu.RUnlock()
-			
+
 			logger := rls.logger.Info().
 				Int("tenant_count", tenantCount).
 				Int("active_counters", activeCounters)
-			
+
 			if tenantCount > 0 {
 				if tenantCount <= 5 {
 					// Log all tenant IDs if there are few
@@ -572,7 +572,7 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 
 	tenant, exists := rls.tenants[tenantID]
 	isNewTenant := !exists
-	
+
 	if !exists {
 		tenant = &TenantState{
 			Info: limits.TenantInfo{

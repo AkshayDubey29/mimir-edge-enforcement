@@ -68,7 +68,7 @@ echo ""
 echo -e "${BLUE}[$(date +%H:%M:%S)] 🎯 Applying 10% canary configuration${NC}"
 echo "------------------------"
 kubectl apply -f examples/nginx-10-percent-canary.yaml
-echo -e "${GREEN}✅ 10% canary configuration applied${NC}"
+echo -e "${GREEN}✅ Clean 10% canary configuration applied${NC}"
 echo ""
 
 # Restart NGINX deployment

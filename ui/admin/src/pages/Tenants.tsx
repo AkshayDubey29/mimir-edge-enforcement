@@ -1,5 +1,9 @@
 
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { TrendingUp, TrendingDown, Activity, Users, RefreshCw, ExternalLink } from 'lucide-react';
 
 // Utility function to format bytes in human-readable format
 function formatBytes(bytes: number): string {
@@ -111,7 +115,15 @@ export function Tenants() {
                   {/* Tenant Info */}
                   <td className="py-4 px-4">
                     <div>
-                      <div className="font-mono text-sm font-medium text-gray-900">{tenant.id}</div>
+                      <div className="flex items-center space-x-2">
+                        <div className="font-mono text-sm font-medium text-gray-900">{tenant.id}</div>
+                        <Link 
+                          to={`/tenants/${tenant.id}`}
+                          className="text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      </div>
                       <div className="text-sm text-gray-500">{tenant.name || 'No display name'}</div>
                     </div>
                   </td>

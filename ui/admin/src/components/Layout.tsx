@@ -6,7 +6,10 @@ import {
   AlertTriangle, 
   Activity,
   Settings,
-  Download
+  Download,
+  Server,
+  Database,
+  Gauge
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -16,9 +19,11 @@ interface LayoutProps {
 
 const navigation = [
   { name: 'Overview', href: '/', icon: BarChart3 },
+  { name: 'Pipeline Status', href: '/pipeline', icon: Server },
   { name: 'Tenants', href: '/tenants', icon: Users },
   { name: 'Recent Denials', href: '/denials', icon: AlertTriangle },
   { name: 'System Health', href: '/health', icon: Activity },
+  { name: 'Metrics', href: '/metrics', icon: Gauge },
 ];
 
 export function Layout({ children }: LayoutProps) {
