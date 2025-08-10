@@ -1,0 +1,37 @@
+[Unit]
+Description=Edge Enforcement Endpoint Monitoring Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/mimir-edge-enforcement
+ExecStart=/opt/mimir-edge-enforcement/scripts/automated-endpoint-monitoring.sh daemon
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=endpoint-monitoring
+
+# Environment variables
+Environment=RLS_BASE_URL=http://localhost:8082
+Environment=ENVOY_BASE_URL=http://localhost:8080
+Environment=MIMIR_BASE_URL=http://localhost:9009
+Environment=UI_BASE_URL=http://localhost:3000
+Environment=OVERRIDES_SYNC_BASE_URL=http://localhost:8084
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/tmp /var/log
+
+[Install]
+WantedBy=multi-user.target
