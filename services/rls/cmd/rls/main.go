@@ -188,6 +188,7 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/metrics/system", handleSystemMetrics(rls)).Methods("GET")
 	router.HandleFunc("/api/flow/status", handleFlowStatus(rls)).Methods("GET")
 	router.HandleFunc("/api/system/status", handleComprehensiveSystemStatus(rls)).Methods("GET")
+	router.HandleFunc("/api/traffic/flow", handleTrafficFlow(rls)).Methods("GET")
 
 	// Debug endpoint to list all routes
 	router.HandleFunc("/api/debug/routes", func(w http.ResponseWriter, r *http.Request) {
@@ -549,5 +550,22 @@ func handleComprehensiveSystemStatus(rls *service.RLS) http.HandlerFunc {
 		// Get comprehensive system status
 		systemStatus := rls.GetComprehensiveSystemStatus()
 		writeJSON(w, http.StatusOK, systemStatus)
+	}
+}
+
+func handleTrafficFlow(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleTrafficFlow")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		log.Debug().Msg("handling /api/traffic/flow request")
+
+		// Get traffic flow data
+		trafficFlow := rls.GetTrafficFlowData()
+		writeJSON(w, http.StatusOK, trafficFlow)
 	}
 }

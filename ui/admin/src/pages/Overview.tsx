@@ -711,23 +711,23 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       ];
     }
     
-    // Calculate flow metrics from actual data
-    const flow_metrics: FlowMetrics = {
-      nginx_requests: overviewData.stats?.total_requests || 0,
-      nginx_route_direct: Math.round((overviewData.stats?.total_requests || 0) * 0.9), // Estimate 90% direct
-      nginx_route_edge: Math.round((overviewData.stats?.total_requests || 0) * 0.1), // Estimate 10% edge
-      envoy_requests: Math.round((overviewData.stats?.total_requests || 0) * 0.1), // Only edge traffic goes through Envoy
-      envoy_authorized: overviewData.stats?.allowed_requests || 0,
-      envoy_denied: overviewData.stats?.denied_requests || 0,
-      mimir_requests: overviewData.stats?.allowed_requests || 0, // Only allowed requests reach Mimir
-      mimir_success: overviewData.stats?.allowed_requests || 0,
-      mimir_errors: 0, // We don't track Mimir errors yet
-      response_times: {
-        nginx_to_envoy: 45, // Estimated from real metrics
-        envoy_to_mimir: 120, // Estimated from real metrics
-        total_flow: 165 // Total estimated response time
-      }
-    };
+                    // Calculate flow metrics from actual data
+                const flow_metrics: FlowMetrics = {
+                  nginx_requests: overviewData.stats?.total_requests || 0,
+                  nginx_route_direct: Math.round((overviewData.stats?.total_requests || 0) * 0.9), // Estimate 90% direct
+                  nginx_route_edge: Math.round((overviewData.stats?.total_requests || 0) * 0.1), // Estimate 10% edge
+                  envoy_requests: overviewData.stats?.total_requests || 0, // All requests go through Envoy in edge enforcement
+                  envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                  envoy_denied: overviewData.stats?.denied_requests || 0,
+                  mimir_requests: overviewData.stats?.allowed_requests || 0, // Only allowed requests reach Mimir
+                  mimir_success: overviewData.stats?.allowed_requests || 0,
+                  mimir_errors: 0, // We don't track Mimir errors yet
+                  response_times: {
+                    nginx_to_envoy: 45, // Estimated from real metrics
+                    envoy_to_mimir: 120, // Estimated from real metrics
+                    total_flow: 165 // Total estimated response time
+                  }
+                };
 
     // Generate flow timeline data based on current stats
     const flow_timeline: FlowDataPoint[] = [
