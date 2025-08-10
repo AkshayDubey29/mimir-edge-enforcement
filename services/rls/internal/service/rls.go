@@ -359,13 +359,13 @@ type TrafficFlowState struct {
 	LastRequestTime   time.Time
 	ResponseTimes     map[string]float64 // Component response times
 	LastUpdate        time.Time
-	
+
 	// Component-specific request tracking
-	EnvoyToRLSRequests   int64 // Requests from Envoy to RLS
-	RLSToMimirRequests   int64 // Requests from RLS to Mimir (allowed requests)
-	RLSDecisions         int64 // Total RLS decisions made
-	RLSAllowed           int64 // RLS allowed decisions
-	RLSDenied            int64 // RLS denied decisions
+	EnvoyToRLSRequests int64 // Requests from Envoy to RLS
+	RLSToMimirRequests int64 // Requests from RLS to Mimir (allowed requests)
+	RLSDecisions       int64 // Total RLS decisions made
+	RLSAllowed         int64 // RLS allowed decisions
+	RLSDenied          int64 // RLS denied decisions
 }
 
 // Admin snapshots
@@ -1601,7 +1601,7 @@ func (rls *RLS) GetTrafficFlowData() map[string]any {
 	}
 	rls.countersMu.RUnlock()
 
-		// Get real traffic flow data from traffic flow state
+	// Get real traffic flow data from traffic flow state
 	rls.trafficFlowMu.RLock()
 	envoyToRLSRequests := rls.trafficFlow.EnvoyToRLSRequests
 	rlsToMimirRequests := rls.trafficFlow.RLSToMimirRequests
@@ -1609,17 +1609,17 @@ func (rls *RLS) GetTrafficFlowData() map[string]any {
 	rlsAllowed := rls.trafficFlow.RLSAllowed
 	rlsDenied := rls.trafficFlow.RLSDenied
 	rls.trafficFlowMu.RUnlock()
-	
+
 	// Calculate traffic flow metrics
 	totalRequests := stats.TotalRequests
 	allowedRequests := stats.AllowedRequests
 	deniedRequests := stats.DeniedRequests
-	
+
 	// Envoy → RLS flow (this is what we actually track)
 	envoyRequests := envoyToRLSRequests
 	envoyAuthorized := rlsAllowed
 	envoyDenied := rlsDenied
-	
+
 	// RLS → Mimir flow (only allowed requests)
 	mimirRequests := rlsToMimirRequests
 	mimirSuccess := rlsToMimirRequests
@@ -1682,10 +1682,10 @@ func (rls *RLS) GetTrafficFlowData() map[string]any {
 			"active_tenants":   stats.ActiveTenants,
 		},
 		"traffic_patterns": map[string]any{
-			"edge_enforcement_active":     true,
-			"envoy_to_rls_tracking":       true,
-			"rls_to_mimir_tracking":       true,
-			"real_time_flow_monitoring":   true,
+			"edge_enforcement_active":   true,
+			"envoy_to_rls_tracking":     true,
+			"rls_to_mimir_tracking":     true,
+			"real_time_flow_monitoring": true,
 		},
 	}
 }
@@ -1784,15 +1784,15 @@ func (rls *RLS) getEnvoyResponseTimes() map[string]any {
 func (rls *RLS) updateTrafficFlowState(responseTime float64, allowed bool) {
 	rls.trafficFlowMu.Lock()
 	defer rls.trafficFlowMu.Unlock()
-	
+
 	now := time.Now()
-	
+
 	// Update total requests
 	rls.trafficFlow.TotalRequests++
-	
+
 	// Track Envoy → RLS flow (every request from Envoy comes to RLS)
 	rls.trafficFlow.EnvoyToRLSRequests++
-	
+
 	// Track RLS decisions
 	rls.trafficFlow.RLSDecisions++
 	if allowed {
@@ -1802,7 +1802,7 @@ func (rls *RLS) updateTrafficFlowState(responseTime float64, allowed bool) {
 	} else {
 		rls.trafficFlow.RLSDenied++
 	}
-	
+
 	// Calculate requests per second (rolling average over last 60 seconds)
 	if !rls.trafficFlow.LastRequestTime.IsZero() {
 		timeDiff := now.Sub(rls.trafficFlow.LastRequestTime).Seconds()
@@ -1812,24 +1812,24 @@ func (rls *RLS) updateTrafficFlowState(responseTime float64, allowed bool) {
 			rls.trafficFlow.RequestsPerSecond = alpha*(1/timeDiff) + (1-alpha)*rls.trafficFlow.RequestsPerSecond
 		}
 	}
-	
+
 	rls.trafficFlow.LastRequestTime = now
 	rls.trafficFlow.LastUpdate = now
-	
+
 	// Update response times (rolling average)
 	if rls.trafficFlow.ResponseTimes == nil {
 		rls.trafficFlow.ResponseTimes = make(map[string]float64)
 	}
-	
+
 	// Update total flow response time
 	alpha := 0.1 // Smoothing factor
 	currentTotal := rls.trafficFlow.ResponseTimes["total_flow"]
 	rls.trafficFlow.ResponseTimes["total_flow"] = alpha*responseTime + (1-alpha)*currentTotal
-	
+
 	// Calculate component times based on actual flow
 	// Envoy → RLS: This is the time we're measuring (ext_authz call)
 	rls.trafficFlow.ResponseTimes["envoy_to_rls"] = rls.trafficFlow.ResponseTimes["total_flow"] * 0.3
-	
+
 	// RLS → Mimir: Estimated based on typical ratios (only for allowed requests)
 	if allowed {
 		rls.trafficFlow.ResponseTimes["rls_to_mimir"] = rls.trafficFlow.ResponseTimes["total_flow"] * 0.7
