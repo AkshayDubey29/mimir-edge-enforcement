@@ -93,6 +93,9 @@ interface OverviewData {
   flow_timeline: FlowDataPoint[];
   flow_status: FlowStatus;
   health_checks: HealthChecks;
+  service_status: Record<string, any>;
+  endpoint_status: Record<string, any>;
+  validation_results: Record<string, any>;
 }
 
 interface FlowStatus {
@@ -207,13 +210,16 @@ export function Overview() {
     );
   }
 
-  const { stats, top_tenants, flow_metrics, flow_timeline, flow_status, health_checks } = overviewData || {
+  const { stats, top_tenants, flow_metrics, flow_timeline, flow_status, health_checks, service_status, endpoint_status, validation_results } = overviewData || {
     stats: { total_requests: 0, allowed_requests: 0, denied_requests: 0, allow_percentage: 0, active_tenants: 0 },
     top_tenants: [],
     flow_metrics: { nginx_requests: 0, nginx_route_direct: 0, nginx_route_edge: 0, envoy_requests: 0, envoy_authorized: 0, envoy_denied: 0, mimir_requests: 0, mimir_success: 0, mimir_errors: 0, response_times: { nginx_to_envoy: 0, envoy_to_mimir: 0, total_flow: 0 } },
     flow_timeline: [],
     flow_status: { overall: 'unknown', nginx: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, envoy: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, rls: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, overrides_sync: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, mimir: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, last_check: '' },
-    health_checks: { rls_service: false, overrides_sync: false, envoy_proxy: false, nginx_config: false, mimir_connectivity: false, tenant_limits_synced: false, enforcement_active: false }
+    health_checks: { rls_service: false, overrides_sync: false, envoy_proxy: false, nginx_config: false, mimir_connectivity: false, tenant_limits_synced: false, enforcement_active: false },
+    service_status: {},
+    endpoint_status: {},
+    validation_results: {}
   };
 
   return (
@@ -557,6 +563,87 @@ export function Overview() {
         </CardContent>
       </Card>
 
+      {/* Comprehensive Endpoint Monitoring */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Comprehensive Endpoint Monitoring</CardTitle>
+          <CardDescription>
+            Real-time status of all endpoints across all services
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-6">
+            {/* Service Status Overview */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              {Object.entries(service_status).map(([service, data]: [string, any]) => (
+                <div key={service} className="p-4 border rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-medium capitalize">{service}</h3>
+                    <StatusBadge status={data.status} />
+                  </div>
+                  <p className="text-sm text-gray-600 mb-2">{data.message}</p>
+                  <div className="text-xs text-gray-500">
+                    <div>Version: {data.version}</div>
+                    <div>Uptime: {data.uptime}</div>
+                    <div>Last Check: {new Date(data.last_check).toLocaleTimeString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Endpoint Details */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Endpoint Details</h3>
+              {Object.entries(endpoint_status).map(([service, endpoints]: [string, any]) => (
+                <div key={service} className="border rounded-lg p-4">
+                  <h4 className="font-medium capitalize mb-3">{service} Endpoints</h4>
+                  <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                    {Object.entries(endpoints).map(([endpoint, data]: [string, any]) => (
+                      <div key={endpoint} className="p-3 border rounded bg-gray-50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">{endpoint}</span>
+                          <StatusBadge status={data.status} />
+                        </div>
+                        <p className="text-xs text-gray-600 mb-1">{data.message}</p>
+                        <div className="text-xs text-gray-500">
+                          <div>Response: {data.response_time}ms</div>
+                          <div>Status: {data.actual_status}/{data.expected_status}</div>
+                          <div>Size: {data.response_size} bytes</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Validation Results */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Validation Results</h3>
+              {Object.entries(validation_results).map(([category, validations]: [string, any]) => (
+                <div key={category} className="border rounded-lg p-4">
+                  <h4 className="font-medium capitalize mb-3">{category.replace('_', ' ')}</h4>
+                  <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+                    {Object.entries(validations).map(([validation, data]: [string, any]) => (
+                      <div key={validation} className="p-3 border rounded bg-gray-50">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium">{validation.replace('_', ' ')}</span>
+                          <StatusBadge status={data.status} />
+                        </div>
+                        <p className="text-xs text-gray-600 mb-1">{data.message}</p>
+                        <div className="text-xs text-gray-500">
+                          Last Check: {new Date(data.last_check).toLocaleTimeString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Flow Timeline */}
       <Card>
         <CardHeader>
@@ -655,15 +742,21 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       }
     ];
 
-    // Get comprehensive flow status from backend
-    const flowStatusResponse = await fetch('/api/flow/status');
+    // Get comprehensive system status from backend
+    const systemStatusResponse = await fetch('/api/system/status');
     let flow_status: FlowStatus;
     let health_checks: HealthChecks;
+    let endpoint_status: any = {};
+    let service_status: any = {};
+    let validation_results: any = {};
     
-    if (flowStatusResponse.ok) {
-      const flowStatusData = await flowStatusResponse.json();
-      flow_status = flowStatusData.flow_status;
-      health_checks = flowStatusData.health_checks;
+    if (systemStatusResponse.ok) {
+      const systemStatusData = await systemStatusResponse.json();
+      flow_status = systemStatusData.flow_status;
+      health_checks = systemStatusData.health_checks;
+      endpoint_status = systemStatusData.endpoints || {};
+      service_status = systemStatusData.services || {};
+      validation_results = systemStatusData.validations || {};
     } else {
       // Fallback to basic status if API fails
       flow_status = {
@@ -692,7 +785,10 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       flow_metrics,
       flow_timeline,
       flow_status,
-      health_checks
+      health_checks,
+      service_status,
+      endpoint_status,
+      validation_results
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
@@ -740,7 +836,10 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
         mimir_connectivity: false,
         tenant_limits_synced: false,
         enforcement_active: false
-      }
+      },
+      service_status: {},
+      endpoint_status: {},
+      validation_results: {}
     };
   }
 }
