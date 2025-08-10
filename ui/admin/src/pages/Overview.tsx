@@ -711,23 +711,70 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       ];
     }
     
-                    // Calculate flow metrics from actual data
-                const flow_metrics: FlowMetrics = {
-                  nginx_requests: overviewData.stats?.total_requests || 0,
-                  nginx_route_direct: Math.round((overviewData.stats?.total_requests || 0) * 0.9), // Estimate 90% direct
-                  nginx_route_edge: Math.round((overviewData.stats?.total_requests || 0) * 0.1), // Estimate 10% edge
-                  envoy_requests: overviewData.stats?.total_requests || 0, // All requests go through Envoy in edge enforcement
-                  envoy_authorized: overviewData.stats?.allowed_requests || 0,
-                  envoy_denied: overviewData.stats?.denied_requests || 0,
-                  mimir_requests: overviewData.stats?.allowed_requests || 0, // Only allowed requests reach Mimir
-                  mimir_success: overviewData.stats?.allowed_requests || 0,
-                  mimir_errors: 0, // We don't track Mimir errors yet
-                  response_times: {
-                    nginx_to_envoy: 45, // Estimated from real metrics
-                    envoy_to_mimir: 120, // Estimated from real metrics
-                    total_flow: 165 // Total estimated response time
+                    // Get real traffic flow data from the new API endpoint
+                let flow_metrics: FlowMetrics;
+                try {
+                  const trafficFlowResponse = await fetch('/api/traffic/flow');
+                  if (trafficFlowResponse.ok) {
+                    const trafficFlowData = await trafficFlowResponse.json();
+                    const flowData = trafficFlowData.flow_metrics;
+                    const responseTimes = flowData.response_times;
+                    
+                    flow_metrics = {
+                      nginx_requests: flowData.nginx_requests || 0,
+                      nginx_route_direct: flowData.nginx_route_direct || 0,
+                      nginx_route_edge: flowData.nginx_route_edge || 0,
+                      envoy_requests: flowData.envoy_requests || 0,
+                      envoy_authorized: flowData.envoy_authorized || 0,
+                      envoy_denied: flowData.envoy_denied || 0,
+                      mimir_requests: flowData.mimir_requests || 0,
+                      mimir_success: flowData.mimir_success || 0,
+                      mimir_errors: flowData.mimir_errors || 0,
+                      response_times: {
+                        nginx_to_envoy: responseTimes?.nginx_to_envoy || 0,
+                        envoy_to_mimir: responseTimes?.envoy_to_mimir || 0,
+                        total_flow: responseTimes?.total_flow || 0
+                      }
+                    };
+                  } else {
+                    // Fallback to calculated metrics
+                    flow_metrics = {
+                      nginx_requests: overviewData.stats?.total_requests || 0,
+                      nginx_route_direct: 0, // No direct traffic in edge enforcement
+                      nginx_route_edge: overviewData.stats?.total_requests || 0, // All traffic goes through edge
+                      envoy_requests: overviewData.stats?.total_requests || 0,
+                      envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                      envoy_denied: overviewData.stats?.denied_requests || 0,
+                      mimir_requests: overviewData.stats?.allowed_requests || 0,
+                      mimir_success: overviewData.stats?.allowed_requests || 0,
+                      mimir_errors: 0,
+                      response_times: {
+                        nginx_to_envoy: 0,
+                        envoy_to_mimir: 0,
+                        total_flow: 0
+                      }
+                    };
                   }
-                };
+                } catch (error) {
+                  console.error('Error fetching traffic flow data:', error);
+                  // Fallback to calculated metrics
+                  flow_metrics = {
+                    nginx_requests: overviewData.stats?.total_requests || 0,
+                    nginx_route_direct: 0,
+                    nginx_route_edge: overviewData.stats?.total_requests || 0,
+                    envoy_requests: overviewData.stats?.total_requests || 0,
+                    envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                    envoy_denied: overviewData.stats?.denied_requests || 0,
+                    mimir_requests: overviewData.stats?.allowed_requests || 0,
+                    mimir_success: overviewData.stats?.allowed_requests || 0,
+                    mimir_errors: 0,
+                    response_times: {
+                      nginx_to_envoy: 0,
+                      envoy_to_mimir: 0,
+                      total_flow: 0
+                    }
+                  };
+                }
 
     // Generate flow timeline data based on current stats
     const flow_timeline: FlowDataPoint[] = [
