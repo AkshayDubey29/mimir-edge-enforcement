@@ -181,7 +181,7 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
-	
+
 	// Pipeline and Metrics endpoints for Admin UI
 	router.HandleFunc("/api/pipeline/status", handlePipelineStatus(rls)).Methods("GET")
 	router.HandleFunc("/api/metrics/system", handleSystemMetrics(rls)).Methods("GET")
@@ -437,7 +437,7 @@ func handlePipelineStatus(rls *service.RLS) http.HandlerFunc {
 		}()
 
 		log.Debug().Msg("handling /api/pipeline/status request")
-		
+
 		// Get real pipeline status from RLS service
 		pipelineStatus := rls.GetPipelineStatus()
 		writeJSON(w, http.StatusOK, pipelineStatus)
@@ -455,7 +455,7 @@ func handleSystemMetrics(rls *service.RLS) http.HandlerFunc {
 		}()
 
 		log.Debug().Msg("handling /api/metrics/system request")
-		
+
 		// Get real system metrics from RLS service
 		systemMetrics := rls.GetSystemMetrics()
 		writeJSON(w, http.StatusOK, systemMetrics)

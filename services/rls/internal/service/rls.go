@@ -723,158 +723,158 @@ func (rls *RLS) GetHealth() *HealthState {
 func (rls *RLS) GetPipelineStatus() map[string]interface{} {
 	rls.tenantsMu.RLock()
 	defer rls.tenantsMu.RUnlock()
-	
+
 	// Get overview stats
 	stats := rls.OverviewSnapshot()
-	
+
 	// Calculate component status
 	components := []map[string]interface{}{
 		{
-			"name": "NGINX",
-			"status": "healthy",
-			"uptime": "15d 8h 32m",
-			"version": "1.24.0",
+			"name":       "NGINX",
+			"status":     "healthy",
+			"uptime":     "15d 8h 32m",
+			"version":    "1.24.0",
 			"last_check": time.Now().UTC().Format(time.RFC3339),
 			"metrics": map[string]interface{}{
 				"requests_per_second": stats.TotalRequests / 60, // Convert to per-second
-				"error_rate": 0.2,
-				"response_time": 45,
-				"memory_usage": 85.2,
-				"cpu_usage": 12.8,
+				"error_rate":          0.2,
+				"response_time":       45,
+				"memory_usage":        85.2,
+				"cpu_usage":           12.8,
 			},
 			"endpoints": map[string]string{
-				"health": "/nginx/health",
+				"health":  "/nginx/health",
 				"metrics": "/nginx/metrics",
-				"ready": "/nginx/ready",
+				"ready":   "/nginx/ready",
 			},
 		},
 		{
-			"name": "Envoy Proxy",
-			"status": "healthy",
-			"uptime": "15d 8h 30m",
-			"version": "1.28.0",
+			"name":       "Envoy Proxy",
+			"status":     "healthy",
+			"uptime":     "15d 8h 30m",
+			"version":    "1.28.0",
 			"last_check": time.Now().UTC().Format(time.RFC3339),
 			"metrics": map[string]interface{}{
 				"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60, // 10% of traffic
-				"error_rate": 0.8,
-				"response_time": 120,
-				"memory_usage": 92.1,
-				"cpu_usage": 18.5,
+				"error_rate":          0.8,
+				"response_time":       120,
+				"memory_usage":        92.1,
+				"cpu_usage":           18.5,
 			},
 			"endpoints": map[string]string{
-				"health": "/envoy/health",
+				"health":  "/envoy/health",
 				"metrics": "/envoy/metrics",
-				"ready": "/envoy/ready",
+				"ready":   "/envoy/ready",
 			},
 		},
 		{
-			"name": "RLS (Rate Limit Service)",
-			"status": "healthy",
-			"uptime": "15d 8h 28m",
-			"version": "1.0.0",
+			"name":       "RLS (Rate Limit Service)",
+			"status":     "healthy",
+			"uptime":     "15d 8h 28m",
+			"version":    "1.0.0",
 			"last_check": time.Now().UTC().Format(time.RFC3339),
 			"metrics": map[string]interface{}{
 				"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60, // 10% of traffic
-				"error_rate": 0.1,
-				"response_time": 25,
-				"memory_usage": 45.8,
-				"cpu_usage": 8.2,
+				"error_rate":          0.1,
+				"response_time":       25,
+				"memory_usage":        45.8,
+				"cpu_usage":           8.2,
 			},
 			"endpoints": map[string]string{
-				"health": "/api/health",
+				"health":  "/api/health",
 				"metrics": "/api/metrics",
-				"ready": "/api/ready",
+				"ready":   "/api/ready",
 			},
 		},
 		{
-			"name": "Overrides Sync",
-			"status": "healthy",
-			"uptime": "15d 8h 25m",
-			"version": "1.0.0",
+			"name":       "Overrides Sync",
+			"status":     "healthy",
+			"uptime":     "15d 8h 25m",
+			"version":    "1.0.0",
 			"last_check": time.Now().UTC().Format(time.RFC3339),
 			"metrics": map[string]interface{}{
 				"requests_per_second": 0.1,
-				"error_rate": 0,
-				"response_time": 150,
-				"memory_usage": 23.4,
-				"cpu_usage": 2.1,
+				"error_rate":          0,
+				"response_time":       150,
+				"memory_usage":        23.4,
+				"cpu_usage":           2.1,
 			},
 			"endpoints": map[string]string{
-				"health": "/health",
+				"health":  "/health",
 				"metrics": "/metrics",
-				"ready": "/ready",
+				"ready":   "/ready",
 			},
 		},
 		{
-			"name": "Mimir Distributor",
-			"status": "healthy",
-			"uptime": "15d 8h 35m",
-			"version": "2.8.0",
+			"name":       "Mimir Distributor",
+			"status":     "healthy",
+			"uptime":     "15d 8h 35m",
+			"version":    "2.8.0",
 			"last_check": time.Now().UTC().Format(time.RFC3339),
 			"metrics": map[string]interface{}{
 				"requests_per_second": float64(stats.TotalRequests) * 0.9 / 60, // 90% of traffic
-				"error_rate": 0.4,
-				"response_time": 85,
-				"memory_usage": 78.9,
-				"cpu_usage": 15.3,
+				"error_rate":          0.4,
+				"response_time":       85,
+				"memory_usage":        78.9,
+				"cpu_usage":           15.3,
 			},
 			"endpoints": map[string]string{
-				"health": "/distributor/health",
+				"health":  "/distributor/health",
 				"metrics": "/distributor/metrics",
-				"ready": "/distributor/ready",
+				"ready":   "/distributor/ready",
 			},
 		},
 	}
-	
+
 	// Calculate pipeline flow
 	pipelineFlow := []map[string]interface{}{
 		{
-			"stage": "Ingress",
-			"component": "NGINX",
+			"stage":               "Ingress",
+			"component":           "NGINX",
 			"requests_per_second": stats.TotalRequests / 60,
-			"success_rate": 99.8,
-			"error_rate": 0.2,
-			"avg_response_time": 45,
-			"status": "flowing",
+			"success_rate":        99.8,
+			"error_rate":          0.2,
+			"avg_response_time":   45,
+			"status":              "flowing",
 		},
 		{
-			"stage": "Canary Routing",
-			"component": "NGINX → Envoy",
+			"stage":               "Canary Routing",
+			"component":           "NGINX → Envoy",
 			"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60,
-			"success_rate": 99.2,
-			"error_rate": 0.8,
-			"avg_response_time": 165,
-			"status": "flowing",
+			"success_rate":        99.2,
+			"error_rate":          0.8,
+			"avg_response_time":   165,
+			"status":              "flowing",
 		},
 		{
-			"stage": "Authorization",
-			"component": "RLS",
+			"stage":               "Authorization",
+			"component":           "RLS",
 			"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60,
-			"success_rate": 99.9,
-			"error_rate": 0.1,
-			"avg_response_time": 25,
-			"status": "flowing",
+			"success_rate":        99.9,
+			"error_rate":          0.1,
+			"avg_response_time":   25,
+			"status":              "flowing",
 		},
 		{
-			"stage": "Distribution",
-			"component": "Mimir Distributor",
+			"stage":               "Distribution",
+			"component":           "Mimir Distributor",
 			"requests_per_second": float64(stats.TotalRequests) * 0.9 / 60,
-			"success_rate": 99.6,
-			"error_rate": 0.4,
-			"avg_response_time": 85,
-			"status": "flowing",
+			"success_rate":        99.6,
+			"error_rate":          0.4,
+			"avg_response_time":   85,
+			"status":              "flowing",
 		},
 	}
-	
+
 	return map[string]interface{}{
 		"total_requests_per_second": stats.TotalRequests / 60,
-		"total_errors_per_second": stats.DeniedRequests / 60,
-		"overall_success_rate": stats.AllowPercentage,
-		"avg_response_time": 165,
-		"active_tenants": stats.ActiveTenants,
-		"total_denials": stats.DeniedRequests,
-		"components": components,
-		"pipeline_flow": pipelineFlow,
+		"total_errors_per_second":   stats.DeniedRequests / 60,
+		"overall_success_rate":      stats.AllowPercentage,
+		"avg_response_time":         165,
+		"active_tenants":            stats.ActiveTenants,
+		"total_denials":             stats.DeniedRequests,
+		"components":                components,
+		"pipeline_flow":             pipelineFlow,
 	}
 }
 
@@ -882,82 +882,82 @@ func (rls *RLS) GetPipelineStatus() map[string]interface{} {
 func (rls *RLS) GetSystemMetrics() map[string]interface{} {
 	rls.tenantsMu.RLock()
 	defer rls.tenantsMu.RUnlock()
-	
+
 	// Get overview stats
 	stats := rls.OverviewSnapshot()
-	
+
 	// Calculate component metrics
 	componentMetrics := map[string]interface{}{
 		"nginx": map[string]interface{}{
 			"requests_per_second": stats.TotalRequests / 60,
-			"error_rate": 0.2,
-			"response_time": 45,
-			"memory_usage": 85.2,
-			"cpu_usage": 12.8,
-			"uptime": "15d 8h 32m",
-			"status": "healthy",
+			"error_rate":          0.2,
+			"response_time":       45,
+			"memory_usage":        85.2,
+			"cpu_usage":           12.8,
+			"uptime":              "15d 8h 32m",
+			"status":              "healthy",
 		},
 		"envoy": map[string]interface{}{
 			"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60,
-			"error_rate": 0.8,
-			"response_time": 120,
-			"memory_usage": 92.1,
-			"cpu_usage": 18.5,
-			"uptime": "15d 8h 30m",
-			"status": "healthy",
+			"error_rate":          0.8,
+			"response_time":       120,
+			"memory_usage":        92.1,
+			"cpu_usage":           18.5,
+			"uptime":              "15d 8h 30m",
+			"status":              "healthy",
 		},
 		"rls": map[string]interface{}{
 			"requests_per_second": float64(stats.TotalRequests) * 0.1 / 60,
-			"error_rate": 0.1,
-			"response_time": 25,
-			"memory_usage": 45.8,
-			"cpu_usage": 8.2,
-			"uptime": "15d 8h 28m",
-			"status": "healthy",
+			"error_rate":          0.1,
+			"response_time":       25,
+			"memory_usage":        45.8,
+			"cpu_usage":           8.2,
+			"uptime":              "15d 8h 28m",
+			"status":              "healthy",
 		},
 		"overrides_sync": map[string]interface{}{
 			"requests_per_second": 0.1,
-			"error_rate": 0,
-			"response_time": 150,
-			"memory_usage": 23.4,
-			"cpu_usage": 2.1,
-			"uptime": "15d 8h 25m",
-			"status": "healthy",
+			"error_rate":          0,
+			"response_time":       150,
+			"memory_usage":        23.4,
+			"cpu_usage":           2.1,
+			"uptime":              "15d 8h 25m",
+			"status":              "healthy",
 		},
 		"mimir": map[string]interface{}{
 			"requests_per_second": float64(stats.TotalRequests) * 0.9 / 60,
-			"error_rate": 0.4,
-			"response_time": 85,
-			"memory_usage": 78.9,
-			"cpu_usage": 15.3,
-			"uptime": "15d 8h 35m",
-			"status": "healthy",
+			"error_rate":          0.4,
+			"response_time":       85,
+			"memory_usage":        78.9,
+			"cpu_usage":           15.3,
+			"uptime":              "15d 8h 35m",
+			"status":              "healthy",
 		},
 	}
-	
+
 	// Calculate performance metrics
 	performanceMetrics := map[string]interface{}{
-		"cpu_usage": 15.2,
-		"memory_usage": 78.5,
-		"disk_usage": 45.8,
+		"cpu_usage":          15.2,
+		"memory_usage":       78.5,
+		"disk_usage":         45.8,
 		"network_throughput": 125.5,
-		"error_rate": 0.96,
-		"latency_p95": 245,
-		"latency_p99": 389,
+		"error_rate":         0.96,
+		"latency_p95":        245,
+		"latency_p99":        389,
 	}
-	
+
 	// Generate traffic metrics (last 60 minutes)
 	trafficMetrics := map[string]interface{}{
 		"requests_per_minute": []map[string]interface{}{},
-		"samples_per_minute": []map[string]interface{}{},
-		"denials_per_minute": []map[string]interface{}{},
-		"response_times": []map[string]interface{}{},
+		"samples_per_minute":  []map[string]interface{}{},
+		"denials_per_minute":  []map[string]interface{}{},
+		"response_times":      []map[string]interface{}{},
 	}
-	
+
 	// Generate tenant metrics
 	tenantMetrics := map[string]interface{}{
 		"top_tenants_by_requests": []map[string]interface{}{},
-		"top_tenants_by_denials": []map[string]interface{}{},
+		"top_tenants_by_denials":  []map[string]interface{}{},
 		"utilization_distribution": []map[string]interface{}{
 			{"range": "0-20%", "count": 2, "percentage": 25},
 			{"range": "20-40%", "count": 1, "percentage": 12.5},
@@ -966,53 +966,53 @@ func (rls *RLS) GetSystemMetrics() map[string]interface{} {
 			{"range": "80-100%", "count": 1, "percentage": 12.5},
 		},
 	}
-	
+
 	// Calculate alert metrics
 	alertMetrics := map[string]interface{}{
-		"total_alerts": 8,
+		"total_alerts":    8,
 		"critical_alerts": 1,
-		"warning_alerts": 3,
-		"info_alerts": 4,
+		"warning_alerts":  3,
+		"info_alerts":     4,
 		"recent_alerts": []map[string]interface{}{
 			{
-				"id": "alert-1",
-				"severity": "warning",
-				"message": "High memory usage detected on Envoy",
+				"id":        "alert-1",
+				"severity":  "warning",
+				"message":   "High memory usage detected on Envoy",
 				"timestamp": time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339),
 				"component": "envoy",
 			},
 			{
-				"id": "alert-2",
-				"severity": "info",
-				"message": "Tenant limits updated successfully",
+				"id":        "alert-2",
+				"severity":  "info",
+				"message":   "Tenant limits updated successfully",
 				"timestamp": time.Now().Add(-10 * time.Minute).UTC().Format(time.RFC3339),
 				"component": "overrides-sync",
 			},
 			{
-				"id": "alert-3",
-				"severity": "critical",
-				"message": "RLS service not responding",
+				"id":        "alert-3",
+				"severity":  "critical",
+				"message":   "RLS service not responding",
 				"timestamp": time.Now().Add(-15 * time.Minute).UTC().Format(time.RFC3339),
 				"component": "rls",
 			},
 		},
 	}
-	
+
 	return map[string]interface{}{
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 		"overview": map[string]interface{}{
 			"total_requests_per_second": stats.TotalRequests / 60,
-			"total_errors_per_second": stats.DeniedRequests / 60,
-			"overall_success_rate": stats.AllowPercentage,
-			"avg_response_time": 165,
-			"active_tenants": stats.ActiveTenants,
-			"total_denials": stats.DeniedRequests,
-			"system_health": "healthy",
+			"total_errors_per_second":   stats.DeniedRequests / 60,
+			"overall_success_rate":      stats.AllowPercentage,
+			"avg_response_time":         165,
+			"active_tenants":            stats.ActiveTenants,
+			"total_denials":             stats.DeniedRequests,
+			"system_health":             "healthy",
 		},
-		"component_metrics": componentMetrics,
+		"component_metrics":   componentMetrics,
 		"performance_metrics": performanceMetrics,
-		"traffic_metrics": trafficMetrics,
-		"tenant_metrics": tenantMetrics,
-		"alert_metrics": alertMetrics,
+		"traffic_metrics":     trafficMetrics,
+		"tenant_metrics":      tenantMetrics,
+		"alert_metrics":       alertMetrics,
 	}
 }
