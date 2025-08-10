@@ -103,6 +103,8 @@ data:
                           - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
                           - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
                           - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
+                          - Ext Authz Filter: ENABLED
+                          - Rate Limit Filter: ENABLED
                   # 🔧 DEBUG: Catch-all route for debugging (returns 404 for unmatched paths)
                   - match:
                       prefix: "/"
@@ -124,6 +126,9 @@ data:
                   # 🔧 DEBUG: Add metadata for detailed logging
                   metadata_context_namespaces:
                   - "envoy.filters.http.ext_authz"
+                  # 🔧 DEBUG: Add status on error for better debugging
+                  status_on_error:
+                    code: 13  # INTERNAL
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
