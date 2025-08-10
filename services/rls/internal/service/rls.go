@@ -1237,51 +1237,23 @@ func (rls *RLS) GetComprehensiveSystemStatus() map[string]any {
 func (rls *RLS) checkAllEndpoints() map[string]any {
 	endpoints := make(map[string]any)
 
-	// RLS Service Endpoints
+	// 🔧 FIX: Only check critical endpoints to prevent 499 timeouts
+	// RLS Service Endpoints (critical)
 	endpoints["rls"] = map[string]any{
-		"healthz":             rls.checkEndpoint("http://localhost:8082/healthz", "GET", nil, 200),
-		"readyz":              rls.checkEndpoint("http://localhost:8082/readyz", "GET", nil, 200),
-		"api_health":          rls.checkEndpoint("http://localhost:8082/api/health", "GET", nil, 200),
-		"api_overview":        rls.checkEndpoint("http://localhost:8082/api/overview", "GET", nil, 200),
-		"api_tenants":         rls.checkEndpoint("http://localhost:8082/api/tenants", "GET", nil, 200),
-		"api_flow_status":     rls.checkEndpoint("http://localhost:8082/api/flow/status", "GET", nil, 200),
-		"api_pipeline_status": rls.checkEndpoint("http://localhost:8082/api/pipeline/status", "GET", nil, 200),
-		"api_system_metrics":  rls.checkEndpoint("http://localhost:8082/api/metrics/system", "GET", nil, 200),
-		"api_denials":         rls.checkEndpoint("http://localhost:8082/api/denials", "GET", nil, 200),
-		"api_export_csv":      rls.checkEndpoint("http://localhost:8082/api/export/csv", "GET", nil, 200),
+		"healthz":     rls.checkEndpoint("http://localhost:8082/healthz", "GET", nil, 200),
+		"readyz":      rls.checkEndpoint("http://localhost:8082/readyz", "GET", nil, 200),
+		"api_health":  rls.checkEndpoint("http://localhost:8082/api/health", "GET", nil, 200),
+		"api_tenants": rls.checkEndpoint("http://localhost:8082/api/tenants", "GET", nil, 200),
 	}
 
-	// Envoy Proxy Endpoints
+	// Envoy Proxy Endpoints (critical)
 	endpoints["envoy"] = map[string]any{
-		"admin_stats":  rls.checkEndpoint("http://localhost:8080/stats", "GET", nil, 200),
-		"admin_health": rls.checkEndpoint("http://localhost:8080/health", "GET", nil, 200),
-		"ext_authz":    rls.checkEndpoint("http://localhost:8081/health", "GET", nil, 200),
-		"ratelimit":    rls.checkEndpoint("http://localhost:8083/health", "GET", nil, 200),
+		"admin_stats": rls.checkEndpoint("http://localhost:8080/stats", "GET", nil, 200),
 	}
 
-	// Overrides Sync Service Endpoints
+	// Overrides Sync Service Endpoints (critical)
 	endpoints["overrides_sync"] = map[string]any{
-		"health":  rls.checkEndpoint("http://localhost:8084/health", "GET", nil, 200),
-		"ready":   rls.checkEndpoint("http://localhost:8084/ready", "GET", nil, 200),
-		"metrics": rls.checkEndpoint("http://localhost:8084/metrics", "GET", nil, 200),
-	}
-
-	// Mimir Backend Endpoints
-	endpoints["mimir"] = map[string]any{
-		"ready":        rls.checkEndpoint("http://localhost:9009/ready", "GET", nil, 200),
-		"health":       rls.checkEndpoint("http://localhost:9009/health", "GET", nil, 200),
-		"metrics":      rls.checkEndpoint("http://localhost:9009/metrics", "GET", nil, 200),
-		"remote_write": rls.checkEndpoint("http://localhost:9009/api/v1/push", "POST", nil, 405), // Should return 405 for GET
-	}
-
-	// UI Endpoints
-	endpoints["ui"] = map[string]any{
-		"overview": rls.checkEndpoint("http://localhost:3000/", "GET", nil, 200),
-		"tenants":  rls.checkEndpoint("http://localhost:3000/tenants", "GET", nil, 200),
-		"denials":  rls.checkEndpoint("http://localhost:3000/denials", "GET", nil, 200),
-		"health":   rls.checkEndpoint("http://localhost:3000/health", "GET", nil, 200),
-		"pipeline": rls.checkEndpoint("http://localhost:3000/pipeline", "GET", nil, 200),
-		"metrics":  rls.checkEndpoint("http://localhost:3000/metrics", "GET", nil, 200),
+		"health": rls.checkEndpoint("http://localhost:8084/health", "GET", nil, 200),
 	}
 
 	return endpoints
@@ -1291,9 +1263,9 @@ func (rls *RLS) checkAllEndpoints() map[string]any {
 func (rls *RLS) checkEndpoint(url, method string, headers map[string]string, expectedStatus int) map[string]any {
 	startTime := time.Now()
 
-	// Create HTTP client with timeout
+	// 🔧 FIX: Reduce timeout to prevent 499 errors
 	client := &http.Client{
-		Timeout: 5 * time.Second,
+		Timeout: 1 * time.Second, // Reduced from 5s to 1s
 	}
 
 	// Create request
