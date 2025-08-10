@@ -29,7 +29,7 @@ limits:
   
   # 🔧 FIX: Add missing RLS configuration options that were causing tenant discovery to fail
   maxBodyBytes: 0               # 0 means no default body size cap (tenant-specific limits from ConfigMap)
-  maxRequestBytes: 3000000      # 3 MiB - Maximum request body size for gRPC (global safety limit) - safe integer
+  maxRequestBytes: 500000       # 500 KB - Maximum request body size for gRPC (global safety limit) - safe integer
   failureModeAllow: false       # Fail closed for security (set true for debugging)
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048
