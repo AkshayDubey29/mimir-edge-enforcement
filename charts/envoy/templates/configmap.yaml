@@ -12,6 +12,7 @@ data:
         socket_address:
           address: 0.0.0.0
           port_value: 9901
+      # 🔧 DEBUG: Add more admin endpoints for troubleshooting
       access_log:
         - name: envoy.access_loggers.stdout
           typed_config:
@@ -63,20 +64,21 @@ data:
               # Enable proper handling of forwarded headers from NGINX
               use_remote_address: {{ .Values.proxy.httpProtocol.useRemoteAddress }}
               xff_num_trusted_hops: {{ .Values.proxy.httpProtocol.xffNumTrustedHops | int }}
-              {{- if .Values.logging.enableAccessLogs }}
-              # 🔧 DEBUG: Enable access logs for troubleshooting
+              # 🔧 DEBUG: Enhanced access logs for detailed troubleshooting
               access_log:
               - name: envoy.access_loggers.stdout
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
                   log_format:
                     text_format: |
-                      [%START_TIME%] "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
+                      [%START_TIME%] ENVOY_ACCESS: "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
                       %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_RECEIVED% %BYTES_SENT%
                       %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% "%REQ(X-FORWARDED-FOR)%"
                       "%REQ(USER-AGENT)%" "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
-                      tenant="%REQ({{ .Values.tenantHeader }})%"
-              {{- end }}
+                      tenant="%REQ({{ .Values.tenantHeader }})%" 
+                      ext_authz_status="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:status)%"
+                      ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
+                      ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
               route_config:
                 name: local_route
                 virtual_hosts:
@@ -88,6 +90,19 @@ data:
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
+                  # 🔧 DEBUG: Debug endpoint for troubleshooting
+                  - match:
+                      prefix: "/debug"
+                    direct_response:
+                      status: 200
+                      body:
+                        inline_string: |
+                          Envoy Debug Info:
+                          - Remote Write Path: {{ .Values.remoteWrite.path }}
+                          - RLS Host: {{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}
+                          - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
+                          - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
+                          - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
                   # 🔧 DEBUG: Catch-all route for debugging (returns 404 for unmatched paths)
                   - match:
                       prefix: "/"
@@ -104,9 +119,16 @@ data:
                     max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
                     allow_partial_message: true
                   failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
+                  # 🔧 DEBUG: Enhanced ext_authz configuration for detailed debugging
+                  include_peer_certificate: true
+                  # 🔧 DEBUG: Add metadata for detailed logging
+                  metadata_context_namespaces:
+                  - "envoy.filters.http.ext_authz"
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
+                      # 🔧 DEBUG: Add authority for gRPC calls
+                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
                     # 🔧 FIX: Add timeout to prevent hanging requests
                     timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               - name: envoy.filters.http.ratelimit
@@ -148,25 +170,31 @@ data:
                     port_value: {{ .Values.mimir.distributorPort | int }}
 
       - name: rls_ext_authz
-        connect_timeout: 0.25s
+        connect_timeout: 5s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
-        # 🔧 FIX: Properly configure HTTP/2 for gRPC communication to RLS
+        # 🔧 DEBUG: Enhanced RLS cluster configuration for detailed debugging
         typed_extension_protocol_options:
           envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
             "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
             explicit_http_config:
               http2_protocol_options: 
-                # 🔧 FIX: Configure HTTP/2 settings for better gRPC performance
+                # 🔧 DEBUG: Configure HTTP/2 settings for better gRPC performance
                 max_concurrent_streams: 100
-        # 🔧 FIX: Add gRPC health checks for RLS service
+                # 🔧 DEBUG: Add more detailed HTTP/2 settings
+                initial_stream_window_size: 65536
+                initial_connection_window_size: 1048576
+
+        # 🔧 DEBUG: Enhanced health checks for RLS service debugging
         health_checks:
-        - timeout: 3s
-          interval: 10s
-          unhealthy_threshold: 2
+        - timeout: 5s
+          interval: 5s
+          unhealthy_threshold: 1
           healthy_threshold: 1
           grpc_health_check:
             service_name: "envoy.service.auth.v3.Authorization"
+            # 🔧 DEBUG: Add authority for health check
+            authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:

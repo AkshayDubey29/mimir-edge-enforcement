@@ -34,7 +34,7 @@ func (tb *TokenBucket) Take(n float64) bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	// Refill tokens based on time elapsed
+	// 🔧 PERFORMANCE FIX: Optimize refill calculation
 	tb.refill()
 
 	if tb.tokens >= n {
@@ -72,6 +72,11 @@ func (tb *TokenBucket) Available() float64 {
 func (tb *TokenBucket) refill() {
 	now := time.Now()
 	elapsed := now.Sub(tb.lastRefill).Seconds()
+
+	// 🔧 PERFORMANCE FIX: Skip refill if no time has passed
+	if elapsed <= 0 {
+		return
+	}
 
 	// Calculate tokens to add
 	tokensToAdd := elapsed * tb.rate

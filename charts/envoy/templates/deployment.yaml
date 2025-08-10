@@ -49,17 +49,25 @@ spec:
             httpGet:
               path: /ready
               port: admin
-            initialDelaySeconds: 30
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 3
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /ready
               port: admin
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
             failureThreshold: 3
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

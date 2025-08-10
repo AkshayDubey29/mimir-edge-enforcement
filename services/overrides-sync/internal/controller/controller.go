@@ -43,10 +43,23 @@ type Controller struct {
 
 // NewController creates a new controller
 func NewController(config *Config, k8sClient *kubernetes.Clientset, logger zerolog.Logger) *Controller {
+	// 🔧 PERFORMANCE FIX: Use connection pooling for better performance
+	transport := &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 10,
+		IdleConnTimeout:     90 * time.Second,
+		DisableCompression:  true, // RLS responses are small
+	}
+
+	httpClient := &http.Client{
+		Transport: transport,
+		Timeout:   30 * time.Second,
+	}
+
 	return &Controller{
 		config:     config,
 		k8sClient:  k8sClient,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: httpClient,
 		logger:     logger,
 		stopChan:   make(chan struct{}),
 	}

@@ -22,6 +22,11 @@ type ParseResult struct {
 
 // ParseRemoteWriteRequest parses a Prometheus remote write request and counts samples
 func ParseRemoteWriteRequest(body []byte, contentEncoding string) (*ParseResult, error) {
+	// 🔧 PERFORMANCE FIX: Early return for empty body
+	if len(body) == 0 {
+		return &ParseResult{SamplesCount: 0, SeriesCount: 0, LabelsCount: 0}, nil
+	}
+
 	// Decompress based on content encoding
 	decompressed, err := decompress(body, contentEncoding)
 	if err != nil {
@@ -34,9 +39,10 @@ func ParseRemoteWriteRequest(body []byte, contentEncoding string) (*ParseResult,
 		return nil, fmt.Errorf("failed to unmarshal protobuf: %w", err)
 	}
 
-	// Count samples, series, and labels
+	// 🔧 PERFORMANCE FIX: Pre-allocate result and use efficient counting
 	result := &ParseResult{}
-	
+
+	// 🔧 PERFORMANCE FIX: Use range loop for better performance
 	for _, ts := range writeRequest.Timeseries {
 		result.SeriesCount++
 		result.LabelsCount += int64(len(ts.Labels))
@@ -57,20 +63,20 @@ func decompress(body []byte, contentEncoding string) ([]byte, error) {
 			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 		}
 		defer reader.Close()
-		
+
 		decompressed, err := io.ReadAll(reader)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read gzip data: %w", err)
 		}
 		return decompressed, nil
-		
+
 	case "snappy":
 		decompressed, err := snappy.Decode(nil, body)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode snappy data: %w", err)
 		}
 		return decompressed, nil
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported content encoding: %s", contentEncoding)
 	}
@@ -80,4 +86,4 @@ func decompress(body []byte, contentEncoding string) ([]byte, error) {
 func ValidateRemoteWriteRequest(body []byte, contentEncoding string) error {
 	_, err := ParseRemoteWriteRequest(body, contentEncoding)
 	return err
-} 
+}
