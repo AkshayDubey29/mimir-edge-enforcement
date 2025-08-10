@@ -38,7 +38,7 @@ import {
 interface TenantDetails {
   id: string;
   name: string;
-  status: 'active' | 'inactive' | 'suspended';
+  status: 'active' | 'inactive' | 'suspended' | 'unknown';
   created_at: string;
   last_activity: string;
   limits: {
@@ -88,92 +88,51 @@ interface TenantDetails {
   }>;
 }
 
-// Mock data for tenant details
-const mockTenantDetails: TenantDetails = {
-  id: 'tenant-123',
-  name: 'Production App',
-  status: 'active',
-  created_at: '2024-01-01T00:00:00Z',
-  last_activity: '2024-01-15T10:30:00Z',
-  limits: {
-    samples_per_second: 10000,
-    burst_percent: 50,
-    max_body_bytes: 1048576,
-    max_series_per_query: 1000,
-    max_global_series_per_user: 100000,
-    max_global_series_per_metric: 10000,
-    max_global_exemplars_per_user: 1000,
-    ingestion_rate: 10000,
-    ingestion_burst_size: 15000
-  },
-  metrics: {
-    current_samples_per_second: 8500,
-    current_series: 75000,
-    total_requests: 125000,
-    allowed_requests: 124500,
-    denied_requests: 500,
-    allow_rate: 99.6,
-    deny_rate: 0.4,
-    avg_response_time: 165,
-    error_rate: 0.2,
-    utilization_pct: 85
-  },
-  request_history: Array.from({ length: 24 }, (_, i) => ({
-    timestamp: new Date(Date.now() - (23 - i) * 3600000).toISOString(),
-    requests: Math.floor(Math.random() * 1000) + 500,
-    samples: Math.floor(Math.random() * 5000) + 3000,
-    denials: Math.floor(Math.random() * 20) + 5,
-    avg_response_time: Math.floor(Math.random() * 100) + 100
-  })),
-  enforcement_history: [
-    {
-      timestamp: '2024-01-15T10:25:00Z',
-      reason: 'Samples per second limit exceeded',
-      limit_type: 'samples_per_second',
-      current_value: 10500,
-      limit_value: 10000,
-      action: 'denied'
-    },
-    {
-      timestamp: '2024-01-15T10:20:00Z',
-      reason: 'Request within limits',
-      limit_type: 'samples_per_second',
-      current_value: 8500,
-      limit_value: 10000,
-      action: 'allowed'
-    },
-    {
-      timestamp: '2024-01-15T10:15:00Z',
-      reason: 'Burst limit exceeded',
-      limit_type: 'burst_percent',
-      current_value: 60,
-      limit_value: 50,
-      action: 'denied'
-    }
-  ],
-  alerts: [
-    {
-      id: 'alert-1',
-      severity: 'warning',
-      message: 'High utilization detected (85%)',
-      timestamp: '2024-01-15T10:00:00Z',
-      resolved: false
-    },
-    {
-      id: 'alert-2',
-      severity: 'info',
-      message: 'Tenant limits updated',
-      timestamp: '2024-01-15T09:30:00Z',
-      resolved: true
-    }
-  ]
-};
-
-// Mock API function
+// Real API function - fetches actual tenant details
 async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return mockTenantDetails;
+  try {
+    const response = await fetch(`/api/tenants/${tenantId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch tenant details: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching tenant details:', error);
+    // Return empty data structure on error
+    return {
+      id: tenantId,
+      name: 'Unknown',
+      status: 'unknown',
+      created_at: '',
+      last_activity: '',
+      limits: {
+        samples_per_second: 0,
+        burst_percent: 0,
+        max_body_bytes: 0,
+        max_series_per_query: 0,
+        max_global_series_per_user: 0,
+        max_global_series_per_metric: 0,
+        max_global_exemplars_per_user: 0,
+        ingestion_rate: 0,
+        ingestion_burst_size: 0
+      },
+      metrics: {
+        current_samples_per_second: 0,
+        current_series: 0,
+        total_requests: 0,
+        allowed_requests: 0,
+        denied_requests: 0,
+        allow_rate: 0,
+        deny_rate: 0,
+        avg_response_time: 0,
+        error_rate: 0,
+        utilization_pct: 0
+      },
+      request_history: [],
+      enforcement_history: [],
+      alerts: []
+    };
+  }
 }
 
 // Status badge component

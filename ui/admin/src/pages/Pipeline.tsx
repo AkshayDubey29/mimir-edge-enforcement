@@ -63,156 +63,28 @@ interface SystemOverview {
   pipeline_flow: PipelineFlow[];
 }
 
-// Mock data for now - will be replaced with real API calls
-const mockSystemOverview: SystemOverview = {
-  total_requests_per_second: 1250,
-  total_errors_per_second: 12,
-  overall_success_rate: 99.04,
-  avg_response_time: 165,
-  active_tenants: 8,
-  total_denials: 47,
-  components: [
-    {
-      name: 'NGINX',
-      status: 'healthy',
-      uptime: '15d 8h 32m',
-      version: '1.24.0',
-      last_check: '2024-01-15T10:30:00Z',
-      metrics: {
-        requests_per_second: 1250,
-        error_rate: 0.2,
-        response_time: 45,
-        memory_usage: 85.2,
-        cpu_usage: 12.8
-      },
-      endpoints: {
-        health: '/nginx/health',
-        metrics: '/nginx/metrics',
-        ready: '/nginx/ready'
-      }
-    },
-    {
-      name: 'Envoy Proxy',
-      status: 'healthy',
-      uptime: '15d 8h 30m',
-      version: '1.28.0',
-      last_check: '2024-01-15T10:30:00Z',
-      metrics: {
-        requests_per_second: 125,
-        error_rate: 0.8,
-        response_time: 120,
-        memory_usage: 92.1,
-        cpu_usage: 18.5
-      },
-      endpoints: {
-        health: '/envoy/health',
-        metrics: '/envoy/metrics',
-        ready: '/envoy/ready'
-      }
-    },
-    {
-      name: 'RLS (Rate Limit Service)',
-      status: 'healthy',
-      uptime: '15d 8h 28m',
-      version: '0.1.0',
-      last_check: '2024-01-15T10:30:00Z',
-      metrics: {
-        requests_per_second: 125,
-        error_rate: 0.1,
-        response_time: 25,
-        memory_usage: 45.8,
-        cpu_usage: 8.2
-      },
-      endpoints: {
-        health: '/api/health',
-        metrics: '/api/metrics',
-        ready: '/api/ready'
-      }
-    },
-    {
-      name: 'Overrides Sync',
-      status: 'healthy',
-      uptime: '15d 8h 25m',
-      version: '0.1.0',
-      last_check: '2024-01-15T10:30:00Z',
-      metrics: {
-        requests_per_second: 0.1,
-        error_rate: 0,
-        response_time: 150,
-        memory_usage: 23.4,
-        cpu_usage: 2.1
-      },
-      endpoints: {
-        health: '/health',
-        metrics: '/metrics',
-        ready: '/ready'
-      }
-    },
-    {
-      name: 'Mimir Distributor',
-      status: 'healthy',
-      uptime: '15d 8h 35m',
-      version: '2.8.0',
-      last_check: '2024-01-15T10:30:00Z',
-      metrics: {
-        requests_per_second: 1243,
-        error_rate: 0.4,
-        response_time: 85,
-        memory_usage: 78.9,
-        cpu_usage: 15.3
-      },
-      endpoints: {
-        health: '/distributor/health',
-        metrics: '/distributor/metrics',
-        ready: '/distributor/ready'
-      }
-    }
-  ],
-  pipeline_flow: [
-    {
-      stage: 'Ingress',
-      component: 'NGINX',
-      requests_per_second: 1250,
-      success_rate: 99.8,
-      error_rate: 0.2,
-      avg_response_time: 45,
-      status: 'flowing'
-    },
-    {
-      stage: 'Canary Routing',
-      component: 'NGINX → Envoy',
-      requests_per_second: 125,
-      success_rate: 99.2,
-      error_rate: 0.8,
-      avg_response_time: 165,
-      status: 'flowing'
-    },
-    {
-      stage: 'Authorization',
-      component: 'RLS',
-      requests_per_second: 125,
-      success_rate: 99.9,
-      error_rate: 0.1,
-      avg_response_time: 25,
-      status: 'flowing'
-    },
-    {
-      stage: 'Distribution',
-      component: 'Mimir Distributor',
-      requests_per_second: 1243,
-      success_rate: 99.6,
-      error_rate: 0.4,
-      avg_response_time: 85,
-      status: 'flowing'
-    }
-  ]
-};
-
-// Mock API function
+// Real API function - fetches actual pipeline status
 async function fetchPipelineStatus(): Promise<SystemOverview> {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return mockSystemOverview;
+  try {
+    const response = await fetch('/api/pipeline/status');
+    if (!response.ok) {
+      throw new Error(`Failed to fetch pipeline status: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching pipeline status:', error);
+    // Return empty data structure on error
+    return {
+      total_requests_per_second: 0,
+      total_errors_per_second: 0,
+      overall_success_rate: 0,
+      avg_response_time: 0,
+      active_tenants: 0,
+      total_denials: 0,
+      components: [],
+      pipeline_flow: []
+    };
+  }
 }
 
 // Status badge component
