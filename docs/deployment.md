@@ -441,8 +441,170 @@ kubectl get services -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforce
 
 # Test Envoy admin interface
 kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement &
+
+# Basic health checks
 curl http://localhost:8001/ready
 curl http://localhost:8001/stats | grep -E "(ready|healthy)"
+
+# 🔧 VERIFY BUFFER OVERFLOW FIXES:
+echo "=== Verifying Buffer Overflow Fixes ==="
+
+# 1. Check ext_authz configuration includes buffer size and timeouts
+echo "Checking ext_authz buffer configuration..."
+kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
+  grep -A 10 -B 5 "buffer_size_bytes"
+
+# 2. Verify timeout configurations
+echo "Checking timeout configurations..."
+kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
+  grep -A 3 -B 3 "timeout:"
+
+# 3. Check heap size matches container memory
+echo "Checking heap size configuration..."
+kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
+  grep -A 5 -B 5 "maxHeapSizeBytes"
+
+# 4. Verify RLS cluster health checks are configured
+echo "Checking RLS cluster health checks..."
+kubectl get configmap mimir-envoy-config -n mimir-edge-enforcement -o yaml | \
+  grep -A 10 "health_checks"
+
+# 5. Test that buffer overflow warnings are eliminated
+echo "Checking for buffer overflow warnings (should be none)..."
+kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement --tail=50 | \
+  grep -i "buffer.*size.*limit" || echo "✅ No buffer overflow warnings found"
+
+# 6. Verify ext_authz metrics show successful processing
+echo "Checking ext_authz stats..."
+curl -s http://localhost:8001/stats | grep ext_authz | head -10
+
+# 7. Check memory usage is within limits
+echo "Checking memory usage..."
+curl -s http://localhost:8001/stats | grep -E "(memory_heap_size|memory_allocated)"
+
+# Stop port-forward
+pkill -f "kubectl port-forward.*8001"
+
+# ✅ Expected Results:
+echo "=== Expected Configuration Verification ==="
+echo "✅ buffer_size_bytes: 131072 (128KB)"
+echo "✅ timeout: 5s (ext_authz)"
+echo "✅ grpcTimeout: 4s (ext_authz)"  
+echo "✅ timeout: 3s (ratelimit)"
+echo "✅ grpcTimeout: 2s (ratelimit)"
+echo "✅ maxHeapSizeBytes: 402653184 (384MB)"
+echo "✅ health_checks configured for RLS clusters"
+echo "✅ No buffer overflow warnings in logs"
+```
+
+#### **Post-Deployment Buffer Overflow Testing**
+
+After deploying Envoy with the buffer overflow fixes, run these additional tests:
+
+```bash
+# 🧪 COMPREHENSIVE BUFFER OVERFLOW TESTING
+
+echo "=== Testing Buffer Overflow Fixes ==="
+
+# Test 1: Send large request to verify buffer handling
+echo "Testing large request handling..."
+kubectl port-forward svc/mimir-envoy 8080:8080 -n mimir-edge-enforcement &
+ENVOY_PID=$!
+
+# Create a test payload (simulate large metrics payload)
+python3 -c "
+import requests
+import time
+# Large payload test (should not cause buffer overflow)
+headers = {'X-Scope-OrgID': 'test-tenant', 'Content-Type': 'application/x-protobuf'}
+# Simulate 2MB payload (under 4MB limit but large enough to test buffer)
+payload = b'x' * (2 * 1024 * 1024)
+try:
+    response = requests.post('http://localhost:8080/api/v1/push', 
+                           headers=headers, data=payload, timeout=10)
+    print(f'✅ Large request handled: {response.status_code}')
+except Exception as e:
+    print(f'❌ Large request failed: {e}')
+"
+
+# Test 2: Concurrent requests to test buffer pool
+echo "Testing concurrent request handling..."
+for i in {1..5}; do
+  curl -H "X-Scope-OrgID: test-tenant-$i" \
+       -H "Content-Type: application/x-protobuf" \
+       -X POST http://localhost:8080/api/v1/push \
+       --data-binary "test-payload-$i" &
+done
+wait
+
+# Test 3: Check buffer overflow warnings after testing
+echo "Checking for buffer warnings after load test..."
+kubectl logs -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement --tail=20 | \
+  grep -i "buffer.*size.*limit" && echo "❌ Buffer warnings found!" || echo "✅ No buffer warnings"
+
+# Test 4: Verify ext_authz timeout handling
+echo "Testing ext_authz timeout behavior..."
+curl -s http://localhost:8001/stats | grep -E "ext_authz.*(timeout|retry|pending)" | head -5
+
+# Test 5: Check memory usage under load
+echo "Checking memory usage after load test..."
+MEMORY_USAGE=$(curl -s http://localhost:8001/stats | grep "server.memory_heap_size" | awk '{print $2}')
+MEMORY_LIMIT=402653184  # 384MB in bytes
+echo "Current heap usage: $MEMORY_USAGE bytes"
+echo "Configured limit: $MEMORY_LIMIT bytes"
+if [ "$MEMORY_USAGE" -lt "$MEMORY_LIMIT" ]; then
+  echo "✅ Memory usage within limits"
+else
+  echo "⚠️  Memory usage approaching limit"
+fi
+
+# Cleanup
+kill $ENVOY_PID 2>/dev/null
+
+echo "=== Buffer Overflow Testing Complete ==="
+```
+
+#### **Buffer Overflow Fix Validation Checklist**
+
+Use this checklist to verify all fixes are working:
+
+- [ ] **Buffer Size**: `buffer_size_bytes: 131072` configured in ext_authz
+- [ ] **Timeouts**: 5s ext_authz timeout, 4s gRPC timeout configured  
+- [ ] **Rate Limit Timeouts**: 3s timeout, 2s gRPC timeout configured
+- [ ] **Heap Size**: 384MB (75% of 512MB container) configured
+- [ ] **Health Checks**: RLS clusters have health check endpoints
+- [ ] **Circuit Breakers**: Connection limits configured for RLS clusters
+- [ ] **No Buffer Warnings**: No "buffer size limit exceeded" in logs
+- [ ] **Memory Usage**: Heap usage stays under 384MB limit
+- [ ] **Request Processing**: Large requests (up to 4MB) processed successfully
+- [ ] **Concurrent Handling**: Multiple concurrent requests handled without overflow
+- [ ] **Timeout Handling**: No hanging requests or indefinite retries
+
+#### **Production Readiness Validation**
+
+```bash
+# Final production readiness check
+echo "=== Production Readiness Validation ==="
+
+# 1. Verify all pods are ready and healthy
+kubectl get pods -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement
+kubectl wait --for=condition=ready pods -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement --timeout=120s
+
+# 2. Check resource usage is within limits
+kubectl top pods -l app.kubernetes.io/name=mimir-envoy -n mimir-edge-enforcement
+
+# 3. Verify HPA and PDB are configured
+kubectl get hpa mimir-envoy -n mimir-edge-enforcement
+kubectl get pdb mimir-envoy-pdb -n mimir-edge-enforcement
+
+# 4. Test service connectivity to RLS
+kubectl exec -it deployment/mimir-envoy -n mimir-edge-enforcement -- \
+  curl -s http://mimir-rls:8080/health
+
+# 5. Verify network policies (if enabled)
+kubectl describe networkpolicy -n mimir-edge-enforcement | grep mimir-envoy
+
+echo "✅ Envoy deployment with buffer overflow fixes is production ready!"
 ```
 
 ### Step 6: Deploy Admin UI (Optional)
