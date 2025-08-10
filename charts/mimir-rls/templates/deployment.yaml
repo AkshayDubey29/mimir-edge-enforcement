@@ -53,7 +53,7 @@ spec:
             # Tenant and request configuration
             - "--tenant-header={{ .Values.tenantHeader }}"
             - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
-            - "--max-request-bytes={{ .Values.limits.maxRequestBytes | default 4000000 }}"
+            - "--max-request-bytes={{ .Values.limits.maxRequestBytes | default 3000000 }}"
             - "--failure-mode-allow={{ .Values.limits.failureModeAllow | default false }}"
             
             # Default tenant limits
