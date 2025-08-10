@@ -14,7 +14,7 @@ import {
   Cell
 } from 'recharts';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
-import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Activity, Users, AlertTriangle, CheckCircle, BarChart3 } from 'lucide-react';
 
 // TypeScript interfaces for the API data
 interface OverviewStats {
@@ -33,9 +33,39 @@ interface TopTenant {
   deny_rate: number;
 }
 
+// New interfaces for flow validation metrics
+interface FlowMetrics {
+  nginx_requests: number;
+  nginx_route_direct: number;
+  nginx_route_edge: number;
+  envoy_requests: number;
+  envoy_authorized: number;
+  envoy_denied: number;
+  mimir_requests: number;
+  mimir_success: number;
+  mimir_errors: number;
+  response_times: {
+    nginx_to_envoy: number;
+    envoy_to_mimir: number;
+    total_flow: number;
+  };
+}
+
+interface FlowDataPoint {
+  timestamp: string;
+  nginx_requests: number;
+  route_direct: number;
+  route_edge: number;
+  envoy_requests: number;
+  mimir_requests: number;
+  success_rate: number;
+}
+
 interface OverviewData {
   stats: OverviewStats;
   top_tenants: TopTenant[];
+  flow_metrics: FlowMetrics;
+  flow_timeline: FlowDataPoint[];
 }
 
 interface TenantMetrics {
@@ -97,7 +127,7 @@ export function Overview() {
           <div className="text-sm text-gray-500">
             {error instanceof Error ? error.message : 'Unknown error occurred'}
           </div>
-          <button 
+          <button
             onClick={() => window.location.reload()} 
             className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
           >
@@ -117,7 +147,7 @@ export function Overview() {
     );
   }
 
-  const { stats, top_tenants } = overviewData;
+  const { stats, top_tenants, flow_metrics, flow_timeline } = overviewData;
 
   // Prepare chart data
   const requestData = [
@@ -264,6 +294,120 @@ export function Overview() {
         </Card>
       </div>
 
+      {/* End-to-End Flow Metrics */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">NGINX Requests</CardTitle>
+            <Activity className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics.nginx_requests.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              Direct: {flow_metrics.nginx_route_direct.toLocaleString()} | Edge: {flow_metrics.nginx_route_edge.toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Envoy Processing</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics.envoy_requests.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              Authorized: {flow_metrics.envoy_authorized.toLocaleString()} | Denied: {flow_metrics.envoy_denied.toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Mimir Success</CardTitle>
+            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{flow_metrics.mimir_success.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              Success Rate: {((flow_metrics.mimir_success / flow_metrics.mimir_requests) * 100).toFixed(1)}%
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Flow Timeline Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>End-to-End Flow Timeline</CardTitle>
+          <CardDescription>Real-time request flow through NGINX → Envoy → Mimir</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={flow_timeline}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="timestamp" 
+                tickFormatter={(value) => new Date(value).toLocaleTimeString()}
+              />
+              <YAxis />
+              <Tooltip 
+                labelFormatter={(value) => new Date(value).toLocaleString()}
+                formatter={(value: any, name: string) => [
+                  value.toLocaleString(), 
+                  name === 'nginx_requests' ? 'NGINX Requests' :
+                  name === 'route_direct' ? 'Direct Route' :
+                  name === 'route_edge' ? 'Edge Route' :
+                  name === 'envoy_requests' ? 'Envoy Requests' :
+                  name === 'mimir_requests' ? 'Mimir Requests' :
+                  name === 'success_rate' ? 'Success Rate %' : name
+                ]}
+              />
+              <Bar dataKey="nginx_requests" fill="#3b82f6" name="NGINX Requests" />
+              <Bar dataKey="route_direct" fill="#10b981" name="Direct Route" />
+              <Bar dataKey="route_edge" fill="#f59e0b" name="Edge Route" />
+              <Bar dataKey="envoy_requests" fill="#8b5cf6" name="Envoy Requests" />
+              <Bar dataKey="mimir_requests" fill="#ef4444" name="Mimir Requests" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* Response Times Chart */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Response Times</CardTitle>
+          <CardDescription>Latency breakdown across the request flow</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={[
+              {
+                name: 'NGINX → Envoy',
+                time: flow_metrics.response_times.nginx_to_envoy,
+                color: '#3b82f6'
+              },
+              {
+                name: 'Envoy → Mimir',
+                time: flow_metrics.response_times.envoy_to_mimir,
+                color: '#8b5cf6'
+              },
+              {
+                name: 'Total Flow',
+                time: flow_metrics.response_times.total_flow,
+                color: '#ef4444'
+              }
+            ]}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value: any) => [`${value}ms`, 'Response Time']} />
+              <Bar dataKey="time" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
       {/* Top Tenants Table */}
       <Card>
         <CardHeader>
@@ -351,8 +495,39 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
     ];
   }
   
+  // Generate mock flow metrics for now (will be replaced with real API calls)
+  const flow_metrics: FlowMetrics = {
+    nginx_requests: 1250,
+    nginx_route_direct: 1125,
+    nginx_route_edge: 125,
+    envoy_requests: 125,
+    envoy_authorized: 118,
+    envoy_denied: 7,
+    mimir_requests: 1243,
+    mimir_success: 1238,
+    mimir_errors: 5,
+    response_times: {
+      nginx_to_envoy: 45,
+      envoy_to_mimir: 120,
+      total_flow: 165
+    }
+  };
+
+  // Generate mock flow timeline data
+  const flow_timeline: FlowDataPoint[] = Array.from({ length: 10 }, (_, i) => ({
+    timestamp: new Date(Date.now() - (9 - i) * 60000).toISOString(),
+    nginx_requests: Math.floor(Math.random() * 200) + 100,
+    route_direct: Math.floor(Math.random() * 180) + 90,
+    route_edge: Math.floor(Math.random() * 20) + 10,
+    envoy_requests: Math.floor(Math.random() * 20) + 10,
+    mimir_requests: Math.floor(Math.random() * 200) + 100,
+    success_rate: Math.floor(Math.random() * 10) + 95
+  }));
+
   return {
     stats: overviewData.stats,
-    top_tenants: topTenants
+    top_tenants: topTenants,
+    flow_metrics,
+    flow_timeline
   };
 } 
