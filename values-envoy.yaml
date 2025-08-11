@@ -66,7 +66,7 @@ resourceLimits:
 
 # Image configuration
 image:
-  repository: ghcr.io/AkshayDubey29/mimir-envoy
+  repository: ghcr.io/akshaydubey29/mimir-envoy
   tag: "latest"
   pullPolicy: IfNotPresent
 

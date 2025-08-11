@@ -2,7 +2,7 @@
 
 # Variables
 VERSION ?= $(shell git describe --tags --always --dirty)
-REGISTRY ?= ghcr.io/AkshayDubey29
+REGISTRY ?= ghcr.io/akshaydubey29
 GO_VERSION ?= 1.22
 NODE_VERSION ?= 20
 
