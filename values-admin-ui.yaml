@@ -9,9 +9,9 @@ fullnameOverride: ""
 
 # Image configuration
 image:
-  repository: ghcr.io/AkshayDubey29/mimir-edge-admin
+  repository: ghcr.io/akshaydubey29/mimir-admin-ui
   tag: "latest"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # Service configuration
 service:

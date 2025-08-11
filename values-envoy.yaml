@@ -34,10 +34,10 @@ rls:
 # 🔧 DEBUG: External authorization configuration with debugging
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB
-  failureModeAllow: true    # 🔧 DEBUG: Set to true to allow requests when gRPC fails
+  failureModeAllow: false   # 🔧 FIX: Set to false to block requests when gRPC fails (SECURITY)
   timeout: "10s"            # 🔧 DEBUG: Increased timeout for debugging
-  # 🔧 FIX: Temporarily disable body parsing to avoid snappy corruption issues
-  disableBodyParsing: true  # 🔧 DEBUG: Disable body parsing to avoid corruption
+  # 🔧 FIX: Enable body parsing to test series limits
+  disableBodyParsing: false  # 🔧 DEBUG: Enable body parsing to test series limits
 
 # Rate limiting configuration
 rateLimit:

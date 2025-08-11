@@ -1,5 +1,5 @@
-# Overrides-Sync Values with Debugging Configuration
-# Use this file for deploying Overrides-Sync with enhanced debugging and monitoring
+# Overrides-Sync Values with Real-Time Synchronization
+# Use this file for deploying Overrides-Sync with real-time updates
 
 # Deployment configuration
 replicaCount: 1
@@ -9,7 +9,7 @@ fullnameOverride: ""
 
 # Image configuration
 image:
-  repository: ghcr.io/AkshayDubey29/mimir-overrides-sync
+  repository: ghcr.io/akshaydubey29/mimir-overrides-sync
   tag: "latest"
   pullPolicy: IfNotPresent
 
@@ -19,7 +19,7 @@ service:
   port: 9090  # 🔧 FIX: Match the default metrics port in the application
   annotations: {}
 
-# 🔧 DEBUG: Enhanced resource configuration for debugging
+# 🔧 OPTIMIZED: Enhanced resource configuration for real-time sync
 resources:
   limits:
     cpu: 500m
@@ -44,11 +44,12 @@ podSecurityContext:
   runAsUser: 65532
   fsGroup: 65532
 
-# 🔧 DEBUG: Pod annotations for debugging
+# 🔧 OPTIMIZED: Pod annotations for real-time sync
 podAnnotations:
   debug: "true"
   logging: "debug"
   sync_debug: "true"
+  real_time_sync: "true"
 
 # Node selector
 nodeSelector: {}
@@ -75,7 +76,7 @@ rbac:
       resources: ["events"]
       verbs: ["create", "patch"]
 
-# 🔧 DEBUG: Enhanced logging configuration for troubleshooting
+# 🔧 OPTIMIZED: Enhanced logging configuration for real-time sync
 log:
   level: "debug"  # Set to debug for troubleshooting
   format: "json"
@@ -89,10 +90,10 @@ rls:
   host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
   adminPort: "8082"
 
-# 🔧 DEBUG: Polling configuration with debugging
-pollFallbackSeconds: 30
+# 🔧 OPTIMIZED: Real-time polling configuration for immediate updates
+pollFallbackSeconds: 2  # 🔧 FIX: Reduced to 2s for near real-time updates
 
-# 🔧 DEBUG: Additional environment variables for debugging
+# 🔧 OPTIMIZED: Additional environment variables for real-time sync
 env:
   - name: DEBUG
     value: "true"
@@ -100,24 +101,26 @@ env:
     value: "debug"
   - name: SYNC_DEBUG
     value: "true"
+  - name: REAL_TIME_SYNC
+    value: "true"
 
-# 🔧 DEBUG: Enhanced liveness and readiness probes
+# 🔧 OPTIMIZED: Enhanced liveness and readiness probes for real-time sync
 livenessProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 30
-  periodSeconds: 30
-  timeoutSeconds: 10
+  initialDelaySeconds: 10  # 🔧 OPTIMIZED: Reduced from 30s to 10s
+  periodSeconds: 10        # 🔧 OPTIMIZED: Reduced from 30s to 10s
+  timeoutSeconds: 5        # 🔧 OPTIMIZED: Reduced from 10s to 5s
   failureThreshold: 3
 
 readinessProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
+  initialDelaySeconds: 5   # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  periodSeconds: 5         # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  timeoutSeconds: 3        # 🔧 OPTIMIZED: Reduced from 5s to 3s
   failureThreshold: 3
 
 # Startup probe
@@ -125,10 +128,10 @@ startupProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 30
+  initialDelaySeconds: 5   # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  periodSeconds: 5         # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  timeoutSeconds: 3        # 🔧 OPTIMIZED: Reduced from 5s to 3s
+  failureThreshold: 10     # 🔧 OPTIMIZED: Reduced from 30 to 10
 
 # Horizontal Pod Autoscaler
 hpa:
@@ -146,15 +149,15 @@ pdb:
 # Service Monitor for Prometheus
 serviceMonitor:
   enabled: true
-  interval: 30s
-  scrapeTimeout: 10s
+  interval: 10s            # 🔧 OPTIMIZED: Reduced from 30s to 10s
+  scrapeTimeout: 5s        # 🔧 OPTIMIZED: Reduced from 10s to 5s
   labels: {}
   annotations: {}
 
 # Image pull secrets
 imagePullSecrets: []
 
-# 🔧 DEBUG: Network Policy for debugging access
+# 🔧 OPTIMIZED: Network Policy for real-time sync access
 networkPolicy:
   enabled: true
   ingress:
@@ -185,10 +188,10 @@ networkPolicy:
       - protocol: UDP
         port: 53
 
-# 🔧 DEBUG: Additional configuration for debugging
+# 🔧 OPTIMIZED: Additional configuration for real-time sync
 config:
-  # Debug mode
-  debug: true
+  # Real-time mode
+  realTimeSync: true
   
   # Enhanced error reporting
   errorReporting: true
@@ -198,3 +201,11 @@ config:
   
   # Connection pooling (already configured in controller)
   connectionPooling: true
+  
+  # 🔧 OPTIMIZED: Real-time sync settings
+  sync:
+    watchTimeout: "5s"           # 🔧 OPTIMIZED: Reduced from 30s to 5s
+    retryDelay: "1s"             # 🔧 OPTIMIZED: Reduced from 5s to 1s
+    maxRetries: 3                # 🔧 OPTIMIZED: Reduced from 5 to 3
+    batchSize: 10                # 🔧 OPTIMIZED: Process tenants in batches
+    parallelSync: true           # 🔧 OPTIMIZED: Enable parallel tenant sync
