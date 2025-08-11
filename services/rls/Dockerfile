@@ -1,9 +1,8 @@
 # Runtime stage - minimal distroless image
 FROM gcr.io/distroless/static:nonroot
 
-# Architecture-aware binary copy
-ARG TARGETARCH
-COPY rls-${TARGETARCH} /usr/local/bin/rls
+# Copy the built binary
+COPY rls /usr/local/bin/rls
 
 # Expose ports
 EXPOSE 8080 8081 8082 9090
