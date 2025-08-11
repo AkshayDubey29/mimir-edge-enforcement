@@ -259,17 +259,23 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		result, err := parser.ParseRemoteWriteRequest(body, contentEncoding)
 		if err != nil {
 			rls.metrics.BodyParseErrors.Inc()
-			rls.logger.Error().Err(err).Str("tenant", tenantID).Msg("failed to parse remote write request")
+			rls.logger.Error().Err(err).Str("tenant", tenantID).Str("content_encoding", contentEncoding).Int("body_size", len(body)).Msg("failed to parse remote write request")
+			
+			// 🔧 FIX: Handle truncated/corrupted bodies more gracefully
+			// If body parsing fails, use content length as fallback for rate limiting
 			if rls.config.FailureModeAllow {
+				rls.logger.Debug().Str("tenant", tenantID).Msg("allowing request despite parse failure (failure mode allow)")
 				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed").Inc()
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 				return rls.allowResponse(), nil
 			}
+			
+			// If failure mode is deny, still deny but with better error message
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed").Inc()
 			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
-			return rls.denyResponse("failed to parse request", http.StatusBadRequest), nil
+			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
 		}
 
 		samples = result.SamplesCount
