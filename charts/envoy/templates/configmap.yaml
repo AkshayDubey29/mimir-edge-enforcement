@@ -79,6 +79,8 @@ data:
                       ext_authz_status="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:status)%"
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
+                      route_name="%ROUTE_NAME%"
+                      cluster_name="%UPSTREAM_CLUSTER%"
               http_filters:
               # 🔧 FIX: Re-enabled ext_authz filter with improved gRPC configuration
               - name: envoy.filters.http.ext_authz
@@ -97,7 +99,7 @@ data:
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
-                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
+                      # 🔧 FIX: Remove authority field - it should only be in cluster config
                     timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               # 🔧 FIX: Re-enabled rate limit filter with improved gRPC configuration
               - name: envoy.filters.http.ratelimit
@@ -276,6 +278,10 @@ data:
                 # 🔧 DEBUG: Add more detailed HTTP/2 settings
                 initial_stream_window_size: 65536
                 initial_connection_window_size: 1048576
+                # 🔧 FIX: Add authority for proper gRPC routing
+                hpack_table_size: 4096
+                max_outbound_frames: 10000
+                max_outbound_control_frames: 1000
 
         # 🔧 TEMPORARILY DISABLED: gRPC health checks to isolate 499 issue
         # health_checks:
@@ -302,6 +308,7 @@ data:
                   socket_address:
                     address: {{ .Values.rls.host }}
                     port_value: {{ .Values.rls.extAuthzPort | int }}
+
 
       - name: rls_ratelimit
         connect_timeout: 5s
