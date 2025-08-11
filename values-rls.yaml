@@ -18,9 +18,9 @@ limits:
   # 🔧 DEBUG: Fixed maxRequestBytes to prevent scientific notation error
   maxRequestBytes: "4194304"  # 4 MiB - quoted string to force literal value
   maxBodyBytes: 0             # 0 means no default body size cap
-  failureModeAllow: false     # 🔴 SECURITY: Fail closed for security
-  defaultSamplesPerSecond: 0  # 0 means no default cap; limits must come from ConfigMap
-  defaultBurstPercent: 0      # unused until samples_per_second > 0
+  failureModeAllow: true      # 🔧 DEBUG: Set to true to allow requests when gRPC fails
+  defaultSamplesPerSecond: 10000  # 🔧 DEBUG: Set default rate limit for testing
+  defaultBurstPercent: 0.2    # 🔧 DEBUG: Set default burst allowance
   enforceBodyParsing: true    # parsing enabled for metrics/visibility
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048
