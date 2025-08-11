@@ -1,5 +1,5 @@
-# Envoy Proxy Values with Debugging Configuration
-# Use this file for deploying Envoy with enhanced debugging and monitoring
+# Envoy Proxy Values - Production Configuration
+# Use this file for deploying Envoy in production with optimized settings
 
 # Deployment configuration
 replicaCount: 1
@@ -31,34 +31,33 @@ rls:
   extAuthzPort: 8080
   rateLimitPort: 8081
 
-# 🔧 DEBUG: External authorization configuration with debugging
+# External authorization configuration - Production
 extAuthz:
-  maxRequestBytes: 4194304  # 4 MiB
-  failureModeAllow: false   # 🔧 FIX: Set to false to block requests when gRPC fails (SECURITY)
-  timeout: "10s"            # 🔧 DEBUG: Increased timeout for debugging
-  # 🔧 FIX: Enable body parsing to test series limits
-  disableBodyParsing: false  # 🔧 DEBUG: Enable body parsing to test series limits
+  maxRequestBytes: 10485760  # 10 MiB - Increased for large Alloy payloads
+  failureModeAllow: false    # Production: Deny requests when gRPC fails (SECURITY)
+  timeout: "5s"              # Production: Optimized timeout
+  disableBodyParsing: false  # Production: Enable body parsing for limit enforcement
 
-# Rate limiting configuration
+# Rate limiting configuration - Production
 rateLimit:
-  failureModeDeny: false    # 🔧 DEBUG: Set to false to allow requests when gRPC fails
+  failureModeDeny: false    # Production: Allow requests when rate limit service fails
   domain: "mimir_remote_write"
-  grpcTimeout: "5s"         # 🔧 DEBUG: Increased timeout for debugging
+  grpcTimeout: "3s"         # Production: Optimized timeout
 
-# Proxy configuration
+# Proxy configuration - Production
 proxy:
-  upstreamTimeout: "60s"  # 🔧 FIX: Increased timeout for large metric payloads
+  upstreamTimeout: "30s"  # Production: Optimized timeout for metric payloads
   httpProtocol:
     acceptHttp10: true
     useRemoteAddress: true
     xffNumTrustedHops: 1
 
-# 🔧 DEBUG: Enhanced logging configuration for troubleshooting
+# Logging configuration - Production
 logging:
-  level: "trace"                # 🔧 DEBUG: Set to trace for maximum debugging
-  enableAccessLogs: true        # Enable HTTP access logs
-  enableDebugLogs: true         # Enable debug logging for filters
-  enableDetailedLogs: true      # 🔧 DEBUG: Enable detailed filter logs
+  level: "info"                 # Production: Info level for performance
+  enableAccessLogs: true        # Production: Enable HTTP access logs
+  enableDebugLogs: false        # Production: Disable debug logging for performance
+  enableDetailedLogs: false     # Production: Disable detailed logs for performance
 
 # Resource limits and overload management
 resourceLimits:
@@ -81,11 +80,11 @@ serviceAccount:
   annotations: {}
   name: ""
 
-# 🔧 DEBUG: Pod annotations for debugging
+# Pod annotations - Production
 podAnnotations:
-  debug: "true"
-  logging: "debug"
-  ext_authz_debug: "true"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9901"
+  prometheus.io/path: "/stats/prometheus"
 
 # Pod security context
 podSecurityContext:
@@ -103,14 +102,14 @@ securityContext:
     drop:
       - ALL
 
-# 🔧 DEBUG: Enhanced resource configuration for debugging
+# Resource configuration - Production
 resources:
   limits:
-    cpu: 1000m
-    memory: 512Mi
+    cpu: 2000m
+    memory: 1Gi
   requests:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
 
 # Node selector
 nodeSelector: {}
@@ -134,9 +133,9 @@ pdb:
   enabled: true
   minAvailable: 1
 
-# Service Monitor for Prometheus
+# Service Monitor for Prometheus - Production
 serviceMonitor:
-  enabled: false  # 🔧 DEBUG: Disabled for testing without Prometheus Operator
+  enabled: true   # Production: Enable for monitoring
   interval: 30s
   scrapeTimeout: 10s
   labels: {}
