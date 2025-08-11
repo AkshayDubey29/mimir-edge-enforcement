@@ -79,39 +79,6 @@ data:
                       ext_authz_status="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:status)%"
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
-              route_config:
-                name: local_route
-                virtual_hosts:
-                - name: local_service
-                  domains: ["*"]
-                  routes:
-                  - match:
-                      prefix: "{{ .Values.remoteWrite.path }}"
-                    route:
-                      cluster: mimir_distributor
-                      timeout: {{ .Values.proxy.upstreamTimeout }}
-                  # 🔧 DEBUG: Debug endpoint for troubleshooting
-                  - match:
-                      prefix: "/debug"
-                    direct_response:
-                      status: 200
-                      body:
-                        inline_string: |
-                          Envoy Debug Info:
-                          - Remote Write Path: {{ .Values.remoteWrite.path }}
-                          - RLS Host: {{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}
-                          - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
-                          - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
-                          - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
-                          - Ext Authz Filter: ENABLED
-                          - Rate Limit Filter: ENABLED
-                  # 🔧 DEBUG: Catch-all route for debugging (returns 404 for unmatched paths)
-                  - match:
-                      prefix: "/"
-                    direct_response:
-                      status: 404
-                      body:
-                        inline_string: "Path not found. Expected: {{ .Values.remoteWrite.path }}"
               http_filters:
               - name: envoy.filters.http.ext_authz
                 typed_config:
@@ -152,6 +119,39 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
                   dynamic_stats: true
+              route_config:
+                name: local_route
+                virtual_hosts:
+                - name: local_service
+                  domains: ["*"]
+                  routes:
+                  - match:
+                      prefix: "{{ .Values.remoteWrite.path }}"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  # 🔧 DEBUG: Debug endpoint for troubleshooting
+                  - match:
+                      prefix: "/debug"
+                    direct_response:
+                      status: 200
+                      body:
+                        inline_string: |
+                          Envoy Debug Info:
+                          - Remote Write Path: {{ .Values.remoteWrite.path }}
+                          - RLS Host: {{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}
+                          - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
+                          - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
+                          - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
+                          - Ext Authz Filter: ENABLED
+                          - Rate Limit Filter: ENABLED
+                  # 🔧 DEBUG: Catch-all route for debugging (returns 404 for unmatched paths)
+                  - match:
+                      prefix: "/"
+                    direct_response:
+                      status: 404
+                      body:
+                        inline_string: "Path not found. Expected: {{ .Values.remoteWrite.path }}"
 
       clusters:
       - name: mimir_distributor

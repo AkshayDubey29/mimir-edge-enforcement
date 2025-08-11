@@ -18,7 +18,7 @@ spec:
       annotations:
         {{- if .Values.serviceMonitor.enabled }}
         prometheus.io/scrape: "true"
-        prometheus.io/port: "{{ .Values.service.port }}"
+        prometheus.io/port: "9901"
         prometheus.io/path: "/stats"
         {{- end }}
         {{- with .Values.podAnnotations }}
