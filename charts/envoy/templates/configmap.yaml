@@ -135,6 +135,7 @@ data:
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
+
                   
                   # 🔧 FIX: Prometheus query endpoints (read operations)
                   - match:
