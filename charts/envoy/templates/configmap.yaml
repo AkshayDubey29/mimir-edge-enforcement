@@ -80,6 +80,8 @@ data:
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
                       ext_authz_metadata="%DYNAMIC_METADATA(envoy.filters.http.ext_authz)%"
+                      ext_authz_ok="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:ok)%"
+                      ext_authz_all_metadata="%DYNAMIC_METADATA(envoy.filters.http.ext_authz)%"
                       route_name="%ROUTE_NAME%"
                       cluster_name="%UPSTREAM_CLUSTER%"
                       request_headers="%REQ(ALL)%"
