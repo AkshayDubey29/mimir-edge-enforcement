@@ -522,20 +522,20 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 // extractTenantID extracts the tenant ID from the request headers
 func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string {
 	headers := req.Attributes.Request.Http.Headers
-	
+
 	// 🔧 DEBUG: Log all headers to see what's being received
 	rls.logger.Debug().
 		Interface("all_headers", headers).
 		Str("tenant_header", rls.config.TenantHeader).
 		Str("tenant_value", headers[rls.config.TenantHeader]).
 		Msg("RLS: DEBUG - Extracting tenant ID from headers")
-	
+
 	// 🔧 FIX: Case-insensitive header lookup
 	// Try exact match first
 	if value, exists := headers[rls.config.TenantHeader]; exists && value != "" {
 		return value
 	}
-	
+
 	// Try lowercase version (Envoy converts headers to lowercase)
 	lowercaseHeader := strings.ToLower(rls.config.TenantHeader)
 	if value, exists := headers[lowercaseHeader]; exists && value != "" {
@@ -546,14 +546,14 @@ func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string 
 			Msg("RLS: DEBUG - Found tenant header using lowercase lookup")
 		return value
 	}
-	
+
 	// Try common variations
 	variations := []string{
 		strings.ToLower(rls.config.TenantHeader),
 		strings.ToUpper(rls.config.TenantHeader),
 		strings.Title(strings.ToLower(rls.config.TenantHeader)),
 	}
-	
+
 	for _, variation := range variations {
 		if value, exists := headers[variation]; exists && value != "" {
 			rls.logger.Debug().
@@ -564,7 +564,7 @@ func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string 
 			return value
 		}
 	}
-	
+
 	return ""
 }
 
