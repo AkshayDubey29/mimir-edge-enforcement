@@ -134,7 +134,7 @@ pdb:
 
 # Service Monitor for Prometheus
 serviceMonitor:
-  enabled: true
+  enabled: false  # 🔧 DEBUG: Disabled for testing without Prometheus Operator
   interval: 30s
   scrapeTimeout: 10s
   labels: {}

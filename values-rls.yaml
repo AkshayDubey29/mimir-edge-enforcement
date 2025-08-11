@@ -4,6 +4,7 @@
 # Service configuration
 service:
   type: ClusterIP
+  port: 8082  # Main service port (admin API)
   ports:
     extAuthz: 8080
     rateLimit: 8081

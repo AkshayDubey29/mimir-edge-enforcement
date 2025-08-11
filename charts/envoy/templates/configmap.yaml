@@ -171,6 +171,31 @@ data:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
                   
+                  # 🔧 FIX: RLS Admin API endpoints (must come before Mimir admin endpoints)
+                  - match:
+                      prefix: "/api/tenants"
+                    route:
+                      cluster: rls_admin
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/api/traffic"
+                    route:
+                      cluster: rls_admin
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/api/limits"
+                    route:
+                      cluster: rls_admin
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/api/debug"
+                    route:
+                      cluster: rls_admin
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
                   # 🔧 FIX: Mimir admin endpoints
                   - match:
                       prefix: "/api/v1/status"
@@ -221,6 +246,10 @@ data:
                           - Configured Routes:
                             * {{ .Values.remoteWrite.path }} (Remote Write)
                             * /prometheus/api/v1/query* (Prometheus Queries)
+                            * /api/tenants* (RLS Admin API)
+                            * /api/traffic* (RLS Admin API)
+                            * /api/limits* (RLS Admin API)
+                            * /api/debug* (RLS Admin API)
                             * /api/v1/status* (Mimir Admin)
                             * /ready, /healthy (Health Checks)
                             * / (Catch-all for other endpoints)
@@ -275,6 +304,46 @@ data:
                   socket_address:
                     address: {{ .Values.mimir.distributorHost }}
                     port_value: {{ .Values.mimir.distributorPort | int }}
+
+      # 🔧 FIX: RLS Admin API cluster for HTTP endpoints
+      - name: rls_admin
+        connect_timeout: 5s
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
+        # 🔧 FIX: Use HTTP/1.1 for RLS admin API
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            explicit_http_config:
+              http_protocol_options: {}  # HTTP/1.1
+        # 🔧 FIX: Add health checks for RLS admin service
+        health_checks:
+        - timeout: 5s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/readyz"
+            expected_statuses:
+            - start: 200
+              end: 299
+        # 🔧 FIX: Configure connection pool for reliability
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 50
+            max_pending_requests: 25
+            max_requests: 100
+            max_retries: 3
+        load_assignment:
+          cluster_name: rls_admin
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: {{ .Values.rls.host }}
+                    port_value: 8082  # RLS admin port
 
       - name: rls_ext_authz
         connect_timeout: 5s
