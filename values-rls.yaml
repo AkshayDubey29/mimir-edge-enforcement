@@ -22,7 +22,7 @@ limits:
   failureModeAllow: true      # 🔧 DEBUG: Set to true to allow requests when gRPC fails
   defaultSamplesPerSecond: 10000  # 🔧 DEBUG: Set default rate limit for testing
   defaultBurstPercent: 0.2    # 🔧 DEBUG: Set default burst allowance
-  enforceBodyParsing: true    # parsing enabled for metrics/visibility
+  enforceBodyParsing: false   # 🔧 FIX: Disabled to avoid snappy corruption issues
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048
   defaultMaxSeriesPerRequest: 100000

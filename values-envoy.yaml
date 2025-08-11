@@ -36,6 +36,8 @@ extAuthz:
   maxRequestBytes: 4194304  # 4 MiB
   failureModeAllow: true    # 🔧 DEBUG: Set to true to allow requests when gRPC fails
   timeout: "10s"            # 🔧 DEBUG: Increased timeout for debugging
+  # 🔧 FIX: Temporarily disable body parsing to avoid snappy corruption issues
+  disableBodyParsing: true  # 🔧 DEBUG: Disable body parsing to avoid corruption
 
 # Rate limiting configuration
 rateLimit:

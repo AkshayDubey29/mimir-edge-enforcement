@@ -97,9 +97,11 @@ data:
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
                   transport_api_version: V3
+                  {{- if not .Values.extAuthz.disableBodyParsing }}
                   with_request_body:
                     max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
                     allow_partial_message: true
+                  {{- end }}
                   failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
                   include_peer_certificate: true
                   metadata_context_namespaces:

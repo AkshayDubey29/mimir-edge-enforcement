@@ -27,6 +27,11 @@ func ParseRemoteWriteRequest(body []byte, contentEncoding string) (*ParseResult,
 		return &ParseResult{SamplesCount: 0, SeriesCount: 0, LabelsCount: 0}, nil
 	}
 
+	// 🔧 FIX: Check for potentially truncated bodies
+	if contentEncoding == "snappy" && len(body) < 10 {
+		return nil, fmt.Errorf("snappy body too small (%d bytes), likely truncated", len(body))
+	}
+
 	// Decompress based on content encoding
 	decompressed, err := decompress(body, contentEncoding)
 	if err != nil {
@@ -73,7 +78,8 @@ func decompress(body []byte, contentEncoding string) ([]byte, error) {
 	case "snappy":
 		decompressed, err := snappy.Decode(nil, body)
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode snappy data: %w", err)
+			// 🔧 FIX: Provide more detailed error information for debugging
+			return nil, fmt.Errorf("failed to decode snappy data (body size: %d bytes): %w", len(body), err)
 		}
 		return decompressed, nil
 
