@@ -70,6 +70,8 @@ type RequestInfo struct {
 	ObservedSamples  int64
 	ObservedSeries   int64
 	ObservedLabels   int64
+	MaxLabelsPerSeries int64 // Maximum labels found in any single series
+	MaxLabelValueLength int64 // Maximum label value length found
 }
 
 // Decision represents the result of an authorization check
