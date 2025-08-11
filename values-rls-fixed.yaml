@@ -2,7 +2,7 @@
 limits:
   maxRequestBytes: "4194304"  # Fixed: Use quoted string to force literal value (4 MiB)
   maxBodyBytes: 0
-  failureModeAllow: false
+  failureModeAllow: true  # 🔧 TEMPORARY: Enable to work around data corruption issue
   defaultSamplesPerSecond: 0
   defaultBurstPercent: 0
   enforceBodyParsing: true

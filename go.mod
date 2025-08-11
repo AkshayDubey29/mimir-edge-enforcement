@@ -4,8 +4,9 @@ go 1.22
 
 require (
 	github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus v0.0.0
+	github.com/golang/snappy v0.0.4
 	github.com/rs/zerolog v1.34.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.36.7
 	gopkg.in/yaml.v2 v2.4.0
 )
 

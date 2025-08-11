@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/snappy"
 	"google.golang.org/protobuf/proto"
 
 	prompb "github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus"
@@ -85,6 +86,7 @@ func sendRequest(client *http.Client, workerID, requestID int) {
 	// Compress if needed
 	var body bytes.Buffer
 	var contentType string
+	var contentEncoding string
 	switch *compression {
 	case "gzip":
 		gw := gzip.NewWriter(&body)
@@ -94,18 +96,16 @@ func sendRequest(client *http.Client, workerID, requestID int) {
 		}
 		gw.Close()
 		contentType = "application/x-protobuf"
+		contentEncoding = "gzip"
 	case "snappy":
-		// For simplicity, we'll use gzip as snappy
-		gw := gzip.NewWriter(&body)
-		if _, err := gw.Write(data); err != nil {
-			log.Printf("Failed to compress data: %v", err)
-			return
-		}
-		gw.Close()
+		compressed := snappy.Encode(nil, data)
+		body.Write(compressed)
 		contentType = "application/x-protobuf"
+		contentEncoding = "snappy"
 	default:
 		body.Write(data)
 		contentType = "application/x-protobuf"
+		contentEncoding = ""
 	}
 
 	// Create request
@@ -118,8 +118,8 @@ func sendRequest(client *http.Client, workerID, requestID int) {
 	// Set headers
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Scope-OrgID", *tenantID)
-	if *compression == "gzip" || *compression == "snappy" {
-		req.Header.Set("Content-Encoding", "gzip")
+	if contentEncoding != "" {
+		req.Header.Set("Content-Encoding", contentEncoding)
 	}
 
 	// Send request
