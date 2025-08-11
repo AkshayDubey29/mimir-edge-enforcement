@@ -2256,17 +2256,65 @@ func (rls *RLS) GetDebugTrafficFlow() map[string]interface{} {
 
 // Cardinality dashboard methods
 func (rls *RLS) GetCardinalityData(timeRange, tenant string) limits.CardinalityData {
-	// For now, return mock data - this would be replaced with real aggregation
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+
+	// Calculate real metrics from actual data
+	totalSeries := int64(0)
+	totalLabels := int64(0)
+	maxSeriesInRequest := int64(0)
+	maxLabelsInSeries := int64(0)
+	cardinalityViolations := int64(0)
+	totalRequests := int64(0)
+	requestCount := int64(0)
+
+	// Aggregate data from recent denials
+	for _, denial := range rls.recentDenials {
+		totalSeries += denial.ObservedSeries
+		totalLabels += denial.ObservedLabels
+		requestCount++
+		
+		if denial.ObservedSeries > maxSeriesInRequest {
+			maxSeriesInRequest = denial.ObservedSeries
+		}
+		if denial.ObservedLabels > maxLabelsInSeries {
+			maxLabelsInSeries = denial.ObservedLabels
+		}
+		
+		if denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded" {
+			cardinalityViolations++
+		}
+	}
+
+	// Count total requests from counters
+	for _, counter := range rls.counters {
+		totalRequests += counter.Total
+	}
+
+	// Calculate averages
+	avgSeriesPerRequest := 0.0
+	avgLabelsPerSeries := 0.0
+	violationRate := 0.0
+	
+	if requestCount > 0 {
+		avgSeriesPerRequest = float64(totalSeries) / float64(requestCount)
+		avgLabelsPerSeries = float64(totalLabels) / float64(requestCount)
+	}
+	
+	if totalRequests > 0 {
+		violationRate = float64(cardinalityViolations) / float64(totalRequests)
+	}
+
 	return limits.CardinalityData{
 		Metrics: limits.CardinalityMetrics{
-			TotalSeries:           1250000,
-			TotalLabels:           8500000,
-			AvgSeriesPerRequest:   45.2,
-			AvgLabelsPerSeries:    6.8,
-			MaxSeriesInRequest:    150000,
-			MaxLabelsInSeries:     85,
-			CardinalityViolations: 12,
-			ViolationRate:         0.02,
+			TotalSeries:           totalSeries,
+			TotalLabels:           totalLabels,
+			AvgSeriesPerRequest:   avgSeriesPerRequest,
+			AvgLabelsPerSeries:    avgLabelsPerSeries,
+			MaxSeriesInRequest:    maxSeriesInRequest,
+			MaxLabelsInSeries:     maxLabelsInSeries,
+			CardinalityViolations: cardinalityViolations,
+			ViolationRate:         violationRate,
 		},
 		Violations: rls.getCardinalityViolations(timeRange),
 		Trends:     rls.getCardinalityTrends(timeRange),
@@ -2318,18 +2366,79 @@ func (rls *RLS) getCardinalityViolations(timeRange string) []limits.CardinalityV
 }
 
 func (rls *RLS) getCardinalityTrends(timeRange string) []limits.CardinalityTrend {
-	// For now, return mock trends - this would be replaced with real time-series data
-	trends := make([]limits.CardinalityTrend, 24)
-	now := time.Now()
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
 
-	for i := 0; i < 24; i++ {
-		timestamp := now.Add(time.Duration(-23+i) * time.Hour)
+	// Parse time range
+	var duration time.Duration
+	switch timeRange {
+	case "1h":
+		duration = time.Hour
+	case "6h":
+		duration = 6 * time.Hour
+	case "24h":
+		duration = 24 * time.Hour
+	default:
+		duration = 24 * time.Hour
+	}
+
+	// Calculate number of buckets based on duration
+	numBuckets := 24 // Default to 24 buckets
+	if duration <= time.Hour {
+		numBuckets = 12 // 5-minute buckets for 1 hour
+	} else if duration <= 6*time.Hour {
+		numBuckets = 24 // 15-minute buckets for 6 hours
+	}
+
+	trends := make([]limits.CardinalityTrend, numBuckets)
+	now := time.Now()
+	bucketDuration := duration / time.Duration(numBuckets)
+
+	// Aggregate data from recent denials and counters
+	for i := 0; i < numBuckets; i++ {
+		bucketStart := now.Add(-duration + time.Duration(i)*bucketDuration)
+		bucketEnd := bucketStart.Add(bucketDuration)
+
+		// Count violations in this time bucket
+		violationCount := int64(0)
+		totalRequests := int64(0)
+		totalSeries := int64(0)
+		totalLabels := int64(0)
+		requestCount := int64(0)
+
+		// Count violations from denials
+		for _, denial := range rls.recentDenials {
+			if denial.Timestamp.After(bucketStart) && denial.Timestamp.Before(bucketEnd) {
+				if denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded" {
+					violationCount++
+				}
+				totalSeries += denial.ObservedSeries
+				totalLabels += denial.ObservedLabels
+				requestCount++
+			}
+		}
+
+		// Count total requests from counters
+		for _, counter := range rls.counters {
+			// For now, we'll estimate requests per bucket based on total
+			// In a real implementation, you'd store time-series data
+			totalRequests += counter.Total / int64(numBuckets)
+		}
+
+		// Calculate averages
+		avgSeriesPerRequest := 0.0
+		avgLabelsPerSeries := 0.0
+		if requestCount > 0 {
+			avgSeriesPerRequest = float64(totalSeries) / float64(requestCount)
+			avgLabelsPerSeries = float64(totalLabels) / float64(requestCount)
+		}
+
 		trends[i] = limits.CardinalityTrend{
-			Timestamp:           timestamp,
-			AvgSeriesPerRequest: 40 + float64(i%10),
-			AvgLabelsPerSeries:  5 + float64(i%5),
-			ViolationCount:      int64(i % 5),
-			TotalRequests:       1000 + int64(i*50),
+			Timestamp:           bucketStart,
+			AvgSeriesPerRequest: avgSeriesPerRequest,
+			AvgLabelsPerSeries:  avgLabelsPerSeries,
+			ViolationCount:      violationCount,
+			TotalRequests:       totalRequests,
 		}
 	}
 
@@ -2357,11 +2466,22 @@ func (rls *RLS) getTenantCardinality() []limits.TenantCardinality {
 			}
 		}
 
+		// Calculate real current series and labels for this tenant
+		currentSeries := int64(0)
+		currentLabels := int64(0)
+		
+		for _, denial := range rls.recentDenials {
+			if denial.TenantID == tenantID {
+				currentSeries += denial.ObservedSeries
+				currentLabels += denial.ObservedLabels
+			}
+		}
+
 		tc := limits.TenantCardinality{
 			TenantID:       tenantID,
 			Name:           tenant.Info.Name,
-			CurrentSeries:  450000,  // Mock data - would be real aggregation
-			CurrentLabels:  2800000, // Mock data - would be real aggregation
+			CurrentSeries:  currentSeries,
+			CurrentLabels:  currentLabels,
 			ViolationCount: violationCount,
 			LastViolation:  lastViolation,
 		}
