@@ -318,6 +318,17 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		writeJSON(w, http.StatusOK, debugInfo)
 	}).Methods("GET")
 
+	// 🔧 DEBUG: Add endpoint to check traffic flow state directly
+	router.HandleFunc("/api/debug/traffic-flow", func(w http.ResponseWriter, r *http.Request) {
+		log.Info().Msg("RLS: INFO - Debug traffic flow endpoint called")
+		
+		// Get traffic flow state using the public method
+		trafficFlow := rls.GetDebugTrafficFlow()
+		
+		log.Info().Interface("traffic_flow", trafficFlow).Msg("RLS: INFO - Traffic flow state")
+		writeJSON(w, http.StatusOK, trafficFlow)
+	}).Methods("GET")
+
 	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
 	// Routes are now only logged at debug level if needed
 
@@ -718,8 +729,15 @@ func handleTrafficFlow(rls *service.RLS) http.HandlerFunc {
 
 		log.Debug().Msg("handling /api/traffic/flow request")
 
+		// 🔧 DEBUG: Add debug logging before calling GetTrafficFlowData
+		log.Info().Msg("RLS: INFO - About to call GetTrafficFlowData")
+
 		// Get traffic flow data
 		trafficFlow := rls.GetTrafficFlowData()
+		
+		// 🔧 DEBUG: Add debug logging after calling GetTrafficFlowData
+		log.Info().Msg("RLS: INFO - GetTrafficFlowData completed successfully")
+		
 		writeJSON(w, http.StatusOK, trafficFlow)
 	}
 }
