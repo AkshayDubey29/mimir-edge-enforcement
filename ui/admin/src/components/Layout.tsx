@@ -10,7 +10,8 @@ import {
   Server,
   Database,
   Gauge,
-  BookOpen
+  BookOpen,
+  Shield
 } from 'lucide-react';
 import { Button } from './ui/button';
 
@@ -46,6 +47,7 @@ const navigation = [
   { name: 'Pipeline Status', href: '/pipeline', icon: Server },
   { name: 'Tenants', href: '/tenants', icon: Users },
   { name: 'Recent Denials', href: '/denials', icon: AlertTriangle },
+  { name: 'Cardinality Dashboard', href: '/cardinality', icon: Shield },
   { name: 'System Health', href: '/health', icon: Activity },
   { name: 'Metrics', href: '/metrics', icon: Gauge },
   { name: 'Wiki', href: '/wiki', icon: BookOpen },

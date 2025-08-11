@@ -101,8 +101,15 @@ export function Denials() {
                       </span>
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded">
+                      <span className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded ${
+                        denial.reason.includes('max_series') || denial.reason.includes('max_labels') 
+                          ? 'bg-purple-100 text-purple-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
                         {denial.reason}
+                        {(denial.reason.includes('max_series') || denial.reason.includes('max_labels')) && (
+                          <span className="ml-1 text-xs">(Cardinality)</span>
+                        )}
                       </span>
                     </td>
                     <td className="py-3 px-4 font-mono text-sm">

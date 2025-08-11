@@ -271,7 +271,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				fallbackBodyBytes := int64(len(req.Attributes.Request.Http.Body)) // Use raw body size
 				fallbackRequestInfo := &limits.RequestInfo{
 					ObservedSamples: fallbackSamples,
-					ObservedSeries:  1, // Assume 1 series
+					ObservedSeries:  1,  // Assume 1 series
 					ObservedLabels:  10, // Assume 10 labels
 				}
 
@@ -330,7 +330,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				fallbackBodyBytes := bodyBytes // Use actual body size
 				fallbackRequestInfo := &limits.RequestInfo{
 					ObservedSamples: fallbackSamples,
-					ObservedSeries:  1, // Assume 1 series
+					ObservedSeries:  1,  // Assume 1 series
 					ObservedLabels:  10, // Assume 10 labels
 				}
 
@@ -372,7 +372,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		}
 
 		samples = result.SamplesCount
-		
+
 		// 🔧 CARDINALITY CONTROL: Create request info with cardinality data
 		requestInfo = &limits.RequestInfo{
 			ObservedSamples: result.SamplesCount,
@@ -383,11 +383,11 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		// Use content length as a proxy for request size
 		bodyBytes = int64(len(req.Attributes.Request.Http.Body))
 		samples = 1 // Default to 1 sample if not parsing
-		
+
 		// 🔧 CARDINALITY CONTROL: Create fallback request info
 		requestInfo = &limits.RequestInfo{
 			ObservedSamples: samples,
-			ObservedSeries:  1, // Assume 1 series
+			ObservedSeries:  1,  // Assume 1 series
 			ObservedLabels:  10, // Assume 10 labels
 		}
 	}
