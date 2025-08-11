@@ -329,6 +329,12 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		writeJSON(w, http.StatusOK, trafficFlow)
 	}).Methods("GET")
 
+	// Cardinality dashboard endpoints
+	router.HandleFunc("/api/cardinality", handleCardinalityData(rls)).Methods("GET")
+	router.HandleFunc("/api/cardinality/violations", handleCardinalityViolations(rls)).Methods("GET")
+	router.HandleFunc("/api/cardinality/trends", handleCardinalityTrends(rls)).Methods("GET")
+	router.HandleFunc("/api/cardinality/alerts", handleCardinalityAlerts(rls)).Methods("GET")
+
 	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
 	// Routes are now only logged at debug level if needed
 
@@ -739,5 +745,98 @@ func handleTrafficFlow(rls *service.RLS) http.HandlerFunc {
 		log.Info().Msg("RLS: INFO - GetTrafficFlowData completed successfully")
 
 		writeJSON(w, http.StatusOK, trafficFlow)
+	}
+}
+
+// Cardinality dashboard handlers
+func handleCardinalityData(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleCardinalityData")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		// Get time range and tenant filter from query parameters
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "1h"
+		}
+		tenant := r.URL.Query().Get("tenant")
+		if tenant == "" {
+			tenant = "all"
+		}
+
+		// Get cardinality data
+		cardinalityData := rls.GetCardinalityData(timeRange, tenant)
+
+		writeJSON(w, http.StatusOK, cardinalityData)
+	}
+}
+
+func handleCardinalityViolations(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleCardinalityViolations")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		// Get time range from query parameter
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "1h"
+		}
+
+		// Get cardinality violations
+		violations := rls.GetCardinalityViolations(timeRange)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"violations": violations,
+		})
+	}
+}
+
+func handleCardinalityTrends(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleCardinalityTrends")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		// Get time range from query parameter
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "24h"
+		}
+
+		// Get cardinality trends
+		trends := rls.GetCardinalityTrends(timeRange)
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"trends": trends,
+		})
+	}
+}
+
+func handleCardinalityAlerts(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleCardinalityAlerts")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		// Get cardinality alerts
+		alerts := rls.GetCardinalityAlerts()
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"alerts": alerts,
+		})
 	}
 }

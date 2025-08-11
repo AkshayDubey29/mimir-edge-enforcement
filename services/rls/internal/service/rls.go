@@ -248,7 +248,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		// 🔧 FIX: Update traffic flow state even when enforcement is disabled
 		rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
 
-		rls.recordDecision(tenantID, true, "enforcement_disabled", 0, 0)
+		rls.recordDecision(tenantID, true, "enforcement_disabled", 0, 0, nil)
 		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 		return rls.allowResponse(), nil
 	}
@@ -284,7 +284,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
 					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-					rls.recordDecision(tenantID, false, "body_extract_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes)
+					rls.recordDecision(tenantID, false, "body_extract_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
 				}
 
@@ -293,7 +293,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-				rls.recordDecision(tenantID, true, "body_extract_failed_allow", fallbackSamples, fallbackBodyBytes)
+				rls.recordDecision(tenantID, true, "body_extract_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
@@ -305,7 +305,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
 
 			// 🔧 FIX: Record decision for body extraction failure (deny mode)
-			rls.recordDecision(tenantID, false, "body_extract_failed_deny", 0, 0)
+			rls.recordDecision(tenantID, false, "body_extract_failed_deny", 0, 0, nil)
 
 			return rls.denyResponse("failed to extract request body", http.StatusBadRequest), nil
 		}
@@ -343,7 +343,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
 					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-					rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes)
+					rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
 				}
 
@@ -352,7 +352,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-				rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes)
+				rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
@@ -366,7 +366,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
 
 			// 🔧 FIX: Record decision for parse failure (deny mode)
-			rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes)
+			rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes, nil)
 
 			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
 		}
@@ -423,7 +423,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		Str("tenant", tenantID).
 		Msg("RLS: INFO - Traffic flow state updated")
 
-	rls.recordDecision(tenantID, decision.Allowed, decision.Reason, samples, bodyBytes)
+	rls.recordDecision(tenantID, decision.Allowed, decision.Reason, samples, bodyBytes, requestInfo)
 	rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 
 	// Update bucket metrics
@@ -445,7 +445,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 }
 
 // recordDecision updates in-memory counters and recent denials for admin API
-func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, samples int64, bodyBytes int64) {
+func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, samples int64, bodyBytes int64, requestInfo *limits.RequestInfo) {
 	// 🔧 DEBUG: Add logging to track decision recording
 	rls.logger.Info().
 		Str("tenant", tenantID).
@@ -474,7 +474,20 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 	} else {
 		c.Denied++
 		// 🔧 PERFORMANCE FIX: Use ring buffer for recent denials to avoid array resizing
-		di := limits.DenialInfo{TenantID: tenantID, Reason: reason, Timestamp: time.Now(), ObservedSamples: samples, ObservedBodyBytes: bodyBytes}
+		di := limits.DenialInfo{
+			TenantID:          tenantID,
+			Reason:            reason,
+			Timestamp:         time.Now(),
+			ObservedSamples:   samples,
+			ObservedBodyBytes: bodyBytes,
+		}
+
+		// Add cardinality data if available
+		if requestInfo != nil {
+			di.ObservedSeries = requestInfo.ObservedSeries
+			di.ObservedLabels = requestInfo.ObservedLabels
+		}
+
 		rls.recentDenials = append(rls.recentDenials, di)
 		// Keep only last 500 denials to prevent memory growth
 		if len(rls.recentDenials) > 500 {
@@ -2239,4 +2252,154 @@ func (rls *RLS) GetDebugTrafficFlow() map[string]interface{} {
 		"rls_to_mimir_requests": rls.trafficFlow.RLSToMimirRequests,
 		"total_requests":        rls.trafficFlow.TotalRequests,
 	}
+}
+
+// Cardinality dashboard methods
+func (rls *RLS) GetCardinalityData(timeRange, tenant string) limits.CardinalityData {
+	// For now, return mock data - this would be replaced with real aggregation
+	return limits.CardinalityData{
+		Metrics: limits.CardinalityMetrics{
+			TotalSeries:           1250000,
+			TotalLabels:           8500000,
+			AvgSeriesPerRequest:   45.2,
+			AvgLabelsPerSeries:    6.8,
+			MaxSeriesInRequest:    150000,
+			MaxLabelsInSeries:     85,
+			CardinalityViolations: 12,
+			ViolationRate:         0.02,
+		},
+		Violations: rls.getCardinalityViolations(timeRange),
+		Trends:     rls.getCardinalityTrends(timeRange),
+		Tenants:    rls.getTenantCardinality(),
+		Alerts:     rls.getCardinalityAlerts(),
+	}
+}
+
+func (rls *RLS) GetCardinalityViolations(timeRange string) []limits.CardinalityViolation {
+	return rls.getCardinalityViolations(timeRange)
+}
+
+func (rls *RLS) GetCardinalityTrends(timeRange string) []limits.CardinalityTrend {
+	return rls.getCardinalityTrends(timeRange)
+}
+
+func (rls *RLS) GetCardinalityAlerts() []limits.CardinalityAlert {
+	return rls.getCardinalityAlerts()
+}
+
+// Helper methods for cardinality data
+func (rls *RLS) getCardinalityViolations(timeRange string) []limits.CardinalityViolation {
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+
+	var violations []limits.CardinalityViolation
+
+	// Filter recent denials for cardinality violations
+	for _, denial := range rls.recentDenials {
+		if denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded" {
+			violation := limits.CardinalityViolation{
+				TenantID:       denial.TenantID,
+				Reason:         denial.Reason,
+				Timestamp:      denial.Timestamp,
+				ObservedSeries: denial.ObservedSeries,
+				ObservedLabels: denial.ObservedLabels,
+				LimitExceeded:  denial.LimitExceeded,
+			}
+			violations = append(violations, violation)
+		}
+	}
+
+	// Return last 10 violations
+	if len(violations) > 10 {
+		violations = violations[len(violations)-10:]
+	}
+
+	return violations
+}
+
+func (rls *RLS) getCardinalityTrends(timeRange string) []limits.CardinalityTrend {
+	// For now, return mock trends - this would be replaced with real time-series data
+	trends := make([]limits.CardinalityTrend, 24)
+	now := time.Now()
+
+	for i := 0; i < 24; i++ {
+		timestamp := now.Add(time.Duration(-23+i) * time.Hour)
+		trends[i] = limits.CardinalityTrend{
+			Timestamp:           timestamp,
+			AvgSeriesPerRequest: 40 + float64(i%10),
+			AvgLabelsPerSeries:  5 + float64(i%5),
+			ViolationCount:      int64(i % 5),
+			TotalRequests:       1000 + int64(i*50),
+		}
+	}
+
+	return trends
+}
+
+func (rls *RLS) getTenantCardinality() []limits.TenantCardinality {
+	rls.tenantsMu.RLock()
+	defer rls.tenantsMu.RUnlock()
+
+	var tenantCardinality []limits.TenantCardinality
+
+	for tenantID, tenant := range rls.tenants {
+		// Count violations for this tenant
+		violationCount := int64(0)
+		lastViolation := time.Time{}
+
+		for _, denial := range rls.recentDenials {
+			if denial.TenantID == tenantID &&
+				(denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded") {
+				violationCount++
+				if denial.Timestamp.After(lastViolation) {
+					lastViolation = denial.Timestamp
+				}
+			}
+		}
+
+		tc := limits.TenantCardinality{
+			TenantID:       tenantID,
+			Name:           tenant.Info.Name,
+			CurrentSeries:  450000,  // Mock data - would be real aggregation
+			CurrentLabels:  2800000, // Mock data - would be real aggregation
+			ViolationCount: violationCount,
+			LastViolation:  lastViolation,
+		}
+		tc.Limits.MaxSeriesPerRequest = tenant.Info.Limits.MaxSeriesPerRequest
+		tc.Limits.MaxLabelsPerSeries = tenant.Info.Limits.MaxLabelsPerSeries
+
+		tenantCardinality = append(tenantCardinality, tc)
+	}
+
+	return tenantCardinality
+}
+
+func (rls *RLS) getCardinalityAlerts() []limits.CardinalityAlert {
+	// For now, return mock alerts - this would be replaced with real alerting logic
+	var alerts []limits.CardinalityAlert
+
+	// Check for high violation rates
+	if len(rls.recentDenials) > 0 {
+		cardinalityViolations := 0
+		for _, denial := range rls.recentDenials {
+			if denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded" {
+				cardinalityViolations++
+			}
+		}
+
+		if cardinalityViolations > 5 {
+			alerts = append(alerts, limits.CardinalityAlert{
+				ID:        "1",
+				Severity:  "warning",
+				Message:   "High cardinality violation rate detected",
+				Timestamp: time.Now(),
+				Metric:    "violation_rate",
+				Value:     int64(cardinalityViolations),
+				Threshold: 5,
+				Resolved:  false,
+			})
+		}
+	}
+
+	return alerts
 }

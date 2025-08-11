@@ -468,79 +468,39 @@ export function CardinalityDashboard() {
   );
 }
 
-// Mock data function - replace with actual API call
+// Real API call to fetch cardinality data
 async function fetchCardinalityData(timeRange: string, tenant: string): Promise<CardinalityData> {
-  // This would be replaced with actual API calls
-  const mockData: CardinalityData = {
-    metrics: {
-      total_series: 1250000,
-      total_labels: 8500000,
-      avg_series_per_request: 45.2,
-      avg_labels_per_series: 6.8,
-      max_series_in_request: 150000,
-      max_labels_in_series: 85,
-      cardinality_violations: 12,
-      violation_rate: 0.02
-    },
-    violations: [
-      {
-        tenant_id: "tenant-1",
-        reason: "max_series_per_request_exceeded",
-        timestamp: new Date().toISOString(),
-        observed_series: 150000,
-        observed_labels: 0,
-        limit_exceeded: 100000
+  try {
+    const params = new URLSearchParams();
+    if (timeRange) params.append('range', timeRange);
+    if (tenant && tenant !== 'all') params.append('tenant', tenant);
+    
+    const response = await fetch(`/api/cardinality?${params.toString()}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch cardinality data:', error);
+    
+    // Return empty data structure on error
+    return {
+      metrics: {
+        total_series: 0,
+        total_labels: 0,
+        avg_series_per_request: 0,
+        avg_labels_per_series: 0,
+        max_series_in_request: 0,
+        max_labels_in_series: 0,
+        cardinality_violations: 0,
+        violation_rate: 0
       },
-      {
-        tenant_id: "tenant-2",
-        reason: "max_labels_per_series_exceeded",
-        timestamp: new Date(Date.now() - 300000).toISOString(),
-        observed_series: 0,
-        observed_labels: 85,
-        limit_exceeded: 60
-      }
-    ],
-    trends: Array.from({ length: 24 }, (_, i) => ({
-      timestamp: new Date(Date.now() - (23 - i) * 3600000).toISOString(),
-      avg_series_per_request: 40 + Math.random() * 20,
-      avg_labels_per_series: 5 + Math.random() * 4,
-      violation_count: Math.floor(Math.random() * 5),
-      total_requests: 1000 + Math.random() * 500
-    })),
-    tenants: [
-      {
-        tenant_id: "tenant-1",
-        name: "Production App",
-        current_series: 450000,
-        current_labels: 2800000,
-        violation_count: 3,
-        last_violation: new Date().toISOString(),
-        limits: { max_series_per_request: 100000, max_labels_per_series: 60 }
-      },
-      {
-        tenant_id: "tenant-2",
-        name: "Development App",
-        current_series: 120000,
-        current_labels: 800000,
-        violation_count: 1,
-        last_violation: new Date(Date.now() - 300000).toISOString(),
-        limits: { max_series_per_request: 50000, max_labels_per_series: 40 }
-      }
-    ],
-    alerts: [
-      {
-        id: "1",
-        severity: "warning",
-        message: "High series count detected",
-        timestamp: new Date().toISOString(),
-        tenant_id: "tenant-1",
-        metric: "series_per_request",
-        value: 150000,
-        threshold: 100000,
-        resolved: false
-      }
-    ]
-  };
-
-  return mockData;
+      violations: [],
+      trends: [],
+      tenants: [],
+      alerts: []
+    };
+  }
 }
