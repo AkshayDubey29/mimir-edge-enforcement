@@ -22,7 +22,7 @@ spec:
         {{- if .Values.serviceMonitor.enabled }}
         prometheus.io/scrape: "true"
         prometheus.io/port: "{{ .Values.service.port }}"
-        prometheus.io/path: "/stats/prometheus"
+        prometheus.io/path: "/stats"
         {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
