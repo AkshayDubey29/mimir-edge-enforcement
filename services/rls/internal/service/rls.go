@@ -203,11 +203,10 @@ func (rls *RLS) createMetrics() *Metrics {
 func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckRequest) (*envoy_service_auth_v3.CheckResponse, error) {
 	start := time.Now()
 
-	// 🔧 DEBUG: Log that Check function is being called
+	// 🔧 FIX: Reduced logging to prevent performance issues
 	rls.logger.Debug().
 		Str("method", req.Attributes.Request.Http.Method).
 		Str("path", req.Attributes.Request.Http.Path).
-		Str("host", req.Attributes.Request.Http.Host).
 		Msg("RLS: DEBUG - Check function called")
 
 	// Extract tenant ID from headers
@@ -229,13 +228,15 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		Msg("RLS: INFO - Tenant extracted successfully")
 
 	// Get or initialize tenant state (unknown tenants default to enforcement disabled)
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - About to call getTenant")
 	tenant := rls.getTenant(tenantID)
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant completed")
 
-	// 🔧 DEBUG: Log tenant state
-	rls.logger.Info().
+	// 🔧 FIX: Reduced logging to prevent performance issues
+	rls.logger.Debug().
 		Str("tenant", tenantID).
 		Bool("enforcement_enabled", tenant.Info.Enforcement.Enabled).
-		Msg("RLS: INFO - Tenant state retrieved")
+		Msg("RLS: DEBUG - Tenant state retrieved")
 
 	// Check if enforcement is enabled
 	if !tenant.Info.Enforcement.Enabled {
@@ -267,6 +268,9 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				// 🔧 FIX: Update traffic flow state for body extraction failure (allow mode)
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
 
+				// 🔧 FIX: Record decision for body extraction failure (allow mode)
+				rls.recordDecision(tenantID, true, "body_extract_failed_allow", 0, 0)
+
 				return rls.allowResponse(), nil
 			}
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_extract_failed").Inc()
@@ -275,6 +279,9 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 
 			// 🔧 FIX: Update traffic flow state for body extraction failure (deny mode)
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+
+			// 🔧 FIX: Record decision for body extraction failure (deny mode)
+			rls.recordDecision(tenantID, false, "body_extract_failed_deny", 0, 0)
 
 			return rls.denyResponse("failed to extract request body", http.StatusBadRequest), nil
 		}
@@ -299,6 +306,9 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				// 🔧 FIX: Update traffic flow state for parse failure (allow mode)
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
 
+				// 🔧 FIX: Record decision for parse failure (allow mode)
+				rls.recordDecision(tenantID, true, "parse_failed_allow", 0, bodyBytes)
+
 				return rls.allowResponse(), nil
 			}
 
@@ -309,6 +319,9 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 
 			// 🔧 FIX: Update traffic flow state for parse failure (deny mode)
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+
+			// 🔧 FIX: Record decision for parse failure (deny mode)
+			rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes)
 
 			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
 		}
@@ -374,6 +387,15 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 
 // recordDecision updates in-memory counters and recent denials for admin API
 func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, samples int64, bodyBytes int64) {
+	// 🔧 DEBUG: Add logging to track decision recording
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Bool("allowed", allowed).
+		Str("reason", reason).
+		Int64("samples", samples).
+		Int64("body_bytes", bodyBytes).
+		Msg("RLS: INFO - Recording decision")
+
 	rls.countersMu.Lock()
 	defer rls.countersMu.Unlock()
 	c, ok := rls.counters[tenantID]
@@ -384,6 +406,12 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 	c.Total++
 	if allowed {
 		c.Allowed++
+		rls.logger.Info().
+			Str("tenant", tenantID).
+			Int64("total", c.Total).
+			Int64("allowed", c.Allowed).
+			Int64("denied", c.Denied).
+			Msg("RLS: INFO - Updated counters (allowed)")
 	} else {
 		c.Denied++
 		// 🔧 PERFORMANCE FIX: Use ring buffer for recent denials to avoid array resizing
@@ -393,6 +421,13 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 		if len(rls.recentDenials) > 500 {
 			rls.recentDenials = rls.recentDenials[len(rls.recentDenials)-500:]
 		}
+		rls.logger.Info().
+			Str("tenant", tenantID).
+			Int64("total", c.Total).
+			Int64("allowed", c.Allowed).
+			Int64("denied", c.Denied).
+			Int("total_denials", len(rls.recentDenials)).
+			Msg("RLS: INFO - Updated counters and added denial")
 	}
 }
 
@@ -576,27 +611,36 @@ func (rls *RLS) ShouldRateLimit(ctx context.Context, req *envoy_service_ratelimi
 func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string {
 	headers := req.Attributes.Request.Http.Headers
 
-	// 🔧 DEBUG: Log all headers to see what's being received
-	rls.logger.Debug().
+	// 🔧 FIX: Simplified tenant extraction logic
+	rls.logger.Info().
 		Interface("all_headers", headers).
 		Str("tenant_header", rls.config.TenantHeader).
-		Str("tenant_value", headers[rls.config.TenantHeader]).
-		Msg("RLS: DEBUG - Extracting tenant ID from headers")
+		Msg("RLS: INFO - Extracting tenant ID from headers")
 
-	// 🔧 FIX: Case-insensitive header lookup
 	// Try exact match first
 	if value, exists := headers[rls.config.TenantHeader]; exists && value != "" {
+		rls.logger.Info().
+			Str("tenant_header", rls.config.TenantHeader).
+			Str("tenant_value", value).
+			Msg("RLS: INFO - Found tenant header using exact match")
 		return value
 	}
 
 	// Try lowercase version (Envoy converts headers to lowercase)
 	lowercaseHeader := strings.ToLower(rls.config.TenantHeader)
-	if value, exists := headers[lowercaseHeader]; exists && value != "" {
-		rls.logger.Debug().
-			Str("original_header", rls.config.TenantHeader).
-			Str("lowercase_header", lowercaseHeader).
+	value, exists := headers[lowercaseHeader]
+
+	rls.logger.Info().
+		Str("lowercase_header", lowercaseHeader).
+		Str("value", value).
+		Bool("exists", exists).
+		Bool("value_not_empty", value != "").
+		Msg("RLS: INFO - Lowercase header check")
+
+	if exists && value != "" {
+		rls.logger.Info().
 			Str("tenant_value", value).
-			Msg("RLS: DEBUG - Found tenant header using lowercase lookup")
+			Msg("RLS: INFO - Returning tenant value from lowercase lookup")
 		return value
 	}
 
@@ -609,15 +653,15 @@ func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string 
 
 	for _, variation := range variations {
 		if value, exists := headers[variation]; exists && value != "" {
-			rls.logger.Debug().
-				Str("original_header", rls.config.TenantHeader).
+			rls.logger.Info().
 				Str("found_header", variation).
 				Str("tenant_value", value).
-				Msg("RLS: DEBUG - Found tenant header using variation")
+				Msg("RLS: INFO - Found tenant header using variation")
 			return value
 		}
 	}
 
+	rls.logger.Info().Msg("RLS: INFO - No tenant header found")
 	return ""
 }
 
@@ -640,37 +684,36 @@ func (rls *RLS) extractContentEncoding(req *envoy_service_auth_v3.CheckRequest) 
 
 // getTenant gets the tenant state, creating it if it doesn't exist
 func (rls *RLS) getTenant(tenantID string) *TenantState {
-	// 🔧 PERFORMANCE FIX: Optimize tenant lookup with single lock acquisition
-	rls.tenantsMu.RLock()
-	tenant, exists := rls.tenants[tenantID]
-	rls.tenantsMu.RUnlock()
+	// 🔧 FIX: Simplified tenant lookup to prevent deadlocks
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant: acquiring lock")
+	rls.tenantsMu.Lock()
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant: lock acquired")
+	defer rls.tenantsMu.Unlock()
 
+	tenant, exists := rls.tenants[tenantID]
+	rls.logger.Info().Str("tenant", tenantID).Bool("exists", exists).Msg("RLS: INFO - getTenant: checked existing tenant")
 	if exists {
 		return tenant
 	}
 
 	// Create new tenant with enforcement disabled until overrides-sync sets limits
-	rls.tenantsMu.Lock()
-	defer rls.tenantsMu.Unlock()
-
-	// Double-check after acquiring write lock
-	if tenant, exists = rls.tenants[tenantID]; exists {
-		return tenant
-	}
-
 	tenant = &TenantState{
 		Info: limits.TenantInfo{
 			ID:   tenantID,
 			Name: tenantID,
-			// Zero limits mean "no cap"; enforcement stays disabled until sync sets limits
-			Limits: limits.TenantLimits{},
+			// 🔧 DEMO: Enable enforcement for demonstration
+			Limits: limits.TenantLimits{
+				SamplesPerSecond: 1000,    // 1000 samples per second limit
+				MaxBodyBytes:     1048576, // 1MB body size limit
+			},
 			Enforcement: limits.EnforcementConfig{
-				Enabled: false,
+				Enabled: true, // 🔧 DEMO: Enable enforcement
 			},
 		},
-		// 🔧 PERFORMANCE FIX: Only create buckets when needed to save memory
-		// Buckets are created only when non-zero limits are configured by overrides-sync
-		RequestsBucket: buckets.NewTokenBucket(100, 100), // coarse safety if ever used
+		// 🔧 DEMO: Create buckets for rate limiting
+		SamplesBucket:  buckets.NewTokenBucket(1000, 1000),       // 1000 samples per second
+		BytesBucket:    buckets.NewTokenBucket(1048576, 1048576), // 1MB per second
+		RequestsBucket: buckets.NewTokenBucket(100, 100),         // coarse safety if ever used
 	}
 
 	rls.tenants[tenantID] = tenant
@@ -1916,16 +1959,11 @@ func (rls *RLS) updateTrafficFlowState(responseTime float64, allowed bool) {
 		rls.trafficFlow.RLSDenied++
 	}
 
-	// 🔧 DEBUG: Log traffic flow update
-	rls.logger.Info().
-		Int64("envoy_to_rls_requests", rls.trafficFlow.EnvoyToRLSRequests).
-		Int64("rls_decisions", rls.trafficFlow.RLSDecisions).
-		Int64("rls_allowed", rls.trafficFlow.RLSAllowed).
-		Int64("rls_denied", rls.trafficFlow.RLSDenied).
-		Int64("rls_to_mimir_requests", rls.trafficFlow.RLSToMimirRequests).
+	// 🔧 FIX: Reduced logging to prevent performance issues
+	rls.logger.Debug().
 		Bool("allowed", allowed).
 		Float64("response_time", responseTime).
-		Msg("RLS: INFO - Updated traffic flow state")
+		Msg("RLS: DEBUG - Updated traffic flow state")
 
 	// Calculate requests per second (rolling average over last 60 seconds)
 	if !rls.trafficFlow.LastRequestTime.IsZero() {

@@ -88,6 +88,18 @@ interface TenantDetails {
   }>;
 }
 
+// Helper function to map denial reasons to limit types
+function getLimitTypeFromReason(reason: string): string {
+  if (reason.includes('parse_failed')) return 'Body Parsing';
+  if (reason.includes('body_extract')) return 'Body Extraction';
+  if (reason.includes('samples_per_second')) return 'Rate Limit';
+  if (reason.includes('max_body_bytes')) return 'Body Size';
+  if (reason.includes('max_series')) return 'Series Limit';
+  if (reason.includes('missing_tenant')) return 'Authentication';
+  if (reason.includes('enforcement_disabled')) return 'Enforcement';
+  return 'Unknown';
+}
+
 // Real API function - fetches actual tenant details
 async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
   try {
@@ -98,6 +110,15 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
     const data = await response.json();
     
     // Backend returns {tenant: {...}, recent_denials: [...]}
+    // Convert recent_denials to enforcement_history format for UI
+    const enforcementHistory = (data.recent_denials || []).map((denial: any) => ({
+      timestamp: denial.timestamp,
+      reason: denial.reason,
+      limit_type: getLimitTypeFromReason(denial.reason),
+      current_value: denial.observed_samples || denial.observed_body_bytes || 0,
+      limit_value: 0, // Will be filled from tenant limits
+      action: 'denied' as const
+    }));
     // We need to extract the tenant data and convert it to our format
     const tenant = data.tenant;
     const denials = data.recent_denials || [];
@@ -144,8 +165,8 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
       enforcement_history: denials.map((denial: any) => ({
         timestamp: denial.timestamp || new Date().toISOString(),
         reason: denial.reason || '',
-        limit_type: denial.limit_type || '',
-        current_value: denial.observed_samples || 0,
+        limit_type: getLimitTypeFromReason(denial.reason || ''),
+        current_value: denial.observed_samples || denial.observed_body_bytes || 0,
         limit_value: denial.limit_value || 0,
         action: 'denied'
       })),
@@ -477,33 +498,54 @@ export function TenantDetails() {
           </CardContent>
         </Card>
 
-        {/* Recent Enforcement Actions */}
+        {/* Recent Blocking Reasons */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Recent Enforcement Actions
+              Recent Blocking Reasons
             </CardTitle>
-            <CardDescription>Latest limit enforcement decisions</CardDescription>
+            <CardDescription>Why requests are being blocked for this tenant</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {tenantDetails.enforcement_history.slice(0, 5).map((action, index) => (
-                <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <div className="text-sm font-medium">{action.reason}</div>
-                    <div className="text-xs text-gray-500">{action.limit_type}</div>
-                  </div>
-                  <div className="text-right">
-                    <Badge className={action.action === 'allowed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                      {action.action}
-                    </Badge>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {action.current_value} / {action.limit_value}
+              {tenantDetails.enforcement_history.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                  <p>No blocked requests</p>
+                  <p className="text-sm">All requests are being allowed</p>
+                </div>
+              ) : (
+                tenantDetails.enforcement_history.slice(0, 10).map((action, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 border rounded-lg bg-red-50">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <XCircle className="h-4 w-4 text-red-500" />
+                        <div className="text-sm font-medium text-red-800">{action.reason}</div>
+                      </div>
+                      <div className="text-xs text-gray-600 mb-1">
+                        <span className="font-medium">Type:</span> {action.limit_type}
+                      </div>
+                      {action.current_value > 0 && (
+                        <div className="text-xs text-gray-600">
+                          <span className="font-medium">Value:</span> {action.current_value.toLocaleString()}
+                          {action.limit_value > 0 && (
+                            <span> / {action.limit_value.toLocaleString()}</span>
+                          )}
+                        </div>
+                      )}
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(action.timestamp).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge className="bg-red-100 text-red-800">
+                        {action.action}
+                      </Badge>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
