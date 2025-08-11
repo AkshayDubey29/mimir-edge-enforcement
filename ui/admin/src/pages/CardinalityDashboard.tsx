@@ -188,13 +188,16 @@ export function CardinalityDashboard() {
     );
   }
 
-  const { metrics, violations, trends, tenants, alerts } = cardinalityData || {
+  // Ensure we have safe defaults for all data
+  const safeData = cardinalityData || {
     metrics: { total_series: 0, total_labels: 0, avg_series_per_request: 0, avg_labels_per_series: 0, max_series_in_request: 0, max_labels_in_series: 0, cardinality_violations: 0, violation_rate: 0 },
     violations: [],
     trends: [],
     tenants: [],
     alerts: []
   };
+
+  const { metrics, violations, trends, tenants, alerts } = safeData;
 
   // Calculate overall cardinality status
   const getCardinalityStatus = () => {
@@ -286,7 +289,7 @@ export function CardinalityDashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trends}>
+              <LineChart data={trends || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="timestamp" />
                 <YAxis />
@@ -304,7 +307,7 @@ export function CardinalityDashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trends}>
+              <LineChart data={trends || []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="timestamp" />
                 <YAxis />
@@ -323,7 +326,7 @@ export function CardinalityDashboard() {
           <CardDescription>Latest violations of cardinality limits</CardDescription>
         </CardHeader>
         <CardContent>
-          {violations.length === 0 ? (
+          {(violations || []).length === 0 ? (
             <div className="flex items-center justify-center h-32 bg-gray-50 rounded-lg">
               <div className="text-center">
                 <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
@@ -345,7 +348,7 @@ export function CardinalityDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {violations.slice(0, 10).map((violation, index) => (
+                  {(violations || []).slice(0, 10).map((violation, index) => (
                     <tr key={index} className="hover:bg-gray-50">
                       <td className="py-3 px-4 text-sm">
                         <div className="font-mono text-gray-900">
@@ -388,7 +391,7 @@ export function CardinalityDashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {tenants.map((tenant) => (
+            {(tenants || []).map((tenant) => (
               <div key={tenant.tenant_id} className="p-4 border rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium">{tenant.name || tenant.tenant_id}</h4>
@@ -427,7 +430,7 @@ export function CardinalityDashboard() {
           <CardDescription>Active alerts for cardinality issues</CardDescription>
         </CardHeader>
         <CardContent>
-          {alerts.length === 0 ? (
+          {(alerts || []).length === 0 ? (
             <div className="flex items-center justify-center h-32 bg-gray-50 rounded-lg">
               <div className="text-center">
                 <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
@@ -437,7 +440,7 @@ export function CardinalityDashboard() {
             </div>
           ) : (
             <div className="space-y-3">
-              {alerts.map((alert) => (
+              {(alerts || []).map((alert) => (
                 <div key={alert.id} className="p-4 border rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
