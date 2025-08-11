@@ -34,12 +34,12 @@ rls:
 # 🔧 DEBUG: External authorization configuration with debugging
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB
-  failureModeAllow: true    # 🔧 DEBUG: Temporarily set to true for debugging
+  failureModeAllow: true    # 🔧 DEBUG: Set to true to allow requests when gRPC fails
   timeout: "10s"            # 🔧 DEBUG: Increased timeout for debugging
 
 # Rate limiting configuration
 rateLimit:
-  failureModeDeny: true
+  failureModeDeny: false    # 🔧 DEBUG: Set to false to allow requests when gRPC fails
   domain: "mimir_remote_write"
   grpcTimeout: "5s"         # 🔧 DEBUG: Increased timeout for debugging
 

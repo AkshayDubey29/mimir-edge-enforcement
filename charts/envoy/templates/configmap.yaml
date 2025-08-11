@@ -277,14 +277,14 @@ data:
                 initial_stream_window_size: 65536
                 initial_connection_window_size: 1048576
 
-        # 🔧 DEBUG: Enhanced health checks for RLS service debugging
-        health_checks:
-        - timeout: 5s
-          interval: 10s
-          unhealthy_threshold: 3
-          healthy_threshold: 2
-          grpc_health_check:
-            service_name: "envoy.service.auth.v3.Authorization"
+        # 🔧 TEMPORARILY DISABLED: gRPC health checks to isolate 499 issue
+        # health_checks:
+        # - timeout: 5s
+        #   interval: 10s
+        #   unhealthy_threshold: 3
+        #   healthy_threshold: 2
+        #   grpc_health_check:
+        #     service_name: "envoy.service.auth.v3.Authorization"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
@@ -317,14 +317,14 @@ data:
                 max_concurrent_streams: 100
                 initial_stream_window_size: 65536
                 initial_connection_window_size: 1048576
-        # 🔧 FIX: Add gRPC health checks for RLS rate limit service
-        health_checks:
-        - timeout: 5s
-          interval: 10s
-          unhealthy_threshold: 3
-          healthy_threshold: 2
-          grpc_health_check:
-            service_name: "envoy.service.ratelimit.v3.RateLimitService"
+        # 🔧 TEMPORARILY DISABLED: gRPC health checks to isolate 499 issue
+        # health_checks:
+        # - timeout: 5s
+        #   interval: 10s
+        #   unhealthy_threshold: 3
+        #   healthy_threshold: 2
+        #   grpc_health_check:
+        #     service_name: "envoy.service.ratelimit.v3.RateLimitService"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
