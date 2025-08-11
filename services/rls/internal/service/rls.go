@@ -1999,7 +1999,7 @@ func (rls *RLS) GetDebugInfo() map[string]interface{} {
 func (rls *RLS) GetDebugTrafficFlow() map[string]interface{} {
 	rls.trafficFlowMu.RLock()
 	defer rls.trafficFlowMu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"envoy_to_rls_requests": rls.trafficFlow.EnvoyToRLSRequests,
 		"rls_decisions":         rls.trafficFlow.RLSDecisions,
