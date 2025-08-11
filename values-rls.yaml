@@ -1,5 +1,5 @@
-# RLS (Rate Limit Service) Values with Debugging Configuration
-# Use this file for deploying RLS with enhanced debugging and monitoring
+# RLS (Rate Limit Service) Values - Production Configuration
+# Use this file for deploying RLS in production with optimized settings
 
 # Service configuration
 service:
@@ -14,15 +14,14 @@ service:
 # Tenant identification
 tenantHeader: "X-Scope-OrgID"
 
-# Limits configuration with debugging
+# Limits configuration - Production
 limits:
-  # 🔧 DEBUG: Fixed maxRequestBytes to prevent scientific notation error
-  maxRequestBytes: "4194304"  # 4 MiB - quoted string to force literal value
-  maxBodyBytes: 0             # 0 means no default body size cap
-  failureModeAllow: false     # 🔧 FIX: Set to false to deny requests when parsing fails (SECURITY)
-  defaultSamplesPerSecond: 10000  # 🔧 DEBUG: Set default rate limit for testing
-  defaultBurstPercent: 0.2    # 🔧 DEBUG: Set default burst allowance
-  enforceBodyParsing: true   # 🔧 FIX: Enable body parsing to test series limits
+  maxRequestBytes: "10485760"  # 10 MiB - Increased for large Alloy payloads
+  maxBodyBytes: 0              # 0 means no default body size cap
+  failureModeAllow: true       # Production: Allow requests when parsing fails (with limit enforcement)
+  defaultSamplesPerSecond: 1000  # Production: Conservative default rate limit
+  defaultBurstPercent: 0.1     # Production: Conservative burst allowance
+  enforceBodyParsing: true     # Production: Enable body parsing for limit enforcement
   defaultMaxLabelsPerSeries: 60
   defaultMaxLabelValueLength: 2048
   defaultMaxSeriesPerRequest: 100000
@@ -31,28 +30,28 @@ limits:
 store:
   backend: "memory"  # memory or redis
 
-# 🔧 DEBUG: Enhanced logging for troubleshooting
+# Logging configuration - Production
 log:
-  level: "debug"  # Set to debug for troubleshooting
-  enableGRPCLogs: true  # 🔧 DEBUG: Enable gRPC request/response logs
-  enableDetailedLogs: true  # 🔧 DEBUG: Enable detailed operation logs
+  level: "info"  # Production: Info level for performance
+  enableGRPCLogs: false  # Production: Disable gRPC logs for performance
+  enableDetailedLogs: false  # Production: Disable detailed logs for performance
 
 # Deployment configuration
 replicaCount: 1
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest"
-  pullPolicy: Always
+  tag: "latest-limits-fix"  # Production: Use the latest limits-fix image
+  pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# 🔧 DEBUG: Enhanced resource configuration for debugging
+# Resource configuration - Production
 resources:
   limits:
-    cpu: 1000m
-    memory: 1Gi
+    cpu: 2000m
+    memory: 2Gi
   requests:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 512Mi
 
 # Security context
 securityContext:
@@ -82,10 +81,8 @@ serviceAccount:
   create: true
   annotations: {}
 
-# Pod annotations for debugging
+# Pod annotations - Production
 podAnnotations:
-  debug: "true"
-  logging: "debug"
   prometheus.io/scrape: "true"
   prometheus.io/port: "9090"
   prometheus.io/path: "/metrics"
@@ -99,9 +96,9 @@ tolerations: []
 # Affinity
 affinity: {}
 
-# Service Monitor for Prometheus
+# Service Monitor for Prometheus - Production
 serviceMonitor:
-  enabled: false  # 🔧 DEBUG: Disabled for testing without Prometheus Operator
+  enabled: true   # Production: Enable for monitoring
   interval: 30s
   scrapeTimeout: 10s
   labels: {}
