@@ -128,7 +128,7 @@ data:
                   - "envoy.filters.http.ext_authz"
                   # 🔧 DEBUG: Add status on error for better debugging
                   status_on_error:
-                    code: 13  # INTERNAL
+                    code: 500  # HTTP 500 Internal Server Error
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
