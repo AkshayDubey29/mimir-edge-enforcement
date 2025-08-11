@@ -1841,6 +1841,125 @@ export function Wiki() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cardinality Burst Control */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5" />
+            Cardinality Burst Control
+          </CardTitle>
+          <CardDescription>Advanced protection against high-cardinality attacks and burst scenarios</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🛡️ Cardinality Protection Features</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="p-4 border rounded-lg bg-blue-50">
+                <h4 className="font-medium text-blue-900 mb-2">Series Per Request Limit</h4>
+                <p className="text-sm text-gray-600 mb-3">
+                  Controls the maximum number of time series that can be sent in a single request.
+                </p>
+                <div className="text-xs font-mono bg-blue-100 p-2 rounded">
+                  max_series_per_request: 100000
+                </div>
+              </div>
+              <div className="p-4 border rounded-lg bg-green-50">
+                <h4 className="font-medium text-green-900 mb-2">Labels Per Series Limit</h4>
+                <p className="text-sm text-gray-600 mb-3">
+                  Limits the number of labels that can be attached to each time series.
+                </p>
+                <div className="text-xs font-mono bg-green-100 p-2 rounded">
+                  max_labels_per_series: 60
+                </div>
+              </div>
+              <div className="p-4 border rounded-lg bg-purple-50">
+                <h4 className="font-medium text-purple-900 mb-2">Label Value Length Limit</h4>
+                <p className="text-sm text-gray-600 mb-3">
+                  Controls the maximum length of label values to prevent memory exhaustion.
+                </p>
+                <div className="text-xs font-mono bg-purple-100 p-2 rounded">
+                  max_label_value_length: 2048
+                </div>
+              </div>
+              <div className="p-4 border rounded-lg bg-orange-50">
+                <h4 className="font-medium text-orange-900 mb-2">Real-time Enforcement</h4>
+                <p className="text-sm text-gray-600 mb-3">
+                  Instant blocking of requests that exceed cardinality limits at the edge.
+                </p>
+                <div className="text-xs font-mono bg-orange-100 p-2 rounded">
+                  Blocking Reason: max_series_per_request_exceeded
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-3">🎯 Cardinality Blocking Reasons</h4>
+            <div className="space-y-3">
+              <div className="p-3 border-l-4 border-red-500 bg-red-50">
+                <div className="font-medium text-red-900">max_series_per_request_exceeded</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  Request contains more time series than allowed. <strong>Fix:</strong> Reduce the number of series per request or increase the limit.
+                </div>
+                <div className="text-xs font-mono bg-red-100 p-2 rounded mt-2">
+                  Example: Request with 150,000 series when limit is 100,000
+                </div>
+              </div>
+              <div className="p-3 border-l-4 border-orange-500 bg-orange-50">
+                <div className="font-medium text-orange-900">max_labels_per_series_exceeded</div>
+                <div className="text-sm text-gray-600 mt-1">
+                  Individual time series has more labels than permitted. <strong>Fix:</strong> Consolidate labels or increase the limit.
+                </div>
+                <div className="text-xs font-mono bg-orange-100 p-2 rounded mt-2">
+                  Example: Series with 80 labels when limit is 60
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-3">⚡ Configuration Examples</h4>
+            <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
+              <div># Configure cardinality limits for a tenant</div>
+              <div>curl -X PUT http://localhost:8082/api/tenants/my-tenant/limits \</div>
+              <div>  -H "Content-Type: application/json" \</div>
+              <div>  -d &apos;{`{`}</div>
+              <div>    &quot;samples_per_second&quot;: 10000,</div>
+              <div>    &quot;burst_pct&quot;: 0.2,</div>
+              <div>    &quot;max_body_bytes&quot;: 10485760,</div>
+              <div>    &quot;max_labels_per_series&quot;: 60,</div>
+              <div>    &quot;max_label_value_length&quot;: 2048,</div>
+              <div>    &quot;max_series_per_request&quot;: 100000</div>
+              <div>  {`}`}&apos;</div>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="font-medium mb-3">🔍 Monitoring Cardinality</h4>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <h5 className="font-medium mb-2">Real-time Metrics</h5>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• Series count per request</li>
+                  <li>• Labels per series distribution</li>
+                  <li>• Cardinality violation rates</li>
+                  <li>• Burst detection alerts</li>
+                </ul>
+              </div>
+              <div>
+                <h5 className="font-medium mb-2">Alerting</h5>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• High cardinality requests</li>
+                  <li>• Series limit approaching</li>
+                  <li>• Label explosion detection</li>
+                  <li>• Burst pattern alerts</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

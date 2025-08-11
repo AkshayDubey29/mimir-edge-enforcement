@@ -256,6 +256,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 	// Parse request body if enabled
 	var samples int64
 	var bodyBytes int64
+	var requestInfo *limits.RequestInfo
 
 	if rls.config.EnforceBodyParsing {
 		body, err := rls.extractBody(req)
@@ -268,9 +269,14 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				// Use conservative fallback values for rate limiting
 				fallbackSamples := int64(1)                                       // Assume at least 1 sample
 				fallbackBodyBytes := int64(len(req.Attributes.Request.Http.Body)) // Use raw body size
+				fallbackRequestInfo := &limits.RequestInfo{
+					ObservedSamples: fallbackSamples,
+					ObservedSeries:  1, // Assume 1 series
+					ObservedLabels:  10, // Assume 10 labels
+				}
 
 				// Check limits with fallback values
-				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes)
+				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 
 				if !decision.Allowed {
 					// Limits exceeded even with fallback values
@@ -306,7 +312,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 
 		bodyBytes = int64(len(body))
 
-		// Parse remote write request
+		// Parse remote write request for samples and cardinality
 		contentEncoding := rls.extractContentEncoding(req)
 		result, err := parser.ParseRemoteWriteRequest(body, contentEncoding)
 		if err != nil {
@@ -322,9 +328,14 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				// Use conservative fallback values for rate limiting
 				fallbackSamples := int64(1)    // Assume at least 1 sample
 				fallbackBodyBytes := bodyBytes // Use actual body size
+				fallbackRequestInfo := &limits.RequestInfo{
+					ObservedSamples: fallbackSamples,
+					ObservedSeries:  1, // Assume 1 series
+					ObservedLabels:  10, // Assume 10 labels
+				}
 
 				// Check limits with fallback values
-				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes)
+				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 
 				if !decision.Allowed {
 					// Limits exceeded even with fallback values
@@ -361,14 +372,28 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		}
 
 		samples = result.SamplesCount
+		
+		// 🔧 CARDINALITY CONTROL: Create request info with cardinality data
+		requestInfo = &limits.RequestInfo{
+			ObservedSamples: result.SamplesCount,
+			ObservedSeries:  result.SeriesCount,
+			ObservedLabels:  result.LabelsCount,
+		}
 	} else {
 		// Use content length as a proxy for request size
 		bodyBytes = int64(len(req.Attributes.Request.Http.Body))
 		samples = 1 // Default to 1 sample if not parsing
+		
+		// 🔧 CARDINALITY CONTROL: Create fallback request info
+		requestInfo = &limits.RequestInfo{
+			ObservedSamples: samples,
+			ObservedSeries:  1, // Assume 1 series
+			ObservedLabels:  10, // Assume 10 labels
+		}
 	}
 
-	// Check limits
-	decision := rls.checkLimits(tenant, samples, bodyBytes)
+	// Check limits with cardinality controls
+	decision := rls.checkLimits(tenant, samples, bodyBytes, requestInfo)
 
 	// 🔧 FIX: Always record critical metrics to prevent timeouts
 	// Record metrics (reverted from sampling to prevent timeouts)
@@ -870,14 +895,32 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 	return tenant
 }
 
-// checkLimits checks if the request is within limits
-func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64) limits.Decision {
+// checkLimits checks if the request is within limits including cardinality controls
+func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, requestInfo *limits.RequestInfo) limits.Decision {
 	// Check body size
 	if tenant.Info.Limits.MaxBodyBytes > 0 && bodyBytes > tenant.Info.Limits.MaxBodyBytes {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "body_size_exceeded",
 			Code:    http.StatusRequestEntityTooLarge,
+		}
+	}
+
+	// 🔧 CARDINALITY CONTROL: Check series per request limit
+	if tenant.Info.Limits.MaxSeriesPerRequest > 0 && requestInfo.ObservedSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+		return limits.Decision{
+			Allowed: false,
+			Reason:  "max_series_per_request_exceeded",
+			Code:    http.StatusTooManyRequests,
+		}
+	}
+
+	// 🔧 CARDINALITY CONTROL: Check labels per series limit
+	if tenant.Info.Limits.MaxLabelsPerSeries > 0 && requestInfo.ObservedLabels > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
+		return limits.Decision{
+			Allowed: false,
+			Reason:  "max_labels_per_series_exceeded",
+			Code:    http.StatusTooManyRequests,
 		}
 	}
 
