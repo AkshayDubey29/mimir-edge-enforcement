@@ -116,12 +116,12 @@ data:
                   domain: {{ .Values.rateLimit.domain }}
                   rate_limit_service:
                     transport_api_version: V3
-                                      grpc_service:
-                    envoy_grpc:
-                      cluster_name: rls_ratelimit
-                      # 🔧 DEBUG: Add authority for proper gRPC routing
-                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.rateLimitPort }}"
-                    timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
+                    grpc_service:
+                      envoy_grpc:
+                        cluster_name: rls_ratelimit
+                        # 🔧 DEBUG: Add authority for proper gRPC routing
+                        authority: "{{ .Values.rls.host }}:{{ .Values.rls.rateLimitPort }}"
+                      timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
                   failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
                 typed_config:
