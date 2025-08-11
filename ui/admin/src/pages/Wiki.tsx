@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { 
@@ -25,8 +25,446 @@ import {
   Eye,
   TrendingUp,
   AlertCircle,
-  Info
+  Info,
+  Play,
+  Pause,
+  RotateCcw
 } from 'lucide-react';
+
+// Interactive Architecture Flow Component
+function ArchitectureFlow() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
+
+  const steps = [
+    {
+      id: 1,
+      title: "Client Request",
+      description: "Prometheus/Alloy sends metrics with X-Scope-OrgID header",
+      icon: Users,
+      color: "bg-blue-500",
+      details: "Metrics data with tenant identification header"
+    },
+    {
+      id: 2,
+      title: "NGINX Router",
+      description: "Canary routing: 90% direct, 10% edge enforcement",
+      icon: Network,
+      color: "bg-green-500",
+      details: "Traffic distribution based on canary configuration"
+    },
+    {
+      id: 3,
+      title: "Envoy Proxy",
+      description: "Ext_authz + ratelimit filters for edge enforcement",
+      icon: Zap,
+      color: "bg-purple-500",
+      details: "Authorization and rate limiting decisions"
+    },
+    {
+      id: 4,
+      title: "RLS Service",
+      description: "Lightning-fast decision engine (0.28ms)",
+      icon: Shield,
+      color: "bg-orange-500",
+      details: "Token bucket algorithm with tenant limits"
+    },
+    {
+      id: 5,
+      title: "Mimir Distributor",
+      description: "Protected metrics ingestion",
+      icon: Database,
+      color: "bg-red-500",
+      details: "Validated requests within enforced limits"
+    }
+  ];
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setCurrentStep((prev) => (prev + 1) % steps.length);
+      }, 2000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, steps.length]);
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleReset = () => {
+    setCurrentStep(0);
+    setIsPlaying(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Controls */}
+      <div className="flex items-center justify-center gap-4 mb-6">
+        <button
+          onClick={handlePlayPause}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+        >
+          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {isPlaying ? 'Pause' : 'Play'} Animation
+        </button>
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Reset
+        </button>
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+        >
+          <Info className="h-4 w-4" />
+          {showDetails ? 'Hide' : 'Show'} Details
+        </button>
+      </div>
+
+      {/* Flow Diagram */}
+      <div className="relative">
+        {/* Connection Lines */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none">
+          {steps.map((step, index) => {
+            if (index === steps.length - 1) return null;
+            const isActive = currentStep >= index;
+            return (
+              <g key={`line-${index}`}>
+                <line
+                  x1={`${(index + 1) * 20}%`}
+                  y1="50%"
+                  x2={`${(index + 2) * 20}%`}
+                  y2="50%"
+                  stroke={isActive ? "#3b82f6" : "#e5e7eb"}
+                  strokeWidth="3"
+                  strokeDasharray={isActive ? "none" : "5,5"}
+                  className="transition-all duration-1000"
+                />
+                {isActive && (
+                  <circle
+                    cx={`${(index + 1.5) * 20}%`}
+                    cy="50%"
+                    r="4"
+                    fill="#3b82f6"
+                    className="animate-pulse"
+                  />
+                )}
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Steps */}
+        <div className="flex justify-between items-center relative z-10">
+          {steps.map((step, index) => {
+            const isActive = currentStep === index;
+            const isCompleted = currentStep > index;
+            const Icon = step.icon;
+            
+            return (
+              <div key={step.id} className="flex flex-col items-center">
+                <div
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    isActive 
+                      ? `${step.color} text-white scale-110 shadow-lg` 
+                      : isCompleted 
+                        ? `${step.color} text-white` 
+                        : 'bg-gray-200 text-gray-500'
+                  }`}
+                >
+                  <Icon className="h-8 w-8" />
+                </div>
+                <div className="mt-3 text-center max-w-32">
+                  <div className={`font-medium text-sm ${
+                    isActive ? 'text-blue-600' : 'text-gray-600'
+                  }`}>
+                    {step.title}
+                  </div>
+                  {showDetails && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {step.description}
+                    </div>
+                  )}
+                </div>
+                {isActive && (
+                  <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 max-w-48">
+                    {step.details}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Performance Metrics */}
+      <div className="grid grid-cols-3 gap-4 mt-8">
+        <div className="text-center p-4 bg-green-50 rounded-lg">
+          <div className="text-2xl font-bold text-green-600">0.28ms</div>
+          <div className="text-sm text-green-800">RLS Response Time</div>
+        </div>
+        <div className="text-center p-4 bg-blue-50 rounded-lg">
+          <div className="text-2xl font-bold text-blue-600">10K+</div>
+          <div className="text-sm text-blue-800">Requests/sec</div>
+        </div>
+        <div className="text-center p-4 bg-purple-50 rounded-lg">
+          <div className="text-2xl font-bold text-purple-600">99.9%</div>
+          <div className="text-sm text-purple-800">Success Rate</div>
+        </div>
+      </div>
+
+      {/* Traffic Flow Visualization */}
+      <div className="mt-8">
+        <h4 className="font-medium mb-4">Traffic Flow Distribution</h4>
+        <div className="flex items-center justify-center gap-8">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-2">
+              <div className="text-2xl font-bold text-green-600">90%</div>
+            </div>
+            <div className="text-sm text-gray-600">Direct to Mimir</div>
+          </div>
+          <ArrowRight className="h-6 w-6 text-gray-400" />
+          <div className="text-center">
+            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-2">
+              <div className="text-2xl font-bold text-blue-600">10%</div>
+            </div>
+            <div className="text-sm text-gray-600">Edge Enforcement</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Technical Architecture Component
+function TechnicalArchitecture() {
+  const [selectedComponent, setSelectedComponent] = useState<string | null>(null);
+
+  const components = [
+    {
+      id: 'nginx',
+      name: 'NGINX Ingress',
+      description: 'Traffic routing and canary deployment',
+      details: {
+        role: 'Traffic Router',
+        protocol: 'HTTP/1.1, HTTP/2',
+        features: ['Canary Routing', 'SSL Termination', 'Load Balancing'],
+        config: 'nginx.ingress.kubernetes.io/rewrite-target: /'
+      },
+      color: 'bg-green-500',
+      icon: Network
+    },
+    {
+      id: 'envoy',
+      name: 'Envoy Proxy',
+      description: 'Edge enforcement with ext_authz and ratelimit',
+      details: {
+        role: 'Edge Enforcement',
+        protocol: 'gRPC, HTTP/1.1',
+        features: ['ext_authz Filter', 'ratelimit Filter', 'Circuit Breakers'],
+        config: 'envoy.filters.http.ext_authz'
+      },
+      color: 'bg-purple-500',
+      icon: Zap
+    },
+    {
+      id: 'rls',
+      name: 'RLS Service',
+      description: 'Lightning-fast authorization and rate limiting',
+      details: {
+        role: 'Decision Engine',
+        protocol: 'gRPC, HTTP/2',
+        features: ['Token Bucket', 'Tenant Limits', 'Real-time Metrics'],
+        config: 'envoy.service.auth.v3.Authorization'
+      },
+      color: 'bg-orange-500',
+      icon: Shield
+    },
+    {
+      id: 'overrides',
+      name: 'Overrides Sync',
+      description: 'Kubernetes controller for limit synchronization',
+      details: {
+        role: 'Config Sync',
+        protocol: 'HTTP/1.1',
+        features: ['ConfigMap Watcher', 'Limit Sync', 'Health Checks'],
+        config: 'mimir-overrides ConfigMap'
+      },
+      color: 'bg-blue-500',
+      icon: Settings
+    },
+    {
+      id: 'mimir',
+      name: 'Mimir Distributor',
+      description: 'Protected metrics ingestion endpoint',
+      details: {
+        role: 'Metrics Storage',
+        protocol: 'HTTP/1.1',
+        features: ['Remote Write', 'Tenant Isolation', 'Series Limits'],
+        config: '/api/v1/push'
+      },
+      color: 'bg-red-500',
+      icon: Database
+    },
+    {
+      id: 'admin',
+      name: 'Admin UI',
+      description: 'Real-time monitoring and management',
+      details: {
+        role: 'Monitoring Dashboard',
+        protocol: 'HTTP/1.1',
+        features: ['Live Metrics', 'Blocking Reasons', 'Tenant Management'],
+        config: 'React + TypeScript'
+      },
+      color: 'bg-indigo-500',
+      icon: Eye
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Component Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {components.map((component) => {
+          const Icon = component.icon;
+          const isSelected = selectedComponent === component.id;
+          
+          return (
+            <div
+              key={component.id}
+              onClick={() => setSelectedComponent(isSelected ? null : component.id)}
+              className={`p-4 border rounded-lg cursor-pointer transition-all duration-300 ${
+                isSelected 
+                  ? 'border-blue-500 bg-blue-50 shadow-lg' 
+                  : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 rounded-full ${component.color} flex items-center justify-center`}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900">{component.name}</div>
+                  <div className="text-sm text-gray-500">{component.description}</div>
+                </div>
+              </div>
+              
+              {isSelected && (
+                <div className="mt-4 space-y-3 text-sm">
+                  <div>
+                    <div className="font-medium text-gray-700">Role:</div>
+                    <div className="text-gray-600">{component.details.role}</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Protocol:</div>
+                    <div className="text-gray-600">{component.details.protocol}</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Features:</div>
+                    <ul className="text-gray-600 list-disc list-inside">
+                      {component.details.features.map((feature, index) => (
+                        <li key={index}>{feature}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <div className="font-medium text-gray-700">Config:</div>
+                    <code className="text-xs bg-gray-100 px-2 py-1 rounded">
+                      {component.details.config}
+                    </code>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Data Flow Diagram */}
+      <div className="mt-8">
+        <h4 className="font-medium mb-4">Data Flow & Communication</h4>
+        <div className="bg-gray-50 p-6 rounded-lg">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h5 className="font-medium text-gray-900 mb-3">Request Flow</h5>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>Client → NGINX (HTTP/1.1)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>NGINX → Envoy (HTTP/1.1)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <span>Envoy → RLS (gRPC)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span>RLS → Envoy (gRPC Response)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                  <span>Envoy → Mimir (HTTP/1.1)</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h5 className="font-medium text-gray-900 mb-3">Configuration Flow</h5>
+              <div className="space-y-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>ConfigMap → Overrides Sync</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Overrides Sync → RLS (HTTP)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  <span>RLS → Admin UI (HTTP)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span>Admin UI → User (WebSocket)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Performance Characteristics */}
+      <div className="mt-8">
+        <h4 className="font-medium mb-4">Performance Characteristics</h4>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-green-50 rounded-lg">
+            <div className="text-lg font-bold text-green-600">0.28ms</div>
+            <div className="text-xs text-green-800">RLS Decision Time</div>
+          </div>
+          <div className="text-center p-4 bg-blue-50 rounded-lg">
+            <div className="text-lg font-bold text-blue-600">10K+</div>
+            <div className="text-xs text-blue-800">Requests/sec</div>
+          </div>
+          <div className="text-center p-4 bg-purple-50 rounded-lg">
+            <div className="text-lg font-bold text-purple-600">99.9%</div>
+            <div className="text-xs text-purple-800">Availability</div>
+          </div>
+          <div className="text-center p-4 bg-orange-50 rounded-lg">
+            <div className="text-lg font-bold text-orange-600">&lt;1ms</div>
+            <div className="text-xs text-orange-800">End-to-End Latency</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Wiki() {
   return (
@@ -143,6 +581,34 @@ export function Wiki() {
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Interactive Architecture Flow */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Network className="h-5 w-5" />
+            Interactive Architecture Flow
+          </CardTitle>
+          <CardDescription>See how requests flow through the system in real-time</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ArchitectureFlow />
+        </CardContent>
+      </Card>
+
+      {/* Technical Architecture Diagram */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Server className="h-5 w-5" />
+            Technical Architecture Details
+          </CardTitle>
+          <CardDescription>Detailed component interactions and data flow</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <TechnicalArchitecture />
         </CardContent>
       </Card>
 
