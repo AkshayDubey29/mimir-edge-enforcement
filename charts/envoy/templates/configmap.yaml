@@ -106,8 +106,6 @@ data:
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
-                      # 🔧 DEBUG: Add authority for proper gRPC routing
-                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
                     timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               # 🔧 FIX: Re-enabled rate limit filter with improved gRPC configuration
               - name: envoy.filters.http.ratelimit
@@ -119,8 +117,6 @@ data:
                     grpc_service:
                       envoy_grpc:
                         cluster_name: rls_ratelimit
-                        # 🔧 DEBUG: Add authority for proper gRPC routing
-                        authority: "{{ .Values.rls.host }}:{{ .Values.rls.rateLimitPort }}"
                       timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
                   failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
