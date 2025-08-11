@@ -47,8 +47,6 @@ spec:
           ports:
             - name: metrics
               containerPort: {{ .Values.service.port }}
-            - name: health
-              containerPort: {{ .Values.service.port }}
           {{- if .Values.livenessProbe }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
