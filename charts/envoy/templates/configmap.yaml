@@ -80,37 +80,37 @@ data:
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
               http_filters:
-              # 🔧 TEMPORARILY DISABLED: ext_authz filter for internal network testing
-              # - name: envoy.filters.http.ext_authz
-              #   typed_config:
-              #     "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-              #     transport_api_version: V3
-              #     with_request_body:
-              #       max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
-              #       allow_partial_message: true
-              #     failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-              #     include_peer_certificate: true
-              #     metadata_context_namespaces:
-              #     - "envoy.filters.http.ext_authz"
-              #     status_on_error:
-              #       code: 500
-              #     grpc_service:
-              #       envoy_grpc:
-              #         cluster_name: rls_ext_authz
-              #         authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
-              #       timeout: {{ .Values.extAuthz.timeout | default "5s" }}
-              # 🔧 TEMPORARILY DISABLED: rate limit filter for internal network testing
-              # - name: envoy.filters.http.ratelimit
-              #   typed_config:
-              #     "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
-              #     domain: {{ .Values.rateLimit.domain }}
-              #     rate_limit_service:
-              #       transport_api_version: V3
-              #       grpc_service:
-              #         envoy_grpc:
-              #           cluster_name: rls_ratelimit
-              #         timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
-              #     failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
+              # 🔧 FIX: Re-enabled ext_authz filter with improved gRPC configuration
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  transport_api_version: V3
+                  with_request_body:
+                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
+                    allow_partial_message: true
+                  failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
+                  include_peer_certificate: true
+                  metadata_context_namespaces:
+                  - "envoy.filters.http.ext_authz"
+                  status_on_error:
+                    code: 500
+                  grpc_service:
+                    envoy_grpc:
+                      cluster_name: rls_ext_authz
+                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
+                    timeout: {{ .Values.extAuthz.timeout | default "5s" }}
+              # 🔧 FIX: Re-enabled rate limit filter with improved gRPC configuration
+              - name: envoy.filters.http.ratelimit
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+                  domain: {{ .Values.rateLimit.domain }}
+                  rate_limit_service:
+                    transport_api_version: V3
+                    grpc_service:
+                      envoy_grpc:
+                        cluster_name: rls_ratelimit
+                      timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
+                  failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -204,8 +204,8 @@ data:
                           - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
                           - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
                           - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
-                          - Ext Authz Filter: DISABLED (Internal Network)
-                          - Rate Limit Filter: DISABLED (Internal Network)
+                          - Ext Authz Filter: ENABLED (gRPC Fixed)
+                          - Rate Limit Filter: ENABLED (gRPC Fixed)
                           - Configured Routes:
                             * {{ .Values.remoteWrite.path }} (Remote Write)
                             * /prometheus/api/v1/query* (Prometheus Queries)
@@ -280,9 +280,9 @@ data:
         # 🔧 DEBUG: Enhanced health checks for RLS service debugging
         health_checks:
         - timeout: 5s
-          interval: 5s
-          unhealthy_threshold: 1
-          healthy_threshold: 1
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
           grpc_health_check:
             service_name: "envoy.service.auth.v3.Authorization"
         # 🔧 FIX: Configure connection pool for better reliability
@@ -304,7 +304,7 @@ data:
                     port_value: {{ .Values.rls.extAuthzPort | int }}
 
       - name: rls_ratelimit
-        connect_timeout: 0.25s
+        connect_timeout: 5s
         type: STRICT_DNS
         lb_policy: ROUND_ROBIN
         # 🔧 FIX: Properly configure HTTP/2 for gRPC communication to RLS
@@ -315,12 +315,14 @@ data:
               http2_protocol_options:
                 # 🔧 FIX: Configure HTTP/2 settings for better gRPC performance
                 max_concurrent_streams: 100
+                initial_stream_window_size: 65536
+                initial_connection_window_size: 1048576
         # 🔧 FIX: Add gRPC health checks for RLS rate limit service
         health_checks:
         - timeout: 5s
-          interval: 5s
-          unhealthy_threshold: 1
-          healthy_threshold: 1
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
           grpc_health_check:
             service_name: "envoy.service.ratelimit.v3.RateLimitService"
         # 🔧 FIX: Configure connection pool for better reliability
