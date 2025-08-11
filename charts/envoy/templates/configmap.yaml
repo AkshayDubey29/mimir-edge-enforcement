@@ -139,8 +139,6 @@ data:
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
-                      # 🔧 DEBUG: Add route name for tracking
-                      name: "remote_write"
                   
                   # 🔧 FIX: Prometheus query endpoints (read operations)
                   - match:
