@@ -22,7 +22,7 @@ tenantHeader: "X-Scope-OrgID"
 
 # Mimir distributor configuration
 mimir:
-  distributorHost: "mimir-distributor.mimir.svc.cluster.local"
+  distributorHost: "mock-mimir-distributor.mimir.svc.cluster.local"
   distributorPort: 8080
 
 # RLS service configuration
