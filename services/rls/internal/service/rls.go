@@ -262,16 +262,33 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		if err != nil {
 			rls.logger.Error().Err(err).Str("tenant", tenantID).Msg("failed to extract request body")
 			if rls.config.FailureModeAllow {
-				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "body_extract_failed").Inc()
+				rls.logger.Debug().Str("tenant", tenantID).Msg("body extraction failed but checking limits with fallback values (failure mode allow)")
+
+				// 🔧 CRITICAL FIX: Still apply limits even when body extraction fails
+				// Use conservative fallback values for rate limiting
+				fallbackSamples := int64(1)                                       // Assume at least 1 sample
+				fallbackBodyBytes := int64(len(req.Attributes.Request.Http.Body)) // Use raw body size
+
+				// Check limits with fallback values
+				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes)
+
+				if !decision.Allowed {
+					// Limits exceeded even with fallback values
+					rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_extract_failed_limit_exceeded").Inc()
+					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
+					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+					rls.recordDecision(tenantID, false, "body_extract_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes)
+					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
+				}
+
+				// Limits passed with fallback values
+				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "body_extract_failed_allow").Inc()
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
-
-				// 🔧 FIX: Update traffic flow state for body extraction failure (allow mode)
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-
-				// 🔧 FIX: Record decision for body extraction failure (allow mode)
-				rls.recordDecision(tenantID, true, "body_extract_failed_allow", 0, 0)
-
+				rls.recordDecision(tenantID, true, "body_extract_failed_allow", fallbackSamples, fallbackBodyBytes)
+				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_extract_failed").Inc()
@@ -299,17 +316,33 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			// 🔧 FIX: Handle truncated/corrupted bodies more gracefully
 			// If body parsing fails, use content length as fallback for rate limiting
 			if rls.config.FailureModeAllow {
-				rls.logger.Debug().Str("tenant", tenantID).Msg("allowing request despite parse failure (failure mode allow)")
-				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed").Inc()
+				rls.logger.Debug().Str("tenant", tenantID).Msg("parse failed but checking limits with fallback values (failure mode allow)")
+
+				// 🔧 CRITICAL FIX: Still apply limits even when parsing fails
+				// Use conservative fallback values for rate limiting
+				fallbackSamples := int64(1)    // Assume at least 1 sample
+				fallbackBodyBytes := bodyBytes // Use actual body size
+
+				// Check limits with fallback values
+				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes)
+
+				if !decision.Allowed {
+					// Limits exceeded even with fallback values
+					rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed_limit_exceeded").Inc()
+					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
+					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+					rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes)
+					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
+				}
+
+				// Limits passed with fallback values
+				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed_allow").Inc()
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
-
-				// 🔧 FIX: Update traffic flow state for parse failure (allow mode)
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-
-				// 🔧 FIX: Record decision for parse failure (allow mode)
-				rls.recordDecision(tenantID, true, "parse_failed_allow", 0, bodyBytes)
-
+				rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes)
+				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
 
@@ -662,6 +695,49 @@ func (rls *RLS) extractTenantID(req *envoy_service_auth_v3.CheckRequest) string 
 		}
 	}
 
+	// 🔧 ALLOY FIX: Extract tenant from basic auth for Alloy
+	// Alloy uses basic auth with username as tenant identifier
+	if authHeader, exists := headers["authorization"]; exists && authHeader != "" {
+		if strings.HasPrefix(authHeader, "Basic ") {
+			// Decode base64 basic auth
+			encoded := strings.TrimPrefix(authHeader, "Basic ")
+			decoded, err := base64.StdEncoding.DecodeString(encoded)
+			if err == nil {
+				// Format is "username:password"
+				parts := strings.SplitN(string(decoded), ":", 2)
+				if len(parts) >= 1 && parts[0] != "" {
+					tenantFromAuth := parts[0]
+					rls.logger.Info().
+						Str("tenant_from_auth", tenantFromAuth).
+						Msg("RLS: INFO - Extracted tenant from basic auth")
+					return tenantFromAuth
+				}
+			}
+		}
+	}
+
+	// 🔧 ALLOY FIX: Check for other auth header variations
+	authVariations := []string{"authorization", "Authorization", "AUTHORIZATION"}
+	for _, authHeader := range authVariations {
+		if authValue, exists := headers[authHeader]; exists && authValue != "" {
+			if strings.HasPrefix(authValue, "Basic ") {
+				encoded := strings.TrimPrefix(authValue, "Basic ")
+				decoded, err := base64.StdEncoding.DecodeString(encoded)
+				if err == nil {
+					parts := strings.SplitN(string(decoded), ":", 2)
+					if len(parts) >= 1 && parts[0] != "" {
+						tenantFromAuth := parts[0]
+						rls.logger.Info().
+							Str("tenant_from_auth", tenantFromAuth).
+							Str("auth_header", authHeader).
+							Msg("RLS: INFO - Extracted tenant from basic auth variation")
+						return tenantFromAuth
+					}
+				}
+			}
+		}
+	}
+
 	rls.logger.Info().Msg("RLS: INFO - No tenant header found")
 	return ""
 }
@@ -678,30 +754,82 @@ func (rls *RLS) extractBody(req *envoy_service_auth_v3.CheckRequest) ([]byte, er
 		Str("raw_body_preview", req.Attributes.Request.Http.Body[:minInt(100, len(req.Attributes.Request.Http.Body))]).
 		Msg("RLS: DEBUG - Raw request body")
 
-	// 🔧 FIX: Handle base64 encoded body from Envoy ext_authz
-	// Envoy sends the request body as base64 encoded string
+	// 🔧 ALLOY FIX: Enhanced body extraction for Alloy/Prometheus data
+	// Try multiple approaches to handle different data formats
+
+	// 1. First try base64 decoding (for Envoy ext_authz)
 	bodyBytes, err := base64.StdEncoding.DecodeString(req.Attributes.Request.Http.Body)
-	if err != nil {
-		// If base64 decoding fails, try treating it as raw bytes
-		// This handles cases where the body might not be base64 encoded
+	if err == nil {
 		rls.logger.Info().
-			Err(err).
-			Msg("RLS: DEBUG - Base64 decode failed, treating as raw bytes")
-		return []byte(req.Attributes.Request.Http.Body), nil
+			Str("decoded_body_length", fmt.Sprintf("%d", len(bodyBytes))).
+			Str("decoded_body_preview", string(bodyBytes[:minInt(100, len(bodyBytes))])).
+			Msg("RLS: DEBUG - Successfully base64 decoded body")
+		return bodyBytes, nil
+	}
+
+	// 2. If base64 fails, check if it's already raw bytes
+	// This handles cases where Envoy sends raw bytes instead of base64
+	rawBytes := []byte(req.Attributes.Request.Http.Body)
+
+	// 🔧 ALLOY FIX: Check for common Alloy/Prometheus data patterns
+	if len(rawBytes) > 0 {
+		// Check for gzip magic number (0x1f 0x8b)
+		if len(rawBytes) > 2 && rawBytes[0] == 0x1f && rawBytes[1] == 0x8b {
+			rls.logger.Info().
+				Str("detected_format", "gzip").
+				Msg("RLS: DEBUG - Detected gzip compressed data")
+		}
+		// Check for snappy magic number (typically starts with 0xff)
+		if len(rawBytes) > 0 && rawBytes[0] == 0xff {
+			rls.logger.Info().
+				Str("detected_format", "snappy").
+				Msg("RLS: DEBUG - Detected snappy compressed data")
+		}
+		// Check for protobuf-like data (starts with field markers)
+		if len(rawBytes) > 0 && rawBytes[0] == 0x0a {
+			rls.logger.Info().
+				Str("detected_format", "protobuf").
+				Msg("RLS: DEBUG - Detected protobuf-like data")
+		}
 	}
 
 	rls.logger.Info().
-		Str("decoded_body_length", fmt.Sprintf("%d", len(bodyBytes))).
-		Str("decoded_body_preview", string(bodyBytes[:minInt(100, len(bodyBytes))])).
-		Msg("RLS: DEBUG - Decoded request body")
+		Err(err).
+		Str("fallback_method", "raw_bytes").
+		Msg("RLS: DEBUG - Base64 decode failed, using raw bytes")
 
-	return bodyBytes, nil
+	return rawBytes, nil
 }
 
 // extractContentEncoding extracts the content encoding from headers
 func (rls *RLS) extractContentEncoding(req *envoy_service_auth_v3.CheckRequest) string {
 	headers := req.Attributes.Request.Http.Headers
-	return headers["content-encoding"]
+
+	// 🔧 ALLOY FIX: Enhanced content encoding detection
+	// Check multiple header variations that Alloy might use
+	contentEncoding := headers["content-encoding"]
+	if contentEncoding != "" {
+		return contentEncoding
+	}
+
+	// Check for case variations
+	contentEncoding = headers["Content-Encoding"]
+	if contentEncoding != "" {
+		return contentEncoding
+	}
+
+	// Check for other common variations
+	contentEncoding = headers["contentencoding"]
+	if contentEncoding != "" {
+		return contentEncoding
+	}
+
+	// 🔧 ALLOY FIX: Log headers for debugging
+	rls.logger.Info().
+		Interface("headers", headers).
+		Msg("RLS: DEBUG - Request headers for content encoding detection")
+
+	return ""
 }
 
 // getTenant gets the tenant state, creating it if it doesn't exist
