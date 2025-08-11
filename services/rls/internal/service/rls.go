@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	envoy_extensions_common_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/extensions/common/ratelimit/v3"
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
@@ -648,6 +649,21 @@ func (rls *RLS) allowResponse() *envoy_service_auth_v3.CheckResponse {
 		HttpResponse: &envoy_service_auth_v3.CheckResponse_OkResponse{
 			OkResponse: &envoy_service_auth_v3.OkHttpResponse{},
 		},
+		// 🔧 FIX: Add metadata for Envoy access logs
+		DynamicMetadata: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"status": {
+					Kind: &structpb.Value_StringValue{
+						StringValue: "ok",
+					},
+				},
+				"denied": {
+					Kind: &structpb.Value_BoolValue{
+						BoolValue: false,
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -660,6 +676,26 @@ func (rls *RLS) denyResponse(reason string, code int32) *envoy_service_auth_v3.C
 					Code: envoy_type_v3.StatusCode(code),
 				},
 				Body: reason,
+			},
+		},
+		// 🔧 FIX: Add metadata for Envoy access logs
+		DynamicMetadata: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"status": {
+					Kind: &structpb.Value_StringValue{
+						StringValue: "denied",
+					},
+				},
+				"denied": {
+					Kind: &structpb.Value_BoolValue{
+						BoolValue: true,
+					},
+				},
+				"failure_reason": {
+					Kind: &structpb.Value_StringValue{
+						StringValue: reason,
+					},
+				},
 			},
 		},
 	}
