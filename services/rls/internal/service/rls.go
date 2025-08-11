@@ -2445,7 +2445,7 @@ func (rls *RLS) getCardinalityTrends(timeRange string) []limits.CardinalityTrend
 			baseSeries := 25.0 + float64(i%10)*5.0 // 25-75 series per request
 			baseLabels := 6.0 + float64(i%5)*2.0   // 6-16 labels per series
 			baseRequests := int64(100 + i*20)      // 100-580 requests per bucket
-			
+
 			avgSeriesPerRequest = baseSeries
 			avgLabelsPerSeries = baseLabels
 			totalRequests = baseRequests
