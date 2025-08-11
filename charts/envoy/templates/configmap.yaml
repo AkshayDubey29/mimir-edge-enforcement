@@ -106,7 +106,8 @@ data:
                   grpc_service:
                     envoy_grpc:
                       cluster_name: rls_ext_authz
-                      # 🔧 FIX: Remove authority field - it should only be in cluster config
+                      # 🔧 DEBUG: Add authority for proper gRPC routing
+                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
                     timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               # 🔧 FIX: Re-enabled rate limit filter with improved gRPC configuration
               - name: envoy.filters.http.ratelimit
@@ -115,10 +116,12 @@ data:
                   domain: {{ .Values.rateLimit.domain }}
                   rate_limit_service:
                     transport_api_version: V3
-                    grpc_service:
-                      envoy_grpc:
-                        cluster_name: rls_ratelimit
-                      timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
+                                      grpc_service:
+                    envoy_grpc:
+                      cluster_name: rls_ratelimit
+                      # 🔧 DEBUG: Add authority for proper gRPC routing
+                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.rateLimitPort }}"
+                    timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
                   failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
                 typed_config:
@@ -136,6 +139,8 @@ data:
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
+                      # 🔧 DEBUG: Add route name for tracking
+                      name: "remote_write"
                   
                   # 🔧 FIX: Prometheus query endpoints (read operations)
                   - match:
