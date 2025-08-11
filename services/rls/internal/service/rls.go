@@ -2273,14 +2273,14 @@ func (rls *RLS) GetCardinalityData(timeRange, tenant string) limits.CardinalityD
 		totalSeries += denial.ObservedSeries
 		totalLabels += denial.ObservedLabels
 		requestCount++
-		
+
 		if denial.ObservedSeries > maxSeriesInRequest {
 			maxSeriesInRequest = denial.ObservedSeries
 		}
 		if denial.ObservedLabels > maxLabelsInSeries {
 			maxLabelsInSeries = denial.ObservedLabels
 		}
-		
+
 		if denial.Reason == "max_series_per_request_exceeded" || denial.Reason == "max_labels_per_series_exceeded" {
 			cardinalityViolations++
 		}
@@ -2295,12 +2295,12 @@ func (rls *RLS) GetCardinalityData(timeRange, tenant string) limits.CardinalityD
 	avgSeriesPerRequest := 0.0
 	avgLabelsPerSeries := 0.0
 	violationRate := 0.0
-	
+
 	if requestCount > 0 {
 		avgSeriesPerRequest = float64(totalSeries) / float64(requestCount)
 		avgLabelsPerSeries = float64(totalLabels) / float64(requestCount)
 	}
-	
+
 	if totalRequests > 0 {
 		violationRate = float64(cardinalityViolations) / float64(totalRequests)
 	}
@@ -2469,7 +2469,7 @@ func (rls *RLS) getTenantCardinality() []limits.TenantCardinality {
 		// Calculate real current series and labels for this tenant
 		currentSeries := int64(0)
 		currentLabels := int64(0)
-		
+
 		for _, denial := range rls.recentDenials {
 			if denial.TenantID == tenantID {
 				currentSeries += denial.ObservedSeries
