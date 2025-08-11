@@ -54,7 +54,7 @@ log:
 replicaCount: 1
 
 image:
-  repository: ghcr.io/AkshayDubey29/mimir-rls
+  repository: ghcr.io/akshaydubey29/mimir-rls
   tag: "latest"
   pullPolicy: IfNotPresent
 

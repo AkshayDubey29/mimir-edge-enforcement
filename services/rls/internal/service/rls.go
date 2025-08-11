@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -671,9 +672,30 @@ func (rls *RLS) extractBody(req *envoy_service_auth_v3.CheckRequest) ([]byte, er
 		return nil, fmt.Errorf("no body in request")
 	}
 
-	// In a real implementation, you'd need to handle the body properly
-	// This is a simplified version
-	return []byte(req.Attributes.Request.Http.Body), nil
+	// 🔧 DEBUG: Log the raw body to understand the format
+	rls.logger.Info().
+		Str("raw_body_length", fmt.Sprintf("%d", len(req.Attributes.Request.Http.Body))).
+		Str("raw_body_preview", req.Attributes.Request.Http.Body[:minInt(100, len(req.Attributes.Request.Http.Body))]).
+		Msg("RLS: DEBUG - Raw request body")
+
+	// 🔧 FIX: Handle base64 encoded body from Envoy ext_authz
+	// Envoy sends the request body as base64 encoded string
+	bodyBytes, err := base64.StdEncoding.DecodeString(req.Attributes.Request.Http.Body)
+	if err != nil {
+		// If base64 decoding fails, try treating it as raw bytes
+		// This handles cases where the body might not be base64 encoded
+		rls.logger.Info().
+			Err(err).
+			Msg("RLS: DEBUG - Base64 decode failed, treating as raw bytes")
+		return []byte(req.Attributes.Request.Http.Body), nil
+	}
+
+	rls.logger.Info().
+		Str("decoded_body_length", fmt.Sprintf("%d", len(bodyBytes))).
+		Str("decoded_body_preview", string(bodyBytes[:minInt(100, len(bodyBytes))])).
+		Msg("RLS: DEBUG - Decoded request body")
+
+	return bodyBytes, nil
 }
 
 // extractContentEncoding extracts the content encoding from headers

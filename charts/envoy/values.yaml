@@ -37,7 +37,7 @@ rls:
 # External authorization configuration
 extAuthz:
   maxRequestBytes: 4194304  # 4 MiB (this provides buffer management for requests)
-  failureModeAllow: true    # 🔧 DEBUG: Temporarily set to true to allow traffic while debugging
+  failureModeAllow: false   # 🔧 FIX: Set to false to properly enforce authorization
   # 🔧 FIX: Timeout settings to prevent hanging requests
   timeout: "5s"             # gRPC service timeout
 
