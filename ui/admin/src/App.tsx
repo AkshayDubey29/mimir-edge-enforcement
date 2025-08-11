@@ -8,6 +8,7 @@ import { Health } from './pages/Health';
 import { Pipeline } from './pages/Pipeline';
 import { TenantDetails } from './pages/TenantDetails';
 import { Metrics } from './pages/Metrics';
+import { CardinalityDashboard } from './pages/CardinalityDashboard';
 import { Wiki } from './pages/Wiki';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
         <Route path="/health" element={<Health />} />
         <Route path="/pipeline" element={<Pipeline />} />
         <Route path="/metrics" element={<Metrics />} />
+        <Route path="/cardinality" element={<CardinalityDashboard />} />
         <Route path="/wiki" element={<Wiki />} />
       </Routes>
     </Layout>
