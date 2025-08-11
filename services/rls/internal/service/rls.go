@@ -216,17 +216,36 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		rls.metrics.DecisionsTotal.WithLabelValues("deny", "unknown", "missing_tenant_header").Inc()
 		rls.metrics.TrafficFlowTotal.WithLabelValues("unknown", "deny").Inc()
 		rls.metrics.TrafficFlowLatency.WithLabelValues("unknown", "deny").Observe(time.Since(start).Seconds())
+		
+		// 🔧 FIX: Update traffic flow state even for missing tenant header
+		rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+		
 		return rls.denyResponse("missing tenant header", http.StatusBadRequest), nil
 	}
 
+	// 🔧 DEBUG: Log after tenant extraction
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Msg("RLS: INFO - Tenant extracted successfully")
+
 	// Get or initialize tenant state (unknown tenants default to enforcement disabled)
 	tenant := rls.getTenant(tenantID)
+
+	// 🔧 DEBUG: Log tenant state
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Bool("enforcement_enabled", tenant.Info.Enforcement.Enabled).
+		Msg("RLS: INFO - Tenant state retrieved")
 
 	// Check if enforcement is enabled
 	if !tenant.Info.Enforcement.Enabled {
 		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "enforcement_disabled").Inc()
 		rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 		rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
+		
+		// 🔧 FIX: Update traffic flow state even when enforcement is disabled
+		rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
+		
 		rls.recordDecision(tenantID, true, "enforcement_disabled", 0, 0)
 		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 		return rls.allowResponse(), nil
@@ -244,11 +263,19 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "body_extract_failed").Inc()
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
+				
+				// 🔧 FIX: Update traffic flow state for body extraction failure (allow mode)
+				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
+				
 				return rls.allowResponse(), nil
 			}
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_extract_failed").Inc()
 			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+			
+			// 🔧 FIX: Update traffic flow state for body extraction failure (deny mode)
+			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+			
 			return rls.denyResponse("failed to extract request body", http.StatusBadRequest), nil
 		}
 
@@ -260,7 +287,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		if err != nil {
 			rls.metrics.BodyParseErrors.Inc()
 			rls.logger.Error().Err(err).Str("tenant", tenantID).Str("content_encoding", contentEncoding).Int("body_size", len(body)).Msg("failed to parse remote write request")
-			
+
 			// 🔧 FIX: Handle truncated/corrupted bodies more gracefully
 			// If body parsing fails, use content length as fallback for rate limiting
 			if rls.config.FailureModeAllow {
@@ -268,13 +295,21 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed").Inc()
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
+				
+				// 🔧 FIX: Update traffic flow state for parse failure (allow mode)
+				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
+				
 				return rls.allowResponse(), nil
 			}
-			
+
 			// If failure mode is deny, still deny but with better error message
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed").Inc()
 			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+			
+			// 🔧 FIX: Update traffic flow state for parse failure (deny mode)
+			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+			
 			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
 		}
 
@@ -301,8 +336,20 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 	rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, decisionType).Observe(time.Since(start).Seconds())
 	rls.metrics.TrafficFlowBytes.WithLabelValues(tenantID, decisionType).Add(float64(bodyBytes))
 
+	// 🔧 DEBUG: Log before updating traffic flow state
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Bool("decision_allowed", decision.Allowed).
+		Float64("response_time", time.Since(start).Seconds()).
+		Msg("RLS: INFO - About to update traffic flow state")
+
 	// Update real-time traffic flow state
 	rls.updateTrafficFlowState(time.Since(start).Seconds(), decision.Allowed)
+
+	// 🔧 DEBUG: Log after updating traffic flow state
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Msg("RLS: INFO - Traffic flow state updated")
 
 	rls.recordDecision(tenantID, decision.Allowed, decision.Reason, samples, bodyBytes)
 	rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
@@ -1715,6 +1762,15 @@ func (rls *RLS) GetTrafficFlowData() map[string]any {
 	rlsDenied := rls.trafficFlow.RLSDenied
 	rls.trafficFlowMu.RUnlock()
 
+	// 🔧 DEBUG: Log traffic flow state for debugging
+	rls.logger.Debug().
+		Int64("envoy_to_rls_requests", envoyToRLSRequests).
+		Int64("rls_decisions", rlsDecisions).
+		Int64("rls_allowed", rlsAllowed).
+		Int64("rls_denied", rlsDenied).
+		Int64("rls_to_mimir_requests", rlsToMimirRequests).
+		Msg("RLS: DEBUG - Traffic flow state")
+
 	// Calculate traffic flow metrics
 	totalRequests := stats.TotalRequests
 	allowedRequests := stats.AllowedRequests
@@ -1859,6 +1915,17 @@ func (rls *RLS) updateTrafficFlowState(responseTime float64, allowed bool) {
 	} else {
 		rls.trafficFlow.RLSDenied++
 	}
+
+	// 🔧 DEBUG: Log traffic flow update
+	rls.logger.Info().
+		Int64("envoy_to_rls_requests", rls.trafficFlow.EnvoyToRLSRequests).
+		Int64("rls_decisions", rls.trafficFlow.RLSDecisions).
+		Int64("rls_allowed", rls.trafficFlow.RLSAllowed).
+		Int64("rls_denied", rls.trafficFlow.RLSDenied).
+		Int64("rls_to_mimir_requests", rls.trafficFlow.RLSToMimirRequests).
+		Bool("allowed", allowed).
+		Float64("response_time", responseTime).
+		Msg("RLS: INFO - Updated traffic flow state")
 
 	// Calculate requests per second (rolling average over last 60 seconds)
 	if !rls.trafficFlow.LastRequestTime.IsZero() {
