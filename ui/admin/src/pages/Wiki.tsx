@@ -711,6 +711,480 @@ export function Wiki() {
         </CardContent>
       </Card>
 
+      {/* Comprehensive Blocking Reasons */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5" />
+            Comprehensive Blocking Reasons Guide
+          </CardTitle>
+          <CardDescription>Complete reference of all blocking reasons with explanations and examples</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          {/* Overview */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🔍 Understanding Blocking Reasons</h3>
+            <p className="text-gray-700 mb-4">
+              Mimir Edge Enforcement provides detailed blocking reasons to help you understand exactly why requests 
+              are being denied. Each blocking reason includes specific information about the violation, observed values, 
+              and recommendations for resolution.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">📊 Real-time Visibility</h4>
+                <p className="text-sm text-blue-800">
+                  See exactly why requests are blocked with detailed metrics and timestamps
+                </p>
+              </div>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h4 className="font-medium text-green-900 mb-2">🎯 Specific Actions</h4>
+                <p className="text-sm text-green-800">
+                  Each reason provides clear guidance on how to resolve the issue
+                </p>
+              </div>
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <h4 className="font-medium text-purple-900 mb-2">📈 Historical Tracking</h4>
+                <p className="text-sm text-purple-800">
+                  Track blocking patterns over time to identify trends and optimize limits
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Rate Limiting Blocking Reasons */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">⚡ Rate Limiting Blocking Reasons</h3>
+            <div className="space-y-4">
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-red-900 mb-2">samples_rate_exceeded</h4>
+                    <p className="text-sm text-red-800 mb-3">
+                      The tenant has exceeded their samples per second rate limit. This is the most common 
+                      blocking reason for high-volume metric ingestion.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-red-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-red-800 space-y-1">
+                          <li>• Tenant sending too many samples too quickly</li>
+                          <li>• Token bucket algorithm detected rate violation</li>
+                          <li>• Temporary blocking until rate normalizes</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-red-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-red-800 space-y-1">
+                          <li>• Increase <code>samples_per_second</code> limit</li>
+                          <li>• Optimize client batching/compression</li>
+                          <li>• Reduce metric cardinality</li>
+                          <li>• Implement client-side rate limiting</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-red-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-red-800 font-mono">
+                        <div>Reason: samples_rate_exceeded</div>
+                        <div>Observed: 1,500 samples in 1 second</div>
+                        <div>Limit: 1,000 samples per second</div>
+                        <div>Status: 429 Too Many Requests</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-orange-900 mb-2">bytes_rate_exceeded</h4>
+                    <p className="text-sm text-orange-800 mb-3">
+                      The tenant has exceeded their bytes per second rate limit. This protects against 
+                      bandwidth abuse and ensures fair resource allocation.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-orange-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-orange-800 space-y-1">
+                          <li>• Tenant sending too much data too quickly</li>
+                          <li>• Network bandwidth limit exceeded</li>
+                          <li>• Large payloads or high compression</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-orange-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-orange-800 space-y-1">
+                          <li>• Increase <code>max_body_bytes</code> limit</li>
+                          <li>• Optimize payload compression</li>
+                          <li>• Reduce batch sizes</li>
+                          <li>• Implement client-side throttling</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-orange-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-orange-800 font-mono">
+                        <div>Reason: bytes_rate_exceeded</div>
+                        <div>Observed: 2.5 MB in 1 second</div>
+                        <div>Limit: 1 MB per second</div>
+                        <div>Status: 429 Too Many Requests</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Size Limit Blocking Reasons */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">📏 Size Limit Blocking Reasons</h3>
+            <div className="space-y-4">
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-red-900 mb-2">body_size_exceeded</h4>
+                    <p className="text-sm text-red-800 mb-3">
+                      The request body size exceeds the maximum allowed limit. This prevents memory exhaustion 
+                      and protects against DoS attacks.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-red-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-red-800 space-y-1">
+                          <li>• Single request too large</li>
+                          <li>• Memory protection mechanism</li>
+                          <li>• Prevents resource exhaustion</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-red-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-red-800 space-y-1">
+                          <li>• Split large batches into smaller requests</li>
+                          <li>• Increase <code>max_body_bytes</code> limit</li>
+                          <li>• Optimize metric compression</li>
+                          <li>• Reduce metric cardinality</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-red-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-red-800 font-mono">
+                        <div>Reason: body_size_exceeded</div>
+                        <div>Observed: 12 MB request body</div>
+                        <div>Limit: 10 MB maximum</div>
+                        <div>Status: 413 Request Entity Too Large</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Validation Blocking Reasons */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🔍 Data Validation Blocking Reasons</h3>
+            <div className="space-y-4">
+              <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-purple-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-purple-900 mb-2">parse_failed_deny</h4>
+                    <p className="text-sm text-purple-800 mb-3">
+                      The request body could not be parsed as valid Prometheus remote write protobuf data. 
+                      This indicates malformed or corrupted data.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-purple-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-purple-800 space-y-1">
+                          <li>• Invalid protobuf format</li>
+                          <li>• Corrupted snappy/gzip compression</li>
+                          <li>• Malformed metric data</li>
+                          <li>• Network transmission errors</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-purple-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-purple-800 space-y-1">
+                          <li>• Check client protobuf generation</li>
+                          <li>• Verify compression settings</li>
+                          <li>• Test with valid sample data</li>
+                          <li>• Check network connectivity</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-purple-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-purple-800 font-mono">
+                        <div>Reason: parse_failed_deny</div>
+                        <div>Error: proto: cannot parse invalid wire-format data</div>
+                        <div>Body Size: 1,234 bytes</div>
+                        <div>Status: 400 Bad Request</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-purple-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-purple-900 mb-2">body_extract_failed_deny</h4>
+                    <p className="text-sm text-purple-800 mb-3">
+                      Failed to extract the request body from the HTTP request. This usually indicates 
+                      a problem with the request format or Envoy configuration.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-purple-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-purple-800 space-y-1">
+                          <li>• Empty request body</li>
+                          <li>• Envoy body parsing issue</li>
+                          <li>• Content-Length mismatch</li>
+                          <li>• Request truncation</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-purple-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-purple-800 space-y-1">
+                          <li>• Check client request format</li>
+                          <li>• Verify Envoy body parsing config</li>
+                          <li>• Ensure proper Content-Length</li>
+                          <li>• Test with valid request body</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-purple-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-purple-800 font-mono">
+                        <div>Reason: body_extract_failed_deny</div>
+                        <div>Error: no body in request</div>
+                        <div>Content-Length: 0</div>
+                        <div>Status: 400 Bad Request</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Configuration Blocking Reasons */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">⚙️ Configuration Blocking Reasons</h3>
+            <div className="space-y-4">
+              <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-yellow-900 mb-2">missing_tenant_header</h4>
+                    <p className="text-sm text-yellow-800 mb-3">
+                      The request is missing the required tenant identification header. This prevents 
+                      the system from applying tenant-specific limits.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-yellow-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-yellow-800 space-y-1">
+                          <li>• No X-Scope-OrgID header</li>
+                          <li>• No Authorization header (for Alloy)</li>
+                          <li>• Client not configured properly</li>
+                          <li>• Cannot identify tenant</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-yellow-900 mb-1">🛠️ How to fix:</h5>
+                        <ul className="text-sm text-yellow-800 space-y-1">
+                          <li>• Add X-Scope-OrgID header to requests</li>
+                          <li>• Configure basic auth for Alloy</li>
+                          <li>• Update client configuration</li>
+                          <li>• Check tenant header format</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-yellow-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-yellow-800 font-mono">
+                        <div>Reason: missing_tenant_header</div>
+                        <div>Required: X-Scope-OrgID or Authorization</div>
+                        <div>Found: No tenant headers</div>
+                        <div>Status: 400 Bad Request</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-blue-900 mb-2">enforcement_disabled</h4>
+                    <p className="text-sm text-blue-800 mb-3">
+                      Enforcement is disabled for this tenant. Requests are allowed to pass through 
+                      without limit checking (monitoring only mode).
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-blue-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                          <li>• Tenant in monitoring mode</li>
+                          <li>• No limits enforced</li>
+                          <li>• Requests always allowed</li>
+                          <li>• Metrics still collected</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-blue-900 mb-1">🛠️ How to enable:</h5>
+                        <ul className="text-sm text-blue-800 space-y-1">
+                          <li>• Set enforcement.enabled: true</li>
+                          <li>• Configure tenant limits</li>
+                          <li>• Update via Admin API</li>
+                          <li>• Use overrides-sync controller</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-blue-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-blue-800 font-mono">
+                        <div>Reason: enforcement_disabled</div>
+                        <div>Tenant: new-tenant</div>
+                        <div>Status: Monitoring only</div>
+                        <div>Action: Allowed (no limits)</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Failure Mode Blocking Reasons */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🔄 Failure Mode Blocking Reasons</h3>
+            <div className="space-y-4">
+              <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-green-900 mb-2">parse_failed_allow</h4>
+                    <p className="text-sm text-green-800 mb-3">
+                      Request parsing failed but was allowed due to failure mode configuration. 
+                      Limits are still enforced using fallback values.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-green-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-green-800 space-y-1">
+                          <li>• Data corruption detected</li>
+                          <li>• Fallback limit enforcement</li>
+                          <li>• Conservative sample counting</li>
+                          <li>• Protection still active</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-green-900 mb-1">🛠️ Best practices:</h5>
+                        <ul className="text-sm text-green-800 space-y-1">
+                          <li>• Monitor corruption patterns</li>
+                          <li>• Investigate data sources</li>
+                          <li>• Check network stability</li>
+                          <li>• Review client configuration</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-green-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-green-800 font-mono">
+                        <div>Reason: parse_failed_allow</div>
+                        <div>Fallback: 1 sample, 123 bytes</div>
+                        <div>Limits: Still enforced</div>
+                        <div>Status: 200 OK (with limits)</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-green-900 mb-2">body_extract_failed_allow</h4>
+                    <p className="text-sm text-green-800 mb-3">
+                      Body extraction failed but was allowed due to failure mode configuration. 
+                      Conservative limits are applied using raw body size.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <h5 className="font-medium text-green-900 mb-1">🔍 What it means:</h5>
+                        <ul className="text-sm text-green-800 space-y-1">
+                          <li>• Body parsing issue</li>
+                          <li>• Raw size limit enforcement</li>
+                          <li>• Conservative protection</li>
+                          <li>• System still protected</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <h5 className="font-medium text-green-900 mb-1">🛠️ Best practices:</h5>
+                        <ul className="text-sm text-green-800 space-y-1">
+                          <li>• Monitor extraction failures</li>
+                          <li>• Check Envoy configuration</li>
+                          <li>• Verify request format</li>
+                          <li>• Review client setup</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="mt-3 p-3 bg-white rounded border">
+                      <h5 className="font-medium text-green-900 mb-1">📝 Example:</h5>
+                      <div className="text-sm text-green-800 font-mono">
+                        <div>Reason: body_extract_failed_allow</div>
+                        <div>Fallback: 1 sample, 456 bytes</div>
+                        <div>Limits: Raw size enforced</div>
+                        <div>Status: 200 OK (with limits)</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Monitoring and Resolution */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">📊 Monitoring and Resolution</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">🔍 Real-time Monitoring</h4>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  <li>• <strong>Blocking Dashboard</strong> - Live view of all blocking reasons</li>
+                  <li>• <strong>Tenant Details</strong> - Per-tenant blocking history</li>
+                  <li>• <strong>Trend Analysis</strong> - Identify patterns over time</li>
+                  <li>• <strong>Alert Integration</strong> - Get notified of violations</li>
+                  <li>• <strong>Metrics Export</strong> - Prometheus metrics for monitoring</li>
+                </ul>
+              </div>
+              <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <h4 className="font-medium text-gray-900 mb-2">🛠️ Resolution Workflow</h4>
+                <ul className="text-sm text-gray-700 space-y-1">
+                  <li>• <strong>1. Identify</strong> - Check blocking reason in UI</li>
+                  <li>• <strong>2. Analyze</strong> - Review observed vs limit values</li>
+                  <li>• <strong>3. Investigate</strong> - Check client configuration</li>
+                  <li>• <strong>4. Adjust</strong> - Update limits or fix client</li>
+                  <li>• <strong>5. Monitor</strong> - Verify resolution effectiveness</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Architecture */}
       <Card>
         <CardHeader>
