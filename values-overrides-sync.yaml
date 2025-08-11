@@ -16,7 +16,7 @@ image:
 # Service configuration
 service:
   type: ClusterIP
-  port: 8080
+  port: 9090  # 🔧 FIX: Match the default metrics port in the application
   annotations: {}
 
 # 🔧 DEBUG: Enhanced resource configuration for debugging
