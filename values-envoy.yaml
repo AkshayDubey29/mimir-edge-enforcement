@@ -53,9 +53,10 @@ proxy:
 
 # 🔧 DEBUG: Enhanced logging configuration for troubleshooting
 logging:
-  level: "debug"                # Set to debug for troubleshooting
+  level: "trace"                # 🔧 DEBUG: Set to trace for maximum debugging
   enableAccessLogs: true        # Enable HTTP access logs
   enableDebugLogs: true         # Enable debug logging for filters
+  enableDetailedLogs: true      # 🔧 DEBUG: Enable detailed filter logs
 
 # Resource limits and overload management
 resourceLimits:

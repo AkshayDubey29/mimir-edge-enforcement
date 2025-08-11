@@ -1,0 +1,140 @@
+# NGINX Debug Configuration for Mimir Edge Enforcement
+# This configuration enables comprehensive logging to debug 499 errors
+
+# Upstream definitions
+upstream mimir_distributor {
+    server mimir-distributor.mimir.svc.cluster.local:8080;
+}
+
+upstream mimir_envoy {
+    server mimir-envoy.mimir-edge-enforcement.svc.cluster.local:8080;
+}
+
+# 🔧 DEBUG: Generate unique request ID for tracing
+map $remote_addr$request_uri$time $request_id {
+    default $remote_addr$request_uri$time;
+}
+
+# Split clients configuration
+split_clients "${remote_addr}${request_uri}" $backend {
+    5%     mimir_envoy;      # 5% traffic to Envoy
+    95%    mimir_distributor; # 95% traffic to Mimir distributor
+}
+
+# Main server block
+server {
+    listen 80;
+    server_name _;
+
+    # 🔧 DEBUG: Comprehensive access logging
+    access_log /var/log/nginx/access.log combined buffer=512k flush=1s;
+    error_log /var/log/nginx/error.log debug;
+
+    # 🔧 DEBUG: Custom log format for detailed debugging
+    log_format debug_detailed '$remote_addr - $remote_user [$time_local] '
+                             '"$request" $status $body_bytes_sent '
+                             '"$http_referer" "$http_user_agent" '
+                             'rt=$request_time uct="$upstream_connect_time" '
+                             'uht="$upstream_header_time" urt="$upstream_response_time" '
+                             'backend="$upstream_addr" '
+                             'tenant="$http_x_scope_orgid" '
+                             'method="$request_method" '
+                             'uri="$request_uri" '
+                             'host="$http_host" '
+                             'content_length="$http_content_length" '
+                             'content_type="$http_content_type" '
+                             'connection="$http_connection" '
+                             'upgrade="$http_upgrade" '
+                             'x_forwarded_for="$http_x_forwarded_for" '
+                             'x_real_ip="$http_x_real_ip" '
+                             'x_forwarded_proto="$http_x_forwarded_proto"';
+
+    # Main location for remote write with traffic splitting
+    location /api/v1/push {
+        # 🔧 DEBUG: Use detailed logging format
+        access_log /var/log/nginx/api_v1_push.log debug_detailed;
+        
+        # Use split_clients to route traffic
+        proxy_pass http://$backend;
+        
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 🔧 DEBUG: Add request ID for tracing
+        proxy_set_header X-Request-ID $request_id;
+        
+        # Timeouts
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        
+        # Buffer settings for large requests
+        proxy_request_buffering off;
+        proxy_buffering off;
+        
+        # Pass through tenant header
+        proxy_set_header X-Scope-OrgID $http_x_scope_orgid;
+        
+        # 🔧 DEBUG: Add backend info to response headers
+        add_header X-Backend $upstream_addr;
+        add_header X-Request-ID $request_id;
+        
+        # Error handling
+        proxy_intercept_errors on;
+        error_page 502 503 504 = @fallback;
+    }
+
+    # Fallback location (direct to Mimir distributor)
+    location @fallback {
+        # 🔧 DEBUG: Use detailed logging format
+        access_log /var/log/nginx/fallback.log debug_detailed;
+        
+        proxy_pass http://mimir_distributor;
+        
+        # Standard proxy headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # Timeouts
+        proxy_connect_timeout 30s;
+        proxy_send_timeout 30s;
+        proxy_read_timeout 30s;
+        
+        # Buffer settings
+        proxy_request_buffering off;
+        proxy_buffering off;
+        
+        # Pass through tenant header
+        proxy_set_header X-Scope-OrgID $http_x_scope_orgid;
+        
+        # 🔧 DEBUG: Add fallback info to response headers
+        add_header X-Fallback "true";
+        add_header X-Backend $upstream_addr;
+    }
+
+    # 🔧 DEBUG: Status endpoint with detailed info
+    location /debug-status {
+        access_log /var/log/nginx/debug_status.log debug_detailed;
+        return 200 "Debug Status:\nBackend: $backend\nRequest ID: $request_id\nTime: $time_local\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+
+    # Traffic split status endpoint
+    location /split-status {
+        access_log off;
+        return 200 "Canary: 5% to Envoy, 95% to Mimir\n";
+        add_header Content-Type text/plain;
+    }
+}

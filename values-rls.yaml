@@ -33,6 +33,8 @@ store:
 # 🔧 DEBUG: Enhanced logging for troubleshooting
 log:
   level: "debug"  # Set to debug for troubleshooting
+  enableGRPCLogs: true  # 🔧 DEBUG: Enable gRPC request/response logs
+  enableDetailedLogs: true  # 🔧 DEBUG: Enable detailed operation logs
 
 # Deployment configuration
 replicaCount: 1
