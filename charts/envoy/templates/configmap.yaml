@@ -80,36 +80,37 @@ data:
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
               http_filters:
-              - name: envoy.filters.http.ext_authz
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-                  transport_api_version: V3
-                  with_request_body:
-                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
-                    allow_partial_message: true
-                  failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-                  include_peer_certificate: true
-                  metadata_context_namespaces:
-                  - "envoy.filters.http.ext_authz"
-                  status_on_error:
-                    code: 500
-                  grpc_service:
-                    envoy_grpc:
-                      cluster_name: rls_ext_authz
-                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
-                    timeout: {{ .Values.extAuthz.timeout | default "5s" }}
-              - name: envoy.filters.http.ratelimit
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
-                  domain: {{ .Values.rateLimit.domain }}
-                  rate_limit_service:
-                    transport_api_version: V3
-                    grpc_service:
-                      envoy_grpc:
-                        cluster_name: rls_ratelimit
-                      # 🔧 FIX: Add gRPC timeout for rate limit
-                      timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
-                  failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
+              # 🔧 TEMPORARILY DISABLED: ext_authz filter for internal network testing
+              # - name: envoy.filters.http.ext_authz
+              #   typed_config:
+              #     "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+              #     transport_api_version: V3
+              #     with_request_body:
+              #       max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
+              #       allow_partial_message: true
+              #     failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
+              #     include_peer_certificate: true
+              #     metadata_context_namespaces:
+              #     - "envoy.filters.http.ext_authz"
+              #     status_on_error:
+              #       code: 500
+              #     grpc_service:
+              #       envoy_grpc:
+              #         cluster_name: rls_ext_authz
+              #         authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
+              #       timeout: {{ .Values.extAuthz.timeout | default "5s" }}
+              # 🔧 TEMPORARILY DISABLED: rate limit filter for internal network testing
+              # - name: envoy.filters.http.ratelimit
+              #   typed_config:
+              #     "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
+              #     domain: {{ .Values.rateLimit.domain }}
+              #     rate_limit_service:
+              #       transport_api_version: V3
+              #       grpc_service:
+              #         envoy_grpc:
+              #           cluster_name: rls_ratelimit
+              #         timeout: {{ .Values.rateLimit.grpcTimeout | default "2s" }}
+              #     failure_mode_deny: {{ .Values.rateLimit.failureModeDeny }}
               - name: envoy.filters.http.router
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -138,8 +139,8 @@ data:
                           - Mimir Host: {{ .Values.mimir.distributorHost }}:{{ .Values.mimir.distributorPort }}
                           - Failure Mode Allow: {{ .Values.extAuthz.failureModeAllow }}
                           - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
-                          - Ext Authz Filter: ENABLED
-                          - Rate Limit Filter: ENABLED
+                          - Ext Authz Filter: DISABLED (Internal Network)
+                          - Rate Limit Filter: DISABLED (Internal Network)
 
 
       clusters:
