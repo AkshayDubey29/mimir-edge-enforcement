@@ -121,11 +121,76 @@ data:
                 - name: local_service
                   domains: ["*"]
                   routes:
+                  # 🔧 FIX: Remote write endpoint (metrics ingestion)
                   - match:
                       prefix: "{{ .Values.remoteWrite.path }}"
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  # 🔧 FIX: Prometheus query endpoints (read operations)
+                  - match:
+                      prefix: "/prometheus/api/v1/query"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/prometheus/api/v1/query_range"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/prometheus/api/v1/series"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/prometheus/api/v1/labels"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/prometheus/api/v1/label"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  # 🔧 FIX: Mimir admin endpoints
+                  - match:
+                      prefix: "/api/v1/status"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/api/v1/rules"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/api/v1/alerts"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  # 🔧 FIX: Health check endpoints
+                  - match:
+                      prefix: "/ready"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
+                  - match:
+                      prefix: "/healthy"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
+                  
                   # 🔧 DEBUG: Debug endpoint for troubleshooting
                   - match:
                       prefix: "/debug"
@@ -141,6 +206,19 @@ data:
                           - Ext Authz Timeout: {{ .Values.extAuthz.timeout }}
                           - Ext Authz Filter: DISABLED (Internal Network)
                           - Rate Limit Filter: DISABLED (Internal Network)
+                          - Configured Routes:
+                            * {{ .Values.remoteWrite.path }} (Remote Write)
+                            * /prometheus/api/v1/query* (Prometheus Queries)
+                            * /api/v1/status* (Mimir Admin)
+                            * /ready, /healthy (Health Checks)
+                            * / (Catch-all for other endpoints)
+                  
+                  # 🔧 FIX: Catch-all route for other Mimir endpoints (must be last)
+                  - match:
+                      prefix: "/"
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.proxy.upstreamTimeout }}
 
 
       clusters:
