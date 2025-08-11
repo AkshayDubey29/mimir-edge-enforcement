@@ -80,25 +80,24 @@ data:
                       ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
                       ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
               http_filters:
-              # 🔧 TEMPORARILY DISABLED: ext_authz filter for debugging
-              # - name: envoy.filters.http.ext_authz
-              #   typed_config:
-              #     "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-              #     transport_api_version: V3
-              #     with_request_body:
-              #       max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
-              #       allow_partial_message: true
-              #     failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-              #     include_peer_certificate: true
-              #     metadata_context_namespaces:
-              #     - "envoy.filters.http.ext_authz"
-              #     status_on_error:
-              #       code: 500
-              #     grpc_service:
-              #       envoy_grpc:
-              #         cluster_name: rls_ext_authz
-              #         authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
-              #       timeout: {{ .Values.extAuthz.timeout | default "5s" }}
+              - name: envoy.filters.http.ext_authz
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                  transport_api_version: V3
+                  with_request_body:
+                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
+                    allow_partial_message: true
+                  failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
+                  include_peer_certificate: true
+                  metadata_context_namespaces:
+                  - "envoy.filters.http.ext_authz"
+                  status_on_error:
+                    code: 500
+                  grpc_service:
+                    envoy_grpc:
+                      cluster_name: rls_ext_authz
+                      authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
+                    timeout: {{ .Values.extAuthz.timeout | default "5s" }}
               - name: envoy.filters.http.ratelimit
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.ratelimit.v3.RateLimit
@@ -188,8 +187,6 @@ data:
           healthy_threshold: 1
           grpc_health_check:
             service_name: "envoy.service.auth.v3.Authorization"
-            # 🔧 DEBUG: Add authority for health check
-            authority: "{{ .Values.rls.host }}:{{ .Values.rls.extAuthzPort }}"
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
@@ -222,9 +219,9 @@ data:
                 max_concurrent_streams: 100
         # 🔧 FIX: Add gRPC health checks for RLS rate limit service
         health_checks:
-        - timeout: 3s
-          interval: 10s
-          unhealthy_threshold: 2
+        - timeout: 5s
+          interval: 5s
+          unhealthy_threshold: 1
           healthy_threshold: 1
           grpc_health_check:
             service_name: "envoy.service.ratelimit.v3.RateLimitService"
