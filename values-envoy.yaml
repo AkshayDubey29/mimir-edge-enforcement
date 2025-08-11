@@ -45,7 +45,7 @@ rateLimit:
 
 # Proxy configuration
 proxy:
-  upstreamTimeout: "30s"
+  upstreamTimeout: "60s"  # 🔧 FIX: Increased timeout for large metric payloads
   httpProtocol:
     acceptHttp10: true
     useRemoteAddress: true
