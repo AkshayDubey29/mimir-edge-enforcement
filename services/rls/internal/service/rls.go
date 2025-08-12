@@ -405,88 +405,45 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			rls.metrics.BodyParseErrors.Inc()
 			rls.logger.Error().Err(err).Str("tenant", tenantID).Str("content_encoding", contentEncoding).Int("body_size", len(body)).Msg("failed to parse remote write request")
 
-			// 🔧 FIX: Handle truncated/corrupted bodies more gracefully
-			// If body parsing fails, use content length as fallback for rate limiting
-			if rls.config.FailureModeAllow {
-				rls.logger.Debug().Str("tenant", tenantID).Msg("parse failed but checking limits with fallback values (failure mode allow)")
-
-				// 🔧 CRITICAL FIX: Still apply limits even when parsing fails
-				// Use conservative fallback values for rate limiting
-				fallbackSamples := int64(1)    // Assume at least 1 sample
-				fallbackBodyBytes := bodyBytes // Use actual body size
-				fallbackRequestInfo := &limits.RequestInfo{
-					ObservedSamples: fallbackSamples,
-					ObservedSeries:  1,  // Assume 1 series
-					ObservedLabels:  10, // Assume 10 labels
-				}
-
-				// Check limits with fallback values
-				decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
-
-				if !decision.Allowed {
-					// Limits exceeded even with fallback values
-					rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed_limit_exceeded").Inc()
-					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
-					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
-					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-					rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
-					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
-				}
-
-				// Limits passed with fallback values
-				rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed_allow").Inc()
-				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
-				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
-				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-				rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
-				rls.updateBucketMetrics(tenant)
-				return rls.allowResponse(), nil
+			// 🔧 PRODUCTION FIX: Always allow parsing failures with intelligent fallback
+			// This ensures legitimate traffic gets through while still enforcing limits
+			fallbackSamples := rls.calculateFallbackSamples(body, contentEncoding)
+			fallbackBodyBytes := bodyBytes
+			fallbackRequestInfo := &limits.RequestInfo{
+				ObservedSamples: fallbackSamples,
+				ObservedSeries:  rls.calculateFallbackSeries(body, contentEncoding),
+				ObservedLabels:  rls.calculateFallbackLabels(body, contentEncoding),
 			}
 
-			// If failure mode is deny, still deny but with better error message
-			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed").Inc()
-			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
-			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+			// Check limits with intelligent fallback values
+			decision := rls.checkLimits(tenant, fallbackSamples, fallbackBodyBytes, fallbackRequestInfo)
 
-			// 🔧 FIX: Update traffic flow state for parse failure (deny mode)
-			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-
-			// 🔧 FIX: Record decision for parse failure (deny mode)
-			// Build parse diagnostics for visibility
-			parseDiag := &limits.ParseDiagnostics{
-				ContentEncoding: contentEncoding,
-				BodySize:        len(body),
-				Error:           err.Error(),
-				HexPreview:      nil,
-				GuessedCause:    "",
-				Suggestions: []string{
-					"Ensure the payload is valid Prometheus remote_write protobuf",
-					"Verify compression header matches payload (gzip/snappy)",
-					"Avoid truncation by checking client/proxy timeouts and body size",
-				},
-			}
-			// Small hex preview (first 10 bytes) without heavy logging
-			max := 10
-			if len(body) < max {
-				max = len(body)
-			}
-			if max > 0 {
-				hex := make([]string, max)
-				for i := 0; i < max; i++ {
-					hex[i] = fmt.Sprintf("%02x", body[i])
-				}
-				parseDiag.HexPreview = hex
-			}
-			// Simple guess for common cases
-			if contentEncoding == "snappy" && len(body) < 10 {
-				parseDiag.GuessedCause = "snappy compressed body too small (likely truncated)"
-			} else if contentEncoding == "gzip" && len(body) < 20 {
-				parseDiag.GuessedCause = "gzip body very small (likely truncated/invalid)"
+			if !decision.Allowed {
+				// Limits exceeded even with fallback values - deny
+				rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "parse_failed_limit_exceeded").Inc()
+				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
+				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+				rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
+				rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+				return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
 			}
 
-			rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes, nil, nil, parseDiag)
+			// Limits passed with fallback values - allow but log warning
+			rls.logger.Warn().
+				Str("tenant", tenantID).
+				Str("content_encoding", contentEncoding).
+				Int("body_size", len(body)).
+				Int64("fallback_samples", fallbackSamples).
+				Err(err).
+				Msg("parse failed but allowing with fallback values")
 
-			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
+			rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "parse_failed_allow").Inc()
+			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
+			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
+			rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
+			rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+			rls.updateBucketMetrics(tenant)
+			return rls.allowResponse(), nil
 		}
 
 		samples = result.SamplesCount
@@ -1618,6 +1575,56 @@ func (rls *RLS) denyResponse(reason string, code int32) *envoy_service_auth_v3.C
 			},
 		},
 	}
+}
+
+// calculateFallbackSamples calculates intelligent fallback sample count based on body size and encoding
+func (rls *RLS) calculateFallbackSamples(body []byte, contentEncoding string) int64 {
+	// Base calculation on body size and compression type
+	bodySize := len(body)
+
+	// Conservative estimates based on typical Prometheus remote write data
+	switch contentEncoding {
+	case "gzip":
+		// Gzip typically compresses 3-10x, so estimate 1 sample per 100-500 bytes
+		if bodySize < 1000 {
+			return 1
+		}
+		return int64(bodySize / 300) // Conservative estimate
+	case "snappy":
+		// Snappy typically compresses 2-4x, so estimate 1 sample per 50-200 bytes
+		if bodySize < 500 {
+			return 1
+		}
+		return int64(bodySize / 150) // Conservative estimate
+	default:
+		// Uncompressed - estimate 1 sample per 50-100 bytes
+		if bodySize < 100 {
+			return 1
+		}
+		return int64(bodySize / 75) // Conservative estimate
+	}
+}
+
+// calculateFallbackSeries calculates intelligent fallback series count
+func (rls *RLS) calculateFallbackSeries(body []byte, contentEncoding string) int64 {
+	// Estimate series based on samples (typically 1-10 samples per series)
+	samples := rls.calculateFallbackSamples(body, contentEncoding)
+	if samples <= 1 {
+		return 1
+	}
+	// Conservative estimate: 1 series per 5 samples
+	return samples / 5
+}
+
+// calculateFallbackLabels calculates intelligent fallback label count
+func (rls *RLS) calculateFallbackLabels(body []byte, contentEncoding string) int64 {
+	// Estimate labels based on body size (typically 5-20 labels per series)
+	series := rls.calculateFallbackSeries(body, contentEncoding)
+	if series <= 1 {
+		return 10 // Default assumption
+	}
+	// Conservative estimate: 10 labels per series
+	return series * 10
 }
 
 // SetTenantLimits sets the limits for a tenant
