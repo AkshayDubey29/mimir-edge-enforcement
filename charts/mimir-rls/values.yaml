@@ -49,7 +49,7 @@ enforcement:
 
 # Store configuration
 store:
-  backend: "memory"  # memory or redis
+  backend: "redis"  # memory or redis - Use redis for shared state in production
   redis:
     address: "localhost:6379"
     tls:
@@ -57,6 +57,28 @@ store:
       caCert: ""
       clientCert: ""
       clientKey: ""
+
+# Redis configuration for shared state
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7.2-alpine"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 25m
+      memory: 32Mi
+  persistence:
+    enabled: false  # Set to true for production with persistent storage
+    size: 1Gi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
 
 # Logging configuration
 log:
