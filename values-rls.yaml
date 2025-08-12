@@ -118,5 +118,40 @@ serviceMonitor:
   labels: {}
   annotations: {}
 
+# Redis configuration for shared state
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7.2-alpine"
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+  persistence:
+    enabled: true  # Production: Enable persistence for data durability
+    size: 10Gi
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    fsGroup: 999
+  # Production Redis configuration
+  config:
+    maxmemory: "800mb"
+    maxmemoryPolicy: "allkeys-lru"
+    appendonly: "yes"
+    save: ["900 1", "300 10", "60 10000"]
+    timeout: 300
+    tcpKeepalive: 300
+    # Security settings
+    protectedMode: "yes"
+    # Performance settings
+    tcpBacklog: 511
+    databases: 16
+
 # Image pull secrets
 imagePullSecrets: []
