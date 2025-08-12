@@ -1,0 +1,159 @@
+# Cardinality-Only Enforcement Configuration
+# This configuration enforces only per_metric_series_limit and per_user_series_limit
+# while disabling all other limits (rate limiting, body size, etc.)
+
+# RLS Values - Cardinality Enforcement Only
+rls:
+  limits:
+    # Disable rate limiting
+    defaultSamplesPerSecond: 0      # No samples per second enforcement
+    defaultBurstPercent: 0          # No burst allowance needed
+    maxBodyBytes: 0                 # No body size enforcement
+    
+    # Enable cardinality limits
+    defaultMaxLabelsPerSeries: 60   # per_user_series_limit - ENFORCED
+    defaultMaxLabelValueLength: 2048 # per_user_series_limit - ENFORCED
+    defaultMaxSeriesPerRequest: 10000 # per_metric_series_limit - ENFORCED
+    
+    # Keep body parsing enabled for cardinality analysis
+    enforceBodyParsing: true
+    failureModeAllow: true          # Allow requests when parsing fails (with cardinality enforcement)
+    maxRequestBytes: "10485760"     # 10 MiB - Global safety limit
+
+  # Selective Enforcement Configuration
+  enforcement:
+    enabled: true
+    # Cardinality limits - ENFORCED
+    enforceMaxSeriesPerRequest: true   # per_metric_series_limit
+    enforceMaxLabelsPerSeries: true    # per_user_series_limit
+    # Rate limiting - DISABLED
+    enforceSamplesPerSecond: false     # No rate limiting
+    enforceBytesPerSecond: false       # No bytes rate limiting
+    # Body size - DISABLED
+    enforceMaxBodyBytes: false         # No body size enforcement
+
+# Envoy Values - Configured for Cardinality Enforcement
+envoy:
+  extAuthz:
+    maxRequestBytes: 10485760  # 10 MiB - Increased for large payloads
+    failureModeAllow: false    # Deny requests when gRPC fails (SECURITY)
+    timeout: "5s"              # Optimized timeout
+    disableBodyParsing: false  # Enable body parsing for cardinality analysis
+
+  rateLimit:
+    failureModeDeny: false     # Allow requests when rate limit service fails
+    domain: "mimir_remote_write"
+    grpcTimeout: "3s"
+
+# Example Tenant Configurations for Cardinality Enforcement
+
+# ConfigMap for tenant-specific cardinality limits
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-overrides
+  namespace: mimir-edge-enforcement
+data:
+  # Example 1: Conservative cardinality limits
+  tenant-conservative: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 30,
+      "max_label_value_length": 1024,
+      "max_series_per_request": 5000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 2: Aggressive cardinality limits
+  tenant-aggressive: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 100,
+      "max_label_value_length": 4096,
+      "max_series_per_request": 50000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 3: Only series per request limit (per_metric_series_limit)
+  tenant-series-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 0,
+      "max_label_value_length": 0,
+      "max_series_per_request": 10000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": false,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 4: Only labels per series limit (per_user_series_limit)
+  tenant-labels-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 50,
+      "max_label_value_length": 2048,
+      "max_series_per_request": 0,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": false,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+# Deployment Instructions
+
+# 1. Apply the RLS configuration with cardinality-only enforcement:
+# helm upgrade --install mimir-rls ./charts/mimir-rls -f values-rls.yaml
+
+# 2. Apply the Envoy configuration:
+# helm upgrade --install mimir-envoy ./charts/mimir-envoy -f values-envoy.yaml
+
+# 3. Apply the tenant configurations:
+# kubectl apply -f examples/cardinality-only-enforcement.yaml
+
+# 4. Verify the configuration:
+# kubectl get pods -n mimir-edge-enforcement
+# kubectl logs -n mimir-edge-enforcement deployment/mimir-rls
+
+# Expected Behavior:
+# - Only cardinality limits (series per request, labels per series) will be enforced
+# - Rate limiting (samples per second, bytes per second) will be disabled
+# - Body size limits will be disabled
+# - Tenants exceeding cardinality limits will be throttled with 429 Too Many Requests
+# - All other requests will be allowed to pass through to Mimir
+
+# Monitoring:
+# - Check denial reasons in the Admin UI: http://localhost:3000/denials
+# - Look for "max_series_per_request_exceeded" and "max_labels_per_series_exceeded" denials
+# - Monitor cardinality metrics in the Overview page
+# - Use the Tenants page to see per-tenant cardinality utilization

@@ -1,0 +1,122 @@
+# Example: Selective Enforcement Configuration
+# This shows how to configure RLS to only enforce specific limits per tenant
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-overrides
+  namespace: mimir-edge-enforcement
+data:
+  # Example 1: Only enforce series per request limit (per_metric_series_limit equivalent)
+  tenant-series-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 0,
+      "max_label_value_length": 0,
+      "max_series_per_request": 1000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": false,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 2: Only enforce labels per series limit (per_user_series_limit equivalent)
+  tenant-labels-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 50,
+      "max_label_value_length": 2048,
+      "max_series_per_request": 0,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": false,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 3: Only enforce rate limiting (samples per second)
+  tenant-rate-only: |
+    {
+      "samples_per_second": 10000,
+      "burst_pct": 0.2,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 0,
+      "max_label_value_length": 0,
+      "max_series_per_request": 0,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": true,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": false,
+        "enforce_max_series_per_request": false,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 4: Enforce only cardinality limits (series + labels)
+  tenant-cardinality-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 60,
+      "max_label_value_length": 2048,
+      "max_series_per_request": 5000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": false
+      }
+    }
+
+  # Example 5: Enforce everything except body size
+  tenant-no-body-limit: |
+    {
+      "samples_per_second": 5000,
+      "burst_pct": 0.1,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 40,
+      "max_label_value_length": 1024,
+      "max_series_per_request": 2000,
+      "enforcement": {
+        "enabled": true,
+        "enforce_samples_per_second": true,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": true,
+        "enforce_max_series_per_request": true,
+        "enforce_bytes_per_second": true
+      }
+    }
+
+  # Example 6: Monitoring only (no enforcement)
+  tenant-monitoring-only: |
+    {
+      "samples_per_second": 0,
+      "burst_pct": 0,
+      "max_body_bytes": 0,
+      "max_labels_per_series": 0,
+      "max_label_value_length": 0,
+      "max_series_per_request": 0,
+      "enforcement": {
+        "enabled": false,
+        "enforce_samples_per_second": false,
+        "enforce_max_body_bytes": false,
+        "enforce_max_labels_per_series": false,
+        "enforce_max_series_per_request": false,
+        "enforce_bytes_per_second": false
+      }
+    }

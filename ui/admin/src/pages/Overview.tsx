@@ -861,70 +861,70 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       ];
     }
     
-    // Get real traffic flow data from the new API endpoint
-    let flow_metrics: FlowMetrics;
-    try {
-      const trafficFlowResponse = await fetch('/api/traffic/flow');
-      if (trafficFlowResponse.ok) {
-        const trafficFlowData = await trafficFlowResponse.json();
-        const flowData = trafficFlowData.flow_metrics;
-        const responseTimes = flowData.response_times;
-        
-        flow_metrics = {
-          nginx_requests: 0, // We don't track NGINX directly
-          nginx_route_direct: 0,
-          nginx_route_edge: flowData.envoy_to_rls_requests || 0,
-          envoy_requests: flowData.envoy_to_rls_requests || 0,
-          envoy_authorized: flowData.rls_allowed || 0,
-          envoy_denied: flowData.rls_denied || 0,
-          mimir_requests: flowData.rls_to_mimir_requests || 0,
-          mimir_success: flowData.rls_to_mimir_requests || 0,
-          mimir_errors: flowData.mimir_errors || 0,
-          response_times: {
-            nginx_to_envoy: 0, // We don't track NGINX directly
-            envoy_to_mimir: responseTimes?.rls_to_mimir || 0,
-            total_flow: responseTimes?.total_flow || 0
-          }
-        };
-      } else {
-        // Fallback to calculated metrics
-        flow_metrics = {
-          nginx_requests: 0, // We don't track NGINX directly
-          nginx_route_direct: 0,
-          nginx_route_edge: overviewData.stats?.total_requests || 0,
-          envoy_requests: overviewData.stats?.total_requests || 0,
-          envoy_authorized: overviewData.stats?.allowed_requests || 0,
-          envoy_denied: overviewData.stats?.denied_requests || 0,
-          mimir_requests: overviewData.stats?.allowed_requests || 0,
-          mimir_success: overviewData.stats?.allowed_requests || 0,
-          mimir_errors: 0,
-          response_times: {
-            nginx_to_envoy: 0,
-            envoy_to_mimir: 0,
-            total_flow: 0
-          }
-        };
-      }
-    } catch (error) {
-      console.error('Error fetching traffic flow data:', error);
-      // Fallback to calculated metrics
-      flow_metrics = {
-        nginx_requests: 0, // We don't track NGINX directly
-        nginx_route_direct: 0,
-        nginx_route_edge: overviewData.stats?.total_requests || 0,
-        envoy_requests: overviewData.stats?.total_requests || 0,
-        envoy_authorized: overviewData.stats?.allowed_requests || 0,
-        envoy_denied: overviewData.stats?.denied_requests || 0,
-        mimir_requests: overviewData.stats?.allowed_requests || 0,
-        mimir_success: overviewData.stats?.allowed_requests || 0,
-        mimir_errors: 0,
-        response_times: {
-          nginx_to_envoy: 0,
-          envoy_to_mimir: 0,
-          total_flow: 0
-        }
-      };
-    }
+                    // Get real traffic flow data from the new API endpoint
+                let flow_metrics: FlowMetrics;
+                try {
+                  const trafficFlowResponse = await fetch('/api/traffic/flow');
+                  if (trafficFlowResponse.ok) {
+                    const trafficFlowData = await trafficFlowResponse.json();
+                    const flowData = trafficFlowData.flow_metrics;
+                    const responseTimes = flowData.response_times;
+                    
+                    flow_metrics = {
+                      nginx_requests: 0, // We don't track NGINX directly
+                      nginx_route_direct: 0,
+                      nginx_route_edge: flowData.envoy_to_rls_requests || 0,
+                      envoy_requests: flowData.envoy_to_rls_requests || 0,
+                      envoy_authorized: flowData.rls_allowed || 0,
+                      envoy_denied: flowData.rls_denied || 0,
+                      mimir_requests: flowData.rls_to_mimir_requests || 0,
+                      mimir_success: flowData.rls_to_mimir_requests || 0,
+                      mimir_errors: flowData.mimir_errors || 0,
+                      response_times: {
+                        nginx_to_envoy: 0, // We don't track NGINX directly
+                        envoy_to_mimir: responseTimes?.rls_to_mimir || 0,
+                        total_flow: responseTimes?.total_flow || 0
+                      }
+                    };
+                                     } else {
+                     // Fallback to calculated metrics
+                     flow_metrics = {
+                       nginx_requests: 0, // We don't track NGINX directly
+                       nginx_route_direct: 0,
+                       nginx_route_edge: overviewData.stats?.total_requests || 0,
+                       envoy_requests: overviewData.stats?.total_requests || 0,
+                       envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                       envoy_denied: overviewData.stats?.denied_requests || 0,
+                       mimir_requests: overviewData.stats?.allowed_requests || 0,
+                       mimir_success: overviewData.stats?.allowed_requests || 0,
+                       mimir_errors: 0,
+                       response_times: {
+                         nginx_to_envoy: 0,
+                         envoy_to_mimir: 0,
+                         total_flow: 0
+                       }
+                     };
+                   }
+                                 } catch (error) {
+                   console.error('Error fetching traffic flow data:', error);
+                   // Fallback to calculated metrics
+                   flow_metrics = {
+                     nginx_requests: 0, // We don't track NGINX directly
+                     nginx_route_direct: 0,
+                     nginx_route_edge: overviewData.stats?.total_requests || 0,
+                     envoy_requests: overviewData.stats?.total_requests || 0,
+                     envoy_authorized: overviewData.stats?.allowed_requests || 0,
+                     envoy_denied: overviewData.stats?.denied_requests || 0,
+                     mimir_requests: overviewData.stats?.allowed_requests || 0,
+                     mimir_success: overviewData.stats?.allowed_requests || 0,
+                     mimir_errors: 0,
+                     response_times: {
+                       nginx_to_envoy: 0,
+                       envoy_to_mimir: 0,
+                       total_flow: 0
+                     }
+                   };
+                 }
 
     // Get real time-series data instead of generating fake data
     const flow_timeline: FlowDataPoint[] = await getRealFlowTimeline(timeRange);
@@ -1011,8 +1011,8 @@ function generateCalculatedFlowTimeline(timeRange: string): FlowDataPoint[] {
       nginx_requests: 0, // We don't track NGINX directly
       route_direct: 0,
       route_edge: 0,
-      envoy_requests: 0,
-      mimir_requests: 0,
+        envoy_requests: 0,
+        mimir_requests: 0,
       success_rate: 0
     });
   }
@@ -1076,8 +1076,8 @@ async function performHealthChecks(): Promise<HealthChecks> {
     // Check RLS service health endpoint
     const rlsStart = Date.now();
     try {
-      const rlsResponse = await fetch('/api/health');
-      const rlsTime = Date.now() - rlsStart;
+    const rlsResponse = await fetch('/api/health');
+    const rlsTime = Date.now() - rlsStart;
       
       if (rlsResponse.ok) {
         const rlsData = await rlsResponse.json();
@@ -1121,16 +1121,16 @@ async function performHealthChecks(): Promise<HealthChecks> {
     // Check if tenants have limits (indicates sync is working)
     try {
       const tenantsResponse = await fetch('/api/tenants?range=15m');
-      if (tenantsResponse.ok) {
-        const tenantsData = await tenantsResponse.json();
-        const tenantsWithLimits = tenantsData.tenants?.filter((t: any) => 
+    if (tenantsResponse.ok) {
+      const tenantsData = await tenantsResponse.json();
+      const tenantsWithLimits = tenantsData.tenants?.filter((t: any) => 
           t.limits && (
             (t.limits.samples_per_second && t.limits.samples_per_second > 0) ||
             (t.limits.max_body_bytes && t.limits.max_body_bytes > 0) ||
             (t.limits.burst_pct && t.limits.burst_pct > 0)
           )
-        ) || [];
-        checks.tenant_limits_synced = tenantsWithLimits.length > 0;
+      ) || [];
+      checks.tenant_limits_synced = tenantsWithLimits.length > 0;
       }
     } catch (error) {
       console.warn('Tenant limits check failed:', error);
@@ -1140,8 +1140,8 @@ async function performHealthChecks(): Promise<HealthChecks> {
     // Check if enforcement is active (denials > 0 or active tenants > 0)
     try {
       const overviewResponse = await fetch('/api/overview?range=15m');
-      if (overviewResponse.ok) {
-        const overviewData = await overviewResponse.json();
+    if (overviewResponse.ok) {
+      const overviewData = await overviewResponse.json();
         const hasDenials = (overviewData.stats?.denied_requests || 0) > 0;
         const hasActiveTenants = (overviewData.stats?.active_tenants || 0) > 0;
         const hasTraffic = (overviewData.stats?.total_requests || 0) > 0;

@@ -32,11 +32,12 @@ rls:
   rateLimitPort: 8081
 
 # External authorization configuration - Production
+# Configured for cardinality enforcement (per_metric_series_limit and per_user_series_limit)
 extAuthz:
   maxRequestBytes: 10485760  # 10 MiB - Increased for large Alloy payloads
   failureModeAllow: false    # Production: Deny requests when gRPC fails (SECURITY)
   timeout: "5s"              # Production: Optimized timeout
-  disableBodyParsing: false  # Production: Enable body parsing for limit enforcement
+  disableBodyParsing: false  # Production: Enable body parsing for cardinality analysis
 
 # Rate limiting configuration - Production
 rateLimit:

@@ -51,6 +51,13 @@ var (
 	defaultMaxLabelValueLength = flag.Int("default-max-label-value-length", 2048, "Default maximum label value length")
 	defaultMaxSeriesPerRequest = flag.Int("default-max-series-per-request", 100000, "Default maximum series per request")
 
+	// Selective enforcement flags
+	enforceSamplesPerSecond    = flag.Bool("enforce-samples-per-second", true, "Whether to enforce samples per second limits")
+	enforceMaxBodyBytes        = flag.Bool("enforce-max-body-bytes", true, "Whether to enforce maximum body size limits")
+	enforceMaxLabelsPerSeries  = flag.Bool("enforce-max-labels-per-series", true, "Whether to enforce maximum labels per series limits")
+	enforceMaxSeriesPerRequest = flag.Bool("enforce-max-series-per-request", true, "Whether to enforce maximum series per request limits")
+	enforceBytesPerSecond      = flag.Bool("enforce-bytes-per-second", true, "Whether to enforce bytes per second limits")
+
 	// Logging
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
@@ -79,6 +86,14 @@ func main() {
 			MaxLabelsPerSeries:  int32(*defaultMaxLabelsPerSeries),
 			MaxLabelValueLength: int32(*defaultMaxLabelValueLength),
 			MaxSeriesPerRequest: int32(*defaultMaxSeriesPerRequest),
+		},
+		DefaultEnforcement: limits.EnforcementConfig{
+			Enabled:                    true,
+			EnforceSamplesPerSecond:    *enforceSamplesPerSecond,
+			EnforceMaxBodyBytes:        *enforceMaxBodyBytes,
+			EnforceMaxLabelsPerSeries:  *enforceMaxLabelsPerSeries,
+			EnforceMaxSeriesPerRequest: *enforceMaxSeriesPerRequest,
+			EnforceBytesPerSecond:      *enforceBytesPerSecond,
 		},
 	}
 

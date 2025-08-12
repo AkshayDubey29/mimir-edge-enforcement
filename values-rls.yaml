@@ -15,16 +15,30 @@ service:
 tenantHeader: "X-Scope-OrgID"
 
 # Limits configuration - Production
+# SELECTIVE ENFORCEMENT: Only enforce cardinality limits (per_metric_series_limit and per_user_series_limit)
 limits:
   maxRequestBytes: "10485760"  # 10 MiB - Increased for large Alloy payloads
-  maxBodyBytes: 0              # 0 means no default body size cap
+  maxBodyBytes: 0              # 0 = Disabled - No body size enforcement
   failureModeAllow: true       # Production: Allow requests when parsing fails (with limit enforcement)
-  defaultSamplesPerSecond: 1000  # Production: Conservative default rate limit
-  defaultBurstPercent: 0.1     # Production: Conservative burst allowance
-  enforceBodyParsing: true     # Production: Enable body parsing for limit enforcement
-  defaultMaxLabelsPerSeries: 60
-  defaultMaxLabelValueLength: 2048
-  defaultMaxSeriesPerRequest: 100000
+  defaultSamplesPerSecond: 0   # 0 = Disabled - No rate limiting enforcement
+  defaultBurstPercent: 0       # 0 = Disabled - No burst allowance needed
+  enforceBodyParsing: true     # Production: Enable body parsing for cardinality analysis
+  defaultMaxLabelsPerSeries: 60      # per_user_series_limit - ENFORCED
+  defaultMaxLabelValueLength: 2048   # per_user_series_limit - ENFORCED
+  defaultMaxSeriesPerRequest: 10000  # per_metric_series_limit - ENFORCED
+
+# Selective Enforcement Configuration
+# Only enforce cardinality limits, disable rate limiting and body size limits
+enforcement:
+  enabled: true
+  # Cardinality limits - ENFORCED
+  enforceMaxSeriesPerRequest: true   # per_metric_series_limit
+  enforceMaxLabelsPerSeries: true    # per_user_series_limit
+  # Rate limiting - DISABLED
+  enforceSamplesPerSecond: false     # No rate limiting
+  enforceBytesPerSecond: false       # No bytes rate limiting
+  # Body size - DISABLED
+  enforceMaxBodyBytes: false         # No body size enforcement
 
 # Store configuration
 store:

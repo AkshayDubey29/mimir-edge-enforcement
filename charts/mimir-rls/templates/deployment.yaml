@@ -64,6 +64,13 @@ spec:
             - "--default-max-label-value-length={{ .Values.limits.defaultMaxLabelValueLength | default 2048 }}"
             - "--default-max-series-per-request={{ .Values.limits.defaultMaxSeriesPerRequest | default 100000 }}"
             
+            # Selective enforcement configuration
+            - "--enforce-samples-per-second={{ .Values.enforcement.enforceSamplesPerSecond | default true }}"
+            - "--enforce-max-body-bytes={{ .Values.enforcement.enforceMaxBodyBytes | default true }}"
+            - "--enforce-max-labels-per-series={{ .Values.enforcement.enforceMaxLabelsPerSeries | default true }}"
+            - "--enforce-max-series-per-request={{ .Values.enforcement.enforceMaxSeriesPerRequest | default true }}"
+            - "--enforce-bytes-per-second={{ .Values.enforcement.enforceBytesPerSecond | default true }}"
+            
             # Logging
             - "--log-level={{ .Values.log.level }}"
           livenessProbe:
