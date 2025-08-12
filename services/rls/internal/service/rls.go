@@ -3357,3 +3357,51 @@ func (rls *RLS) GetTenantRequestHistory(tenantID string, timeRange string) []map
 
 	return history
 }
+
+// GetFlowTimelineData returns flow timeline data for the specified time range
+func (rls *RLS) GetFlowTimelineData(timeRange string) []map[string]interface{} {
+	// Validate and normalize time range
+	validRanges := map[string]string{
+		"5m":  "15m", // Map 5m to 15m (minimum bucket size)
+		"15m": "15m",
+		"1h":  "1h",
+		"24h": "24h",
+		"1w":  "1w",
+	}
+
+	normalizedRange, exists := validRanges[timeRange]
+	if !exists {
+		normalizedRange = "1h" // Default to 1 hour
+	}
+
+	// Get aggregated data for flow metrics
+	aggregatedData := rls.timeAggregator.GetAggregatedData(normalizedRange)
+
+	// Get time series data for requests
+	requestsData := rls.timeAggregator.GetTimeSeriesData(normalizedRange, "requests")
+
+	// Combine data into flow timeline format
+	flowTimeline := make([]map[string]interface{}, 0, len(requestsData))
+	
+	for _, requestPoint := range requestsData {
+		flowPoint := map[string]interface{}{
+			"timestamp":      requestPoint["timestamp"],
+			"nginx_requests": 0, // We don't track NGINX directly
+			"route_direct":   0,
+			"route_edge":     requestPoint["value"],
+			"envoy_requests": requestPoint["value"],
+			"mimir_requests": aggregatedData["allowed_requests"].(int64),
+			"success_rate": func() float64 {
+				total := aggregatedData["total_requests"].(int64)
+				allowed := aggregatedData["allowed_requests"].(int64)
+				if total > 0 {
+					return float64(allowed) / float64(total) * 100
+				}
+				return 0
+			}(),
+		}
+		flowTimeline = append(flowTimeline, flowPoint)
+	}
+
+	return flowTimeline
+}

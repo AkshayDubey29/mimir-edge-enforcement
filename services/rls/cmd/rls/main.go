@@ -338,6 +338,9 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	// Time-based aggregated data endpoints
 	router.HandleFunc("/api/aggregated/{timeRange}", handleAggregatedData(rls)).Methods("GET")
 	router.HandleFunc("/api/timeseries/{timeRange}/{metric}", handleTimeSeriesData(rls)).Methods("GET")
+	
+	// Flow timeline endpoint for real time-series data
+	router.HandleFunc("/api/timeseries/{timeRange}/flow", handleFlowTimeline(rls)).Methods("GET")
 
 	// Test route to verify route registration
 	router.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
@@ -963,30 +966,54 @@ func handleTimeSeriesData(rls *service.RLS) http.HandlerFunc {
 		metric := vars["metric"]
 
 		// Validate time range
-		validRanges := map[string]bool{"15m": true, "1h": true, "24h": true, "1w": true}
+		validRanges := map[string]bool{
+			"5m": true, "15m": true, "1h": true, "24h": true, "1w": true,
+		}
 		if !validRanges[timeRange] {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "Invalid time range. Supported values: 15m, 1h, 24h, 1w",
-			})
-			return
+			timeRange = "1h" // Default to 1 hour if invalid
 		}
 
-		// Validate metric
-		validMetrics := map[string]bool{
-			"requests": true, "allow_rate": true, "series": true,
-			"labels": true, "violations": true, "response_time": true,
-		}
-		if !validMetrics[metric] {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "Invalid metric. Supported values: requests, allow_rate, series, labels, violations, response_time",
-			})
-			return
+		// Get time series data
+		timeSeriesData := rls.GetTimeSeriesData(timeRange, metric)
+
+		response := map[string]any{
+			"time_range": timeRange,
+			"metric":     metric,
+			"points":     timeSeriesData,
 		}
 
-		log.Info().Str("timeRange", timeRange).Str("metric", metric).Msg("RLS: INFO - Time series data endpoint called")
+		writeJSON(w, http.StatusOK, response)
+	}
+}
 
-		data := rls.GetTimeSeriesData(timeRange, metric)
-		log.Info().Interface("data", data).Msg("RLS: INFO - Time series data")
-		writeJSON(w, http.StatusOK, data)
+func handleFlowTimeline(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleFlowTimeline")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		vars := mux.Vars(r)
+		timeRange := vars["timeRange"]
+
+		// Validate time range
+		validRanges := map[string]bool{
+			"5m": true, "15m": true, "1h": true, "24h": true, "1w": true,
+		}
+		if !validRanges[timeRange] {
+			timeRange = "1h" // Default to 1 hour if invalid
+		}
+
+		// Get flow timeline data from time aggregator
+		flowData := rls.GetFlowTimelineData(timeRange)
+
+		response := map[string]any{
+			"time_range": timeRange,
+			"points":     flowData,
+		}
+
+		writeJSON(w, http.StatusOK, response)
 	}
 }
