@@ -63,6 +63,12 @@ type TimeAggregator struct {
 	// 1-week buckets (52 buckets for 1 year)
 	buckets1w map[string]*TimeBucket // key: "YYYY-WW"
 
+	// Per-tenant buckets for tenant-specific metrics
+	tenantBuckets15min map[string]map[string]*TimeBucket // key: "tenantID:YYYY-MM-DD-HH-MM"
+	tenantBuckets1h    map[string]map[string]*TimeBucket // key: "tenantID:YYYY-MM-DD-HH"
+	tenantBuckets24h   map[string]map[string]*TimeBucket // key: "tenantID:YYYY-MM-DD"
+	tenantBuckets1w    map[string]map[string]*TimeBucket // key: "tenantID:YYYY-WW"
+
 	// Cleanup settings
 	maxBuckets15min int
 	maxBuckets1h    int
@@ -77,6 +83,12 @@ func NewTimeAggregator() *TimeAggregator {
 		buckets1h:    make(map[string]*TimeBucket),
 		buckets24h:   make(map[string]*TimeBucket),
 		buckets1w:    make(map[string]*TimeBucket),
+
+		// Initialize per-tenant bucket maps
+		tenantBuckets15min: make(map[string]map[string]*TimeBucket),
+		tenantBuckets1h:    make(map[string]map[string]*TimeBucket),
+		tenantBuckets24h:   make(map[string]map[string]*TimeBucket),
+		tenantBuckets1w:    make(map[string]map[string]*TimeBucket),
 
 		maxBuckets15min: 96,  // 24 hours
 		maxBuckets1h:    168, // 1 week
@@ -544,7 +556,7 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 	}
 
 	// Record in time aggregator (response time will be calculated separately)
-	rls.timeAggregator.RecordDecision(now, allowed, series, labels, 0.0, violation)
+	rls.timeAggregator.RecordDecision(tenantID, now, allowed, series, labels, 0.0, violation)
 
 	rls.countersMu.Lock()
 	defer rls.countersMu.Unlock()
@@ -2912,8 +2924,8 @@ func (ta *TimeAggregator) cleanupBucketMap(buckets map[string]*TimeBucket, cutof
 	}
 }
 
-// RecordDecision records a decision in all time buckets
-func (ta *TimeAggregator) RecordDecision(timestamp time.Time, allowed bool, series, labels int64, responseTime float64, violation bool) {
+// RecordDecision records a decision in all time buckets for a specific tenant
+func (ta *TimeAggregator) RecordDecision(tenantID string, timestamp time.Time, allowed bool, series, labels int64, responseTime float64, violation bool) {
 	ta.mu.Lock()
 	defer ta.mu.Unlock()
 
@@ -2936,6 +2948,9 @@ func (ta *TimeAggregator) RecordDecision(timestamp time.Time, allowed bool, seri
 	key1w := ta.getBucketKey(timestamp, 7*24*time.Hour)
 	bucket1w := ta.getOrCreateBucket(ta.buckets1w, key1w, timestamp, 7*24*time.Hour)
 	ta.updateBucket(bucket1w, allowed, series, labels, responseTime, violation)
+
+	// Record in per-tenant buckets
+	ta.recordPerTenantDecision(tenantID, timestamp, allowed, series, labels, responseTime, violation)
 
 	// Cleanup old buckets
 	ta.cleanupOldBuckets()
@@ -3037,42 +3052,60 @@ func (ta *TimeAggregator) GetTenantAggregatedData(tenantID string, timeRange str
 	ta.mu.RLock()
 	defer ta.mu.RUnlock()
 
-	var buckets map[string]*TimeBucket
+	var tenantBuckets map[string]*TimeBucket
 	var duration time.Duration
 
 	switch timeRange {
 	case "15m":
-		buckets = ta.buckets15min
+		tenantBuckets = ta.tenantBuckets15min[tenantID]
 		duration = 15 * time.Minute
 	case "1h":
-		buckets = ta.buckets1h
+		tenantBuckets = ta.tenantBuckets1h[tenantID]
 		duration = time.Hour
 	case "24h":
-		buckets = ta.buckets24h
+		tenantBuckets = ta.tenantBuckets24h[tenantID]
 		duration = 24 * time.Hour
 	case "1w":
-		buckets = ta.buckets1w
+		tenantBuckets = ta.tenantBuckets1w[tenantID]
 		duration = 7 * 24 * time.Hour
 	default:
-		buckets = ta.buckets1h
+		tenantBuckets = ta.tenantBuckets1h[tenantID]
 		duration = time.Hour
+	}
+
+	// If no tenant buckets exist, return zero values
+	if tenantBuckets == nil {
+		return map[string]interface{}{
+			"tenant_id":         tenantID,
+			"time_range":        timeRange,
+			"total_requests":    int64(0),
+			"allowed_requests":  int64(0),
+			"denied_requests":   int64(0),
+			"allow_rate":        0.0,
+			"deny_rate":         0.0,
+			"rps":               0.0,
+			"samples_per_sec":   0.0,
+			"bytes_per_sec":     0.0,
+			"utilization_pct":   0.0,
+			"total_series":      int64(0),
+			"total_labels":      int64(0),
+			"avg_response_time": 0.0,
+			"bucket_count":      0,
+			"data_freshness":    time.Now().Format(time.RFC3339),
+		}
 	}
 
 	// Calculate cutoff time
 	cutoff := time.Now().Add(-duration)
 
-	// For now, return default values since we don't have per-tenant bucket tracking
-	// In a full implementation, we would track per-tenant data in buckets
-	// This is a simplified version that returns reasonable defaults
-
-	// Calculate total requests from all buckets for this time range
+	// Calculate total requests from tenant-specific buckets for this time range
 	var totalRequests, allowedRequests, deniedRequests int64
 	var totalSeries, totalLabels int64
 	var totalResponseTime float64
 	var responseTimeCount int64
 
 	bucketCount := 0
-	for _, bucket := range buckets {
+	for _, bucket := range tenantBuckets {
 		if bucket.StartTime.After(cutoff) {
 			totalRequests += bucket.TotalRequests
 			allowedRequests += bucket.AllowedRequests
@@ -3098,27 +3131,27 @@ func (ta *TimeAggregator) GetTenantAggregatedData(tenantID string, timeRange str
 		denyRate = float64(deniedRequests) / float64(totalRequests) * 100.0
 	}
 
-	// Calculate RPS (requests per second) over the time range
+	// Calculate RPS (requests per second) over the time range for this tenant
 	rps := 0.0
 	if duration > 0 {
 		rps = float64(totalRequests) / duration.Seconds()
 	}
 
-	// Calculate samples per second (estimate based on total series)
+	// Calculate samples per second (estimate based on total series for this tenant)
 	samplesPerSec := 0.0
 	if duration > 0 {
 		samplesPerSec = float64(totalSeries) / duration.Seconds()
 	}
 
-	// Calculate bytes per second (estimate)
+	// Calculate bytes per second (estimate for this tenant)
 	bytesPerSec := 0.0
 	if duration > 0 {
-		// Estimate bytes based on labels and series
+		// Estimate bytes based on labels and series for this tenant
 		estimatedBytes := totalSeries * totalLabels * 100 // Rough estimate
 		bytesPerSec = float64(estimatedBytes) / duration.Seconds()
 	}
 
-	// Calculate utilization percentage (placeholder)
+	// Calculate utilization percentage for this tenant
 	utilizationPct := 0.0
 	if totalRequests > 0 {
 		utilizationPct = (float64(allowedRequests) / float64(totalRequests)) * 100.0
@@ -3404,4 +3437,43 @@ func (rls *RLS) GetFlowTimelineData(timeRange string) []map[string]interface{} {
 	}
 
 	return flowTimeline
+}
+
+// recordPerTenantDecision records a decision in per-tenant time buckets
+func (ta *TimeAggregator) recordPerTenantDecision(tenantID string, timestamp time.Time, allowed bool, series, labels int64, responseTime float64, violation bool) {
+	// Record in per-tenant 15-minute bucket
+	key15min := ta.getBucketKey(timestamp, 15*time.Minute)
+	tenantKey15min := tenantID + ":" + key15min
+	if ta.tenantBuckets15min[tenantID] == nil {
+		ta.tenantBuckets15min[tenantID] = make(map[string]*TimeBucket)
+	}
+	bucket15min := ta.getOrCreateBucket(ta.tenantBuckets15min[tenantID], tenantKey15min, timestamp, 15*time.Minute)
+	ta.updateBucket(bucket15min, allowed, series, labels, responseTime, violation)
+
+	// Record in per-tenant 1-hour bucket
+	key1h := ta.getBucketKey(timestamp, time.Hour)
+	tenantKey1h := tenantID + ":" + key1h
+	if ta.tenantBuckets1h[tenantID] == nil {
+		ta.tenantBuckets1h[tenantID] = make(map[string]*TimeBucket)
+	}
+	bucket1h := ta.getOrCreateBucket(ta.tenantBuckets1h[tenantID], tenantKey1h, timestamp, time.Hour)
+	ta.updateBucket(bucket1h, allowed, series, labels, responseTime, violation)
+
+	// Record in per-tenant 24-hour bucket
+	key24h := ta.getBucketKey(timestamp, 24*time.Hour)
+	tenantKey24h := tenantID + ":" + key24h
+	if ta.tenantBuckets24h[tenantID] == nil {
+		ta.tenantBuckets24h[tenantID] = make(map[string]*TimeBucket)
+	}
+	bucket24h := ta.getOrCreateBucket(ta.tenantBuckets24h[tenantID], tenantKey24h, timestamp, 24*time.Hour)
+	ta.updateBucket(bucket24h, allowed, series, labels, responseTime, violation)
+
+	// Record in per-tenant 1-week bucket
+	key1w := ta.getBucketKey(timestamp, 7*24*time.Hour)
+	tenantKey1w := tenantID + ":" + key1w
+	if ta.tenantBuckets1w[tenantID] == nil {
+		ta.tenantBuckets1w[tenantID] = make(map[string]*TimeBucket)
+	}
+	bucket1w := ta.getOrCreateBucket(ta.tenantBuckets1w[tenantID], tenantKey1w, timestamp, 7*24*time.Hour)
+	ta.updateBucket(bucket1w, allowed, series, labels, responseTime, violation)
 }
