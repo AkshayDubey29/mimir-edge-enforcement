@@ -85,7 +85,7 @@ interface Denial {
 }
 
 export function Denials() {
-  const [view, setView] = useState<'enhanced' | 'basic' | 'trends'>('enhanced');
+  const [view, setView] = useState<'enhanced' | 'basic' | 'trends'>('basic'); // Start with basic view for better performance
   const [timeRange, setTimeRange] = useState('15m'); // Start with shorter time range for better performance
   const [selectedTenant, setSelectedTenant] = useState('');
 
@@ -270,9 +270,9 @@ function renderEnhancedView(denials: EnhancedDenial[], metadata?: any) {
     );
   }
 
-  // Limit displayed denials for performance (show only first 50)
-  const displayedDenials = denials.slice(0, 50);
-  const hasMore = denials.length > 50;
+  // Limit displayed denials for performance (show only first 10 for rich cards)
+  const displayedDenials = denials.slice(0, 10);
+  const hasMore = denials.length > 10;
 
   return (
     <div className="space-y-4">
@@ -286,7 +286,7 @@ function renderEnhancedView(denials: EnhancedDenial[], metadata?: any) {
             </span>
             <span className="text-blue-700">
               Total: {metadata.total_count} 
-              {hasMore && <span className="text-blue-600 ml-2">(Showing first 50)</span>}
+              {hasMore && <span className="text-blue-600 ml-2">(Showing first 10)</span>}
             </span>
           </div>
         </div>
@@ -424,16 +424,16 @@ function renderBasicView(denials: Denial[]) {
     );
   }
 
-  // Limit displayed denials for performance (show only first 100 in table)
-  const displayedDenials = denials.slice(0, 100);
-  const hasMore = denials.length > 100;
+  // Limit displayed denials for performance (show only first 25 in table for better performance)
+  const displayedDenials = denials.slice(0, 25);
+  const hasMore = denials.length > 25;
 
   return (
     <Card className="overflow-hidden">
       {hasMore && (
         <div className="bg-yellow-50 p-3 border-b">
           <p className="text-sm text-yellow-800">
-            Showing first 100 of {denials.length} denials for performance. Use filters to narrow results.
+            Showing first 25 of {denials.length} denials for performance. Use filters to narrow results.
           </p>
         </div>
       )}
@@ -583,6 +583,7 @@ function downloadCSV(csvContent: string, filename: string) {
 async function fetchEnhancedDenials(timeRange: string, tenant: string) {
   const params = new URLSearchParams({
     since: timeRange,
+    limit: '15', // Aggressive limit for enhanced denials
     ...(tenant && { tenant })
   });
   const res = await fetch(`/api/denials/enhanced?${params}`);
@@ -603,6 +604,7 @@ async function fetchDenialTrends(timeRange: string, tenant: string) {
 async function fetchBasicDenials(timeRange: string, tenant: string) {
   const params = new URLSearchParams({
     since: timeRange,
+    limit: '50', // Limit to 50 denials for performance
     ...(tenant && { tenant: tenant || '*' })
   });
   const res = await fetch(`/api/denials?${params}`);
