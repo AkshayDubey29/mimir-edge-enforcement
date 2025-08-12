@@ -337,10 +337,12 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 
 	// Time-based aggregated data endpoints
 	router.HandleFunc("/api/aggregated/{timeRange}", handleAggregatedData(rls)).Methods("GET")
-	router.HandleFunc("/api/timeseries/{timeRange}/{metric}", handleTimeSeriesData(rls)).Methods("GET")
-	
-	// Flow timeline endpoint for real time-series data
+
+	// Flow timeline endpoint for real time-series data (more specific route first)
 	router.HandleFunc("/api/timeseries/{timeRange}/flow", handleFlowTimeline(rls)).Methods("GET")
+
+	// General time series data endpoint (more general route after specific ones)
+	router.HandleFunc("/api/timeseries/{timeRange}/{metric}", handleTimeSeriesData(rls)).Methods("GET")
 
 	// Test route to verify route registration
 	router.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {

@@ -3382,7 +3382,7 @@ func (rls *RLS) GetFlowTimelineData(timeRange string) []map[string]interface{} {
 
 	// Combine data into flow timeline format
 	flowTimeline := make([]map[string]interface{}, 0, len(requestsData))
-	
+
 	for _, requestPoint := range requestsData {
 		flowPoint := map[string]interface{}{
 			"timestamp":      requestPoint["timestamp"],
