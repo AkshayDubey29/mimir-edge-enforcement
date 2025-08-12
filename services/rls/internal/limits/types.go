@@ -44,14 +44,24 @@ type TenantMetrics struct {
 
 // DenialInfo represents information about a denied request
 type DenialInfo struct {
-	TenantID          string    `json:"tenant_id"`
-	Reason            string    `json:"reason"`
-	Timestamp         time.Time `json:"timestamp"`
-	ObservedSamples   int64     `json:"observed_samples"`
-	ObservedBodyBytes int64     `json:"observed_body_bytes"`
-	ObservedSeries    int64     `json:"observed_series,omitempty"`
-	ObservedLabels    int64     `json:"observed_labels,omitempty"`
-	LimitExceeded     int64     `json:"limit_exceeded,omitempty"`
+	TenantID          string         `json:"tenant_id"`
+	Reason            string         `json:"reason"`
+	Timestamp         time.Time      `json:"timestamp"`
+	ObservedSamples   int64          `json:"observed_samples"`
+	ObservedBodyBytes int64          `json:"observed_body_bytes"`
+	ObservedSeries    int64          `json:"observed_series,omitempty"`
+	ObservedLabels    int64          `json:"observed_labels,omitempty"`
+	LimitExceeded     int64          `json:"limit_exceeded,omitempty"`
+	SampleMetrics     []SampleMetric `json:"sample_metrics,omitempty"`
+}
+
+// SampleMetric represents a sample metric that was denied
+type SampleMetric struct {
+	MetricName string            `json:"metric_name"`
+	Labels     map[string]string `json:"labels"`
+	Value      float64           `json:"value"`
+	Timestamp  int64             `json:"timestamp"`
+	SeriesHash string            `json:"series_hash,omitempty"`
 }
 
 // EnhancedDenialInfo represents enriched information about a denied request

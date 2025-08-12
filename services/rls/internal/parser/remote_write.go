@@ -15,10 +15,19 @@ import (
 
 // ParseResult contains the parsed information from a remote write request
 type ParseResult struct {
-	SamplesCount int64
-	SeriesCount  int64
-	LabelsCount  int64
-	Error        error
+	SamplesCount  int64
+	SeriesCount   int64
+	LabelsCount   int64
+	Error         error
+	SampleMetrics []SampleMetricDetail
+}
+
+// SampleMetricDetail represents a parsed metric sample
+type SampleMetricDetail struct {
+	MetricName string
+	Labels     map[string]string
+	Value      float64
+	Timestamp  int64
 }
 
 // ParseRemoteWriteRequest parses a Prometheus remote write request and counts samples
@@ -84,11 +93,38 @@ func ParseRemoteWriteRequest(body []byte, contentEncoding string) (*ParseResult,
 	// 🔧 PERFORMANCE FIX: Pre-allocate result and use efficient counting
 	result := &ParseResult{}
 
+	// 🔧 ENHANCEMENT: Capture sample metric details for denial analysis
+	// Limit to first 10 metrics to avoid memory issues
+	maxMetricsToCapture := 10
+
 	// 🔧 PERFORMANCE FIX: Use range loop for better performance
 	for _, ts := range writeRequest.Timeseries {
 		result.SeriesCount++
 		result.LabelsCount += int64(len(ts.Labels))
 		result.SamplesCount += int64(len(ts.Samples))
+
+		// Capture sample metric details (limited for performance)
+		if len(result.SampleMetrics) < maxMetricsToCapture && len(ts.Samples) > 0 {
+			// Extract metric name from labels
+			metricName := "__unknown__"
+			labels := make(map[string]string)
+
+			for _, label := range ts.Labels {
+				labels[label.Name] = label.Value
+				if label.Name == "__name__" {
+					metricName = label.Value
+				}
+			}
+
+			// Take the first sample from this series
+			sample := ts.Samples[0]
+			result.SampleMetrics = append(result.SampleMetrics, SampleMetricDetail{
+				MetricName: metricName,
+				Labels:     labels,
+				Value:      sample.Value,
+				Timestamp:  sample.Timestamp,
+			})
+		}
 	}
 
 	return result, nil
