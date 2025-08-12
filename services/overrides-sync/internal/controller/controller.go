@@ -559,7 +559,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 
 	// Max labels per series variations (max_label_names_per_series is the Mimir field)
 	case "max_labels_per_series", "max_labels_per_metric", "labels_limit", "max_label_names_per_series":
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.MaxLabelsPerSeries = int32(val)
 			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_labels_per_series")
 		} else {
@@ -568,7 +568,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 
 	// Max label value length variations
 	case "max_label_value_length", "max_label_name_length", "label_length_limit":
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.MaxLabelValueLength = int32(val)
 			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_label_value_length")
 		} else {
@@ -577,7 +577,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 
 	// Max series per request variations
 	case "max_series_per_request", "max_series_per_metric", "max_series_per_query", "series_limit":
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.MaxSeriesPerRequest = int32(val)
 			c.logger.Debug().Int32("parsed_value", int32(val)).Msg("set max_series_per_request")
 		} else {
@@ -586,7 +586,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 
 	// Mimir global limits - map to RLS tenant-specific limits
 	case "max_global_series_per_user":
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.MaxSeriesPerRequest = int32(val)
 			c.logger.Debug().
 				Str("mimir_field", limitName).
@@ -597,7 +597,7 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 		}
 
 	case "max_global_series_per_metric":
-		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+		if val, err := strconv.ParseFloat(value, 64); err == nil {
 			limits.MaxSeriesPerMetric = int32(val)
 			c.logger.Debug().
 				Str("mimir_field", limitName).
