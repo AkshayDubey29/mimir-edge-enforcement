@@ -27,7 +27,7 @@ mimir:
 
 # RLS service configuration
 rls:
-  host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
+  host: "mimir-rls.default.svc.cluster.local"
   extAuthzPort: 8080
   rateLimitPort: 8081
 
