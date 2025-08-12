@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mimir-overrides
+  namespace: default
+data:
+  overrides.yaml: |
+    overrides:
+      boltx:
+        # Mimir global limits that will be mapped to RLS tenant limits
+        max_global_series_per_user: 20000000  # 20M series - maps to max_series_per_request
+        max_label_names_per_series: 50        # maps to max_labels_per_series
+        max_global_metadata_per_user: 4000000 # 4M metadata entries
+        max_global_metadata_per_metric: 10    # 10 metadata entries per metric
+        
+        # Ingestion rate limits (optional - can be 0 for cardinality-only enforcement)
+        ingestion_rate: 0                     # 0 = no rate limiting
+        ingestion_burst_size: 0               # 0 = no burst allowance
+        
+        # Other Mimir settings
+        cardinality_analysis_enabled: true
+        accept_ha_samples: true
+        ha_cluster_label: cluster
+        ha_replica_label: __replica__
+        ingestion_tenant_shard_size: 40
+        max_cache_freshness: 2h

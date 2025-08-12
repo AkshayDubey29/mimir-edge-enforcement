@@ -584,11 +584,33 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 			return fmt.Errorf("invalid max_series_per_request: %s", value)
 		}
 
+	// Mimir global limits - map to RLS tenant-specific limits
+	case "max_global_series_per_user":
+		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+			limits.MaxSeriesPerRequest = int32(val)
+			c.logger.Debug().
+				Str("mimir_field", limitName).
+				Int32("mapped_value", int32(val)).
+				Msg("mapped max_global_series_per_user to max_series_per_request")
+		} else {
+			return fmt.Errorf("invalid max_global_series_per_user: %s", value)
+		}
+
+	case "max_global_series_per_metric":
+		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
+			limits.MaxSeriesPerRequest = int32(val)
+			c.logger.Debug().
+				Str("mimir_field", limitName).
+				Int32("mapped_value", int32(val)).
+				Msg("mapped max_global_series_per_metric to max_series_per_request")
+		} else {
+			return fmt.Errorf("invalid max_global_series_per_metric: %s", value)
+		}
+
 	// Additional Mimir fields (log but don't error - these are not part of our core limits yet)
-	case "max_global_series_per_user", "max_global_series_per_metric", "max_global_metadata_per_user",
-		"max_global_metadata_per_metric", "ingestion_tenant_shard_size", "cardinality_analysis_enabled",
-		"accept_ha_samples", "ha_cluster_label", "ha_replica_label", "max_cache_freshness",
-		"ruler_max_rule_groups_per_tenant", "ruler_max_rules_per_rule_group":
+	case "max_global_metadata_per_user", "max_global_metadata_per_metric", "ingestion_tenant_shard_size",
+		"cardinality_analysis_enabled", "accept_ha_samples", "ha_cluster_label", "ha_replica_label",
+		"max_cache_freshness", "ruler_max_rule_groups_per_tenant", "ruler_max_rules_per_rule_group":
 		c.logger.Debug().
 			Str("field", limitName).
 			Str("value", value).
