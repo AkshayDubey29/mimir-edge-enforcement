@@ -589,99 +589,18 @@ export function Denials() {
                         </div>
                       </div>
 
-                      {/* Sample Metrics */}
-                      {((denial.sample_metrics && denial.sample_metrics.length > 0) || denial.reason.includes('parse_failed')) && (
+                      {/* Sample Metrics - Only show when real metrics are available */}
+                      {denial.sample_metrics && denial.sample_metrics.length > 0 && (
                         <div className="bg-gray-50 p-4 rounded-lg">
                           <h4 className="font-medium text-gray-900 mb-3 flex items-center">
                             <BarChart3 className="w-4 h-4 mr-2" />
                             Sample Metrics That Were Denied
                             <Badge variant="outline" className="ml-2 text-xs">
-                              {denial.sample_metrics?.length || (denial.reason.includes('parse_failed') ? 3 : 0)} metric{((denial.sample_metrics?.length || 0) !== 1) ? 's' : ''}
-                              {(!denial.sample_metrics || denial.sample_metrics.length === 0) && denial.reason.includes('parse_failed') && ' (demo)'}
+                              {denial.sample_metrics.length} metric{denial.sample_metrics.length !== 1 ? 's' : ''}
                             </Badge>
                           </h4>
                           <div className="space-y-3">
-                            {/* Show demo metrics for parse_failed denials to demonstrate the feature */}
-                            {(!denial.sample_metrics || denial.sample_metrics.length === 0) && denial.reason.includes('parse_failed') ? (
-                              <>
-                                <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
-                                  <div className="text-sm text-yellow-800 mb-2">
-                                    <strong>Demo:</strong> Here's what sample metrics would look like when available
-                                  </div>
-                                </div>
-                                {[
-                                  {
-                                    metric_name: "http_requests_total",
-                                    labels: { method: "POST", path: "/api/v1/push", status: "200", tenant: denial.tenant_id },
-                                    value: 142.5,
-                                    timestamp: Date.now() - 30000
-                                  },
-                                  {
-                                    metric_name: "prometheus_remote_write_samples",
-                                    labels: { instance: "app-01", job: "prometheus" },
-                                    value: 1250,
-                                    timestamp: Date.now() - 45000
-                                  },
-                                  {
-                                    metric_name: "process_cpu_seconds_total",
-                                    labels: { instance: "worker-node-1", process: "rls-enforcer" },
-                                    value: 89.7,
-                                    timestamp: Date.now() - 60000
-                                  }
-                                ].map((metric, idx) => (
-                                  <div key={idx} className="bg-white p-3 rounded border border-dashed border-gray-300">
-                                    <div className="flex items-start justify-between mb-2">
-                                      <div className="flex-1 min-w-0">
-                                        <div className="font-mono text-sm text-gray-900 break-all">
-                                          <span className="font-medium text-blue-600">{metric.metric_name}</span>
-                                          {Object.keys(metric.labels).length > 0 && (
-                                            <span className="text-gray-600">
-                                              {'{'}
-                                              {Object.entries(metric.labels)
-                                                .map(([key, value], labelIdx, arr) => (
-                                                  <span key={key}>
-                                                    <span className="text-purple-600">{key}</span>
-                                                    <span className="text-gray-400">="</span>
-                                                    <span className="text-green-600">{value}</span>
-                                                    <span className="text-gray-400">"</span>
-                                                    {labelIdx < arr.length - 1 && <span className="text-gray-400">, </span>}
-                                                  </span>
-                                                ))
-                                              }
-                                              {'}'}
-                                            </span>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div className="flex flex-col items-end text-sm ml-4">
-                                        <div className="font-mono font-medium text-gray-900">
-                                          {metric.value.toLocaleString()}
-                                        </div>
-                                        <div className="text-xs text-gray-500">
-                                          {new Date(metric.timestamp).toLocaleTimeString()}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    
-                                    <div className="pt-2 border-t border-gray-100">
-                                      <div className="text-xs text-gray-600 mb-1">Labels:</div>
-                                      <div className="flex flex-wrap gap-1">
-                                        {Object.entries(metric.labels)
-                                          .map(([key, value]) => (
-                                            <span key={key} className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded">
-                                              <span className="text-purple-600">{key}</span>
-                                              <span className="text-gray-400 mx-1">=</span>
-                                              <span className="text-green-600">{value}</span>
-                                            </span>
-                                          ))
-                                        }
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </>
-                            ) : (
-                              denial.sample_metrics?.slice(0, 5).map((metric, idx) => (
+                            {denial.sample_metrics.slice(0, 5).map((metric, idx) => (
                               <div key={idx} className="bg-white p-3 rounded border">
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="flex-1 min-w-0">
@@ -736,9 +655,9 @@ export function Denials() {
                                   </div>
                                 )}
                               </div>
-                            )))}
+                            ))}
                             
-                            {denial.sample_metrics && denial.sample_metrics.length > 5 && (
+                            {denial.sample_metrics.length > 5 && (
                               <div className="text-center py-2">
                                 <span className="text-sm text-gray-500">
                                   and {denial.sample_metrics.length - 5} more metrics...
@@ -748,8 +667,8 @@ export function Denials() {
                           </div>
                           
                           <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded border">
-                            <strong>Note:</strong> These are examples of the actual metrics that were denied. 
-                            They show the metric names, labels, values, and timestamps that exceeded your configured limits.
+                            <strong>Note:</strong> These are the actual metrics that were denied in this request. 
+                            They show the exact metric names, labels, values, and timestamps that exceeded your configured limits.
                           </div>
                         </div>
                       )}
