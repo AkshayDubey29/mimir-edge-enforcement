@@ -19,7 +19,7 @@ tenantHeader: "X-Scope-OrgID"
 limits:
   maxRequestBytes: "10485760"  # 10 MiB - Increased for large Alloy payloads
   maxBodyBytes: 0              # 0 = Disabled - No body size enforcement
-  failureModeAllow: false      # Production: Deny requests when parsing fails (SECURITY - prevents bypassing limits)
+  failureModeAllow: true       # Production: Allow requests when parsing fails (with intelligent fallback)
   defaultSamplesPerSecond: 1000      # 1000 samples/sec - Enable rate limiting
   defaultBurstPercent: 10      # 10% burst allowance
   enforceBodyParsing: true     # Production: Enable body parsing for cardinality analysis
@@ -55,7 +55,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-snappy-fix-arm64"  # Production: Use the latest snappy fix ARM64 image
+  tag: "latest-production-ready"  # Production: Use the latest production-ready multi-arch image
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
 # Resource configuration - Production
