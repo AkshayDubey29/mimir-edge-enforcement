@@ -35,6 +35,56 @@ type RLSConfig struct {
 }
 
 // RLS represents the Rate Limit Service
+// TimeBucket represents a time-based data bucket for aggregation
+type TimeBucket struct {
+	StartTime         time.Time
+	EndTime           time.Time
+	TotalRequests     int64
+	AllowedRequests   int64
+	DeniedRequests    int64
+	TotalSeries       int64
+	TotalLabels       int64
+	Violations        int64
+	AvgResponseTime   float64
+	MaxResponseTime   float64
+	MinResponseTime   float64
+	ResponseTimeCount int64
+}
+
+// TimeAggregator handles time-based data aggregation
+type TimeAggregator struct {
+	mu sync.RWMutex
+	// 15-minute buckets (96 buckets for 24 hours)
+	buckets15min map[string]*TimeBucket // key: "YYYY-MM-DD-HH-MM"
+	// 1-hour buckets (168 buckets for 1 week)
+	buckets1h map[string]*TimeBucket // key: "YYYY-MM-DD-HH"
+	// 24-hour buckets (30 buckets for 1 month)
+	buckets24h map[string]*TimeBucket // key: "YYYY-MM-DD"
+	// 1-week buckets (52 buckets for 1 year)
+	buckets1w map[string]*TimeBucket // key: "YYYY-WW"
+
+	// Cleanup settings
+	maxBuckets15min int
+	maxBuckets1h    int
+	maxBuckets24h   int
+	maxBuckets1w    int
+}
+
+// NewTimeAggregator creates a new time aggregator
+func NewTimeAggregator() *TimeAggregator {
+	return &TimeAggregator{
+		buckets15min: make(map[string]*TimeBucket),
+		buckets1h:    make(map[string]*TimeBucket),
+		buckets24h:   make(map[string]*TimeBucket),
+		buckets1w:    make(map[string]*TimeBucket),
+
+		maxBuckets15min: 96,  // 24 hours
+		maxBuckets1h:    168, // 1 week
+		maxBuckets24h:   30,  // 1 month
+		maxBuckets1w:    52,  // 1 year
+	}
+}
+
 type RLS struct {
 	config *RLSConfig
 	logger zerolog.Logger
@@ -57,6 +107,13 @@ type RLS struct {
 	// Traffic flow tracking
 	trafficFlowMu sync.RWMutex
 	trafficFlow   *TrafficFlowState
+
+	// Time-based data aggregation
+	timeAggregator *TimeAggregator
+
+	// Cache for API responses
+	cacheMu sync.RWMutex
+	cache   map[string]*CacheEntry
 }
 
 // TenantState represents the state of a tenant
@@ -92,18 +149,33 @@ type Metrics struct {
 // NewRLS creates a new RLS service
 func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
 	rls := &RLS{
-		config:        config,
-		logger:        logger,
-		tenants:       make(map[string]*TenantState),
-		health:        &HealthState{Version: "1.0.0"},
-		counters:      make(map[string]*TenantCounters),
-		recentDenials: make([]limits.DenialInfo, 0, 256),
-		trafficFlow:   &TrafficFlowState{ResponseTimes: make(map[string]float64)},
+		config:         config,
+		logger:         logger,
+		tenants:        make(map[string]*TenantState),
+		metrics:        nil, // Will be set after creation
+		health:         &HealthState{},
+		counters:       make(map[string]*TenantCounters),
+		recentDenials:  make([]limits.DenialInfo, 0, 1000),
+		trafficFlow:    &TrafficFlowState{ResponseTimes: make(map[string]float64)},
+		timeAggregator: NewTimeAggregator(),
+		cache:          make(map[string]*CacheEntry),
 	}
 
 	rls.metrics = rls.createMetrics()
 
-	// Start periodic tenant status logging
+	// Start periodic cleanup of expired cache entries
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				rls.CleanupExpiredCache()
+			}
+		}
+	}()
+
+	// Start periodic status logging
 	go rls.startPeriodicStatusLog()
 
 	return rls
@@ -455,6 +527,25 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 		Int64("body_bytes", bodyBytes).
 		Msg("RLS: INFO - Recording decision")
 
+	// Record in time aggregator for stable time-based data
+	now := time.Now()
+	series := int64(0)
+	labels := int64(0)
+	violation := false
+
+	if requestInfo != nil {
+		series = requestInfo.ObservedSeries
+		labels = requestInfo.ObservedLabels
+	}
+
+	// Determine if this is a cardinality violation
+	if reason == "max_series_per_request_exceeded" || reason == "max_labels_per_series_exceeded" {
+		violation = true
+	}
+
+	// Record in time aggregator (response time will be calculated separately)
+	rls.timeAggregator.RecordDecision(now, allowed, series, labels, 0.0, violation)
+
 	rls.countersMu.Lock()
 	defer rls.countersMu.Unlock()
 	c, ok := rls.counters[tenantID]
@@ -528,22 +619,154 @@ type TrafficFlowState struct {
 
 // Admin snapshots
 func (rls *RLS) OverviewSnapshot() limits.OverviewStats {
-	rls.countersMu.RLock()
-	defer rls.countersMu.RUnlock()
-	var total, allowed, denied int64
-	for _, c := range rls.counters {
-		total += c.Total
-		allowed += c.Allowed
-		denied += c.Denied
-	}
-	allowPct := 100.0
-	if total > 0 {
-		allowPct = float64(allowed) / float64(total) * 100.0
-	}
+	// Use time-based aggregated data for stable overview
+	// Default to 1-hour aggregated data for overview
+	aggregatedData := rls.timeAggregator.GetAggregatedData("1h")
+
+	totalRequests := aggregatedData["total_requests"].(int64)
+	totalAllowed := aggregatedData["allowed_requests"].(int64)
+	totalDenied := aggregatedData["denied_requests"].(int64)
+	allowPct := aggregatedData["allow_rate"].(float64)
+
+	// Get active tenants count from counters
 	rls.tenantsMu.RLock()
 	active := int32(len(rls.tenants))
 	rls.tenantsMu.RUnlock()
-	return limits.OverviewStats{TotalRequests: total, AllowedRequests: allowed, DeniedRequests: denied, AllowPercentage: allowPct, ActiveTenants: active}
+
+	return limits.OverviewStats{
+		TotalRequests:   totalRequests,
+		AllowedRequests: totalAllowed,
+		DeniedRequests:  totalDenied,
+		AllowPercentage: allowPct,
+		ActiveTenants:   active,
+	}
+}
+
+// GetOverviewSnapshotWithTimeRange returns overview stats for a specific time range
+func (rls *RLS) GetOverviewSnapshotWithTimeRange(timeRange string) limits.OverviewStats {
+	// Check cache first
+	cacheKey := fmt.Sprintf("overview_%s", timeRange)
+	if cached, exists := rls.GetCachedData(cacheKey); exists {
+		if stats, ok := cached.(limits.OverviewStats); ok {
+			return stats
+		}
+	}
+
+	// Validate and normalize time range
+	validRanges := map[string]string{
+		"5m":  "15m", // Map 5m to 15m (minimum bucket size)
+		"15m": "15m",
+		"1h":  "1h",
+		"24h": "24h",
+		"1w":  "1w",
+	}
+
+	normalizedRange, exists := validRanges[timeRange]
+	if !exists {
+		normalizedRange = "1h" // Default to 1 hour
+	}
+
+	// Get aggregated data for the specified time range
+	aggregatedData := rls.timeAggregator.GetAggregatedData(normalizedRange)
+
+	totalRequests := aggregatedData["total_requests"].(int64)
+	totalAllowed := aggregatedData["allowed_requests"].(int64)
+	totalDenied := aggregatedData["denied_requests"].(int64)
+	allowPct := aggregatedData["allow_rate"].(float64)
+
+	// Get active tenants count from counters
+	rls.tenantsMu.RLock()
+	active := int32(len(rls.tenants))
+	rls.tenantsMu.RUnlock()
+
+	stats := limits.OverviewStats{
+		TotalRequests:   totalRequests,
+		AllowedRequests: totalAllowed,
+		DeniedRequests:  totalDenied,
+		AllowPercentage: allowPct,
+		ActiveTenants:   active,
+	}
+
+	// Cache the result with appropriate TTL based on time range
+	var ttl time.Duration
+	switch timeRange {
+	case "5m", "15m":
+		ttl = 30 * time.Second // Cache for 30 seconds for short ranges
+	case "1h":
+		ttl = 2 * time.Minute // Cache for 2 minutes for 1 hour
+	case "24h":
+		ttl = 5 * time.Minute // Cache for 5 minutes for 24 hours
+	case "1w":
+		ttl = 10 * time.Minute // Cache for 10 minutes for 1 week
+	default:
+		ttl = 2 * time.Minute
+	}
+
+	rls.SetCachedData(cacheKey, stats, ttl)
+	return stats
+}
+
+// GetTenantsWithTimeRange returns tenant metrics aggregated over a time range
+func (rls *RLS) GetTenantsWithTimeRange(timeRange string) []limits.TenantInfo {
+	// Validate and normalize time range
+	validRanges := map[string]string{
+		"5m":  "15m",
+		"15m": "15m",
+		"1h":  "1h",
+		"24h": "24h",
+		"1w":  "1w",
+	}
+
+	normalizedRange, exists := validRanges[timeRange]
+	if !exists {
+		normalizedRange = "1h"
+	}
+
+	rls.tenantsMu.RLock()
+	tenants := make([]*TenantState, 0, len(rls.tenants))
+	for _, t := range rls.tenants {
+		tenants = append(tenants, t)
+	}
+	tenantCount := len(rls.tenants)
+	rls.tenantsMu.RUnlock()
+
+	// 🔧 DEBUG: Add logging to diagnose empty tenant list issue
+	rls.logger.Info().
+		Int("total_tenants_in_map", tenantCount).
+		Int("tenants_being_returned", len(tenants)).
+		Str("time_range", timeRange).
+		Msg("GetTenantsWithTimeRange: tenant count debug")
+
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+
+	out := make([]limits.TenantInfo, 0, len(tenants))
+	for _, t := range tenants {
+		c := rls.counters[t.Info.ID]
+		metrics := limits.TenantMetrics{}
+		if c != nil && c.Total > 0 {
+			// Use time-based aggregation for more stable metrics
+			tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, normalizedRange)
+
+			metrics.AllowRate = tenantAggregatedData["allow_rate"].(float64)
+			metrics.DenyRate = tenantAggregatedData["deny_rate"].(float64)
+			metrics.RPS = tenantAggregatedData["rps"].(float64)
+			metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
+			metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
+			metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
+		}
+		info := t.Info
+		info.Metrics = metrics
+		out = append(out, info)
+	}
+
+	// 🔧 DEBUG: Log the final result
+	rls.logger.Info().
+		Int("final_tenant_count", len(out)).
+		Str("time_range", timeRange).
+		Msg("GetTenantsWithTimeRange: final result")
+
+	return out
 }
 
 func (rls *RLS) ListTenantsWithMetrics() []limits.TenantInfo {
@@ -2556,4 +2779,491 @@ func (rls *RLS) getCardinalityAlerts() []limits.CardinalityAlert {
 	}
 
 	return alerts
+}
+
+// TimeAggregator methods
+
+// getBucketKey generates a bucket key for the given time and duration
+func (ta *TimeAggregator) getBucketKey(t time.Time, duration time.Duration) string {
+	switch duration {
+	case 15 * time.Minute:
+		return t.Format("2006-01-02-15-04")
+	case time.Hour:
+		return t.Format("2006-01-02-15")
+	case 24 * time.Hour:
+		return t.Format("2006-01-02")
+	case 7 * 24 * time.Hour:
+		year, week := t.ISOWeek()
+		return fmt.Sprintf("%d-W%02d", year, week)
+	default:
+		return t.Format("2006-01-02-15-04")
+	}
+}
+
+// getOrCreateBucket gets or creates a bucket for the given key
+func (ta *TimeAggregator) getOrCreateBucket(buckets map[string]*TimeBucket, key string, timestamp time.Time, duration time.Duration) *TimeBucket {
+	if bucket, exists := buckets[key]; exists {
+		return bucket
+	}
+
+	// Calculate bucket boundaries
+	startTime := ta.roundToBucket(timestamp, duration)
+	endTime := startTime.Add(duration)
+
+	bucket := &TimeBucket{
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+	buckets[key] = bucket
+	return bucket
+}
+
+// roundToBucket rounds a time to the nearest bucket start
+func (ta *TimeAggregator) roundToBucket(t time.Time, duration time.Duration) time.Time {
+	switch duration {
+	case 15 * time.Minute:
+		// Round to nearest 15-minute boundary
+		minutes := t.Minute() - (t.Minute() % 15)
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), minutes, 0, 0, t.Location())
+	case time.Hour:
+		// Round to hour boundary
+		return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), 0, 0, 0, t.Location())
+	case 24 * time.Hour:
+		// Round to day boundary
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+	case 7 * 24 * time.Hour:
+		// Round to week boundary (Monday)
+		weekday := int(t.Weekday())
+		if weekday == 0 { // Sunday
+			weekday = 7
+		}
+		daysToSubtract := weekday - 1
+		return time.Date(t.Year(), t.Month(), t.Day()-daysToSubtract, 0, 0, 0, 0, t.Location())
+	default:
+		return t
+	}
+}
+
+// updateBucket updates a bucket with new data
+func (ta *TimeAggregator) updateBucket(bucket *TimeBucket, allowed bool, series, labels int64, responseTime float64, violation bool) {
+	bucket.TotalRequests++
+	if allowed {
+		bucket.AllowedRequests++
+	} else {
+		bucket.DeniedRequests++
+	}
+
+	bucket.TotalSeries += series
+	bucket.TotalLabels += labels
+
+	if violation {
+		bucket.Violations++
+	}
+
+	// Update response time statistics
+	bucket.ResponseTimeCount++
+	if bucket.ResponseTimeCount == 1 {
+		bucket.MinResponseTime = responseTime
+		bucket.MaxResponseTime = responseTime
+		bucket.AvgResponseTime = responseTime
+	} else {
+		if responseTime < bucket.MinResponseTime {
+			bucket.MinResponseTime = responseTime
+		}
+		if responseTime > bucket.MaxResponseTime {
+			bucket.MaxResponseTime = responseTime
+		}
+		// Update running average
+		bucket.AvgResponseTime = (bucket.AvgResponseTime*float64(bucket.ResponseTimeCount-1) + responseTime) / float64(bucket.ResponseTimeCount)
+	}
+}
+
+// cleanupOldBuckets removes old buckets to prevent memory growth
+func (ta *TimeAggregator) cleanupOldBuckets() {
+	now := time.Now()
+
+	// Cleanup 15-minute buckets
+	if len(ta.buckets15min) > ta.maxBuckets15min {
+		ta.cleanupBucketMap(ta.buckets15min, now.Add(-24*time.Hour))
+	}
+
+	// Cleanup 1-hour buckets
+	if len(ta.buckets1h) > ta.maxBuckets1h {
+		ta.cleanupBucketMap(ta.buckets1h, now.Add(-7*24*time.Hour))
+	}
+
+	// Cleanup 24-hour buckets
+	if len(ta.buckets24h) > ta.maxBuckets24h {
+		ta.cleanupBucketMap(ta.buckets24h, now.Add(-30*24*time.Hour))
+	}
+
+	// Cleanup 1-week buckets
+	if len(ta.buckets1w) > ta.maxBuckets1w {
+		ta.cleanupBucketMap(ta.buckets1w, now.Add(-52*7*24*time.Hour))
+	}
+}
+
+// cleanupBucketMap removes buckets older than the cutoff time
+func (ta *TimeAggregator) cleanupBucketMap(buckets map[string]*TimeBucket, cutoff time.Time) {
+	for key, bucket := range buckets {
+		if bucket.EndTime.Before(cutoff) {
+			delete(buckets, key)
+		}
+	}
+}
+
+// RecordDecision records a decision in all time buckets
+func (ta *TimeAggregator) RecordDecision(timestamp time.Time, allowed bool, series, labels int64, responseTime float64, violation bool) {
+	ta.mu.Lock()
+	defer ta.mu.Unlock()
+
+	// Record in 15-minute bucket
+	key15min := ta.getBucketKey(timestamp, 15*time.Minute)
+	bucket15min := ta.getOrCreateBucket(ta.buckets15min, key15min, timestamp, 15*time.Minute)
+	ta.updateBucket(bucket15min, allowed, series, labels, responseTime, violation)
+
+	// Record in 1-hour bucket
+	key1h := ta.getBucketKey(timestamp, time.Hour)
+	bucket1h := ta.getOrCreateBucket(ta.buckets1h, key1h, timestamp, time.Hour)
+	ta.updateBucket(bucket1h, allowed, series, labels, responseTime, violation)
+
+	// Record in 24-hour bucket
+	key24h := ta.getBucketKey(timestamp, 24*time.Hour)
+	bucket24h := ta.getOrCreateBucket(ta.buckets24h, key24h, timestamp, 24*time.Hour)
+	ta.updateBucket(bucket24h, allowed, series, labels, responseTime, violation)
+
+	// Record in 1-week bucket
+	key1w := ta.getBucketKey(timestamp, 7*24*time.Hour)
+	bucket1w := ta.getOrCreateBucket(ta.buckets1w, key1w, timestamp, 7*24*time.Hour)
+	ta.updateBucket(bucket1w, allowed, series, labels, responseTime, violation)
+
+	// Cleanup old buckets
+	ta.cleanupOldBuckets()
+}
+
+// GetAggregatedData returns aggregated data for the specified time range
+func (ta *TimeAggregator) GetAggregatedData(timeRange string) map[string]interface{} {
+	ta.mu.RLock()
+	defer ta.mu.RUnlock()
+
+	var buckets map[string]*TimeBucket
+	var duration time.Duration
+
+	switch timeRange {
+	case "15m":
+		buckets = ta.buckets15min
+		duration = 15 * time.Minute
+	case "1h":
+		buckets = ta.buckets1h
+		duration = time.Hour
+	case "24h":
+		buckets = ta.buckets24h
+		duration = 24 * time.Hour
+	case "1w":
+		buckets = ta.buckets1w
+		duration = 7 * 24 * time.Hour
+	default:
+		buckets = ta.buckets1h // Default to 1-hour buckets
+		duration = time.Hour
+	}
+
+	// Calculate cutoff time
+	cutoff := time.Now().Add(-duration)
+
+	// Aggregate data from relevant buckets
+	var totalRequests, allowedRequests, deniedRequests int64
+	var totalSeries, totalLabels, totalViolations int64
+	var totalResponseTime float64
+	var responseTimeCount int64
+	var minResponseTime, maxResponseTime float64
+
+	bucketCount := 0
+	for _, bucket := range buckets {
+		if bucket.StartTime.After(cutoff) {
+			totalRequests += bucket.TotalRequests
+			allowedRequests += bucket.AllowedRequests
+			deniedRequests += bucket.DeniedRequests
+			totalSeries += bucket.TotalSeries
+			totalLabels += bucket.TotalLabels
+			totalViolations += bucket.Violations
+			totalResponseTime += bucket.AvgResponseTime * float64(bucket.ResponseTimeCount)
+			responseTimeCount += bucket.ResponseTimeCount
+
+			if bucketCount == 0 {
+				minResponseTime = bucket.MinResponseTime
+				maxResponseTime = bucket.MaxResponseTime
+			} else {
+				if bucket.MinResponseTime < minResponseTime {
+					minResponseTime = bucket.MinResponseTime
+				}
+				if bucket.MaxResponseTime > maxResponseTime {
+					maxResponseTime = bucket.MaxResponseTime
+				}
+			}
+			bucketCount++
+		}
+	}
+
+	// Calculate averages
+	avgResponseTime := 0.0
+	if responseTimeCount > 0 {
+		avgResponseTime = totalResponseTime / float64(responseTimeCount)
+	}
+
+	allowRate := 0.0
+	if totalRequests > 0 {
+		allowRate = float64(allowedRequests) / float64(totalRequests) * 100.0
+	}
+
+	return map[string]interface{}{
+		"time_range":        timeRange,
+		"total_requests":    totalRequests,
+		"allowed_requests":  allowedRequests,
+		"denied_requests":   deniedRequests,
+		"allow_rate":        allowRate,
+		"total_series":      totalSeries,
+		"total_labels":      totalLabels,
+		"violations":        totalViolations,
+		"avg_response_time": avgResponseTime,
+		"min_response_time": minResponseTime,
+		"max_response_time": maxResponseTime,
+		"bucket_count":      bucketCount,
+		"data_freshness":    time.Now().Format(time.RFC3339),
+	}
+}
+
+// GetTenantAggregatedData returns aggregated data for a specific tenant over a time range
+func (ta *TimeAggregator) GetTenantAggregatedData(tenantID string, timeRange string) map[string]interface{} {
+	ta.mu.RLock()
+	defer ta.mu.RUnlock()
+
+	var buckets map[string]*TimeBucket
+	var duration time.Duration
+
+	switch timeRange {
+	case "15m":
+		buckets = ta.buckets15min
+		duration = 15 * time.Minute
+	case "1h":
+		buckets = ta.buckets1h
+		duration = time.Hour
+	case "24h":
+		buckets = ta.buckets24h
+		duration = 24 * time.Hour
+	case "1w":
+		buckets = ta.buckets1w
+		duration = 7 * 24 * time.Hour
+	default:
+		buckets = ta.buckets1h
+		duration = time.Hour
+	}
+
+	// Calculate cutoff time
+	cutoff := time.Now().Add(-duration)
+
+	// For now, return default values since we don't have per-tenant bucket tracking
+	// In a full implementation, we would track per-tenant data in buckets
+	// This is a simplified version that returns reasonable defaults
+
+	// Calculate total requests from all buckets for this time range
+	var totalRequests, allowedRequests, deniedRequests int64
+	var totalSeries, totalLabels int64
+	var totalResponseTime float64
+	var responseTimeCount int64
+
+	bucketCount := 0
+	for _, bucket := range buckets {
+		if bucket.StartTime.After(cutoff) {
+			totalRequests += bucket.TotalRequests
+			allowedRequests += bucket.AllowedRequests
+			deniedRequests += bucket.DeniedRequests
+			totalSeries += bucket.TotalSeries
+			totalLabels += bucket.TotalLabels
+			totalResponseTime += bucket.AvgResponseTime * float64(bucket.ResponseTimeCount)
+			responseTimeCount += bucket.ResponseTimeCount
+			bucketCount++
+		}
+	}
+
+	// Calculate averages and rates
+	avgResponseTime := 0.0
+	if responseTimeCount > 0 {
+		avgResponseTime = totalResponseTime / float64(responseTimeCount)
+	}
+
+	allowRate := 0.0
+	denyRate := 0.0
+	if totalRequests > 0 {
+		allowRate = float64(allowedRequests) / float64(totalRequests) * 100.0
+		denyRate = float64(deniedRequests) / float64(totalRequests) * 100.0
+	}
+
+	// Calculate RPS (requests per second) over the time range
+	rps := 0.0
+	if duration > 0 {
+		rps = float64(totalRequests) / duration.Seconds()
+	}
+
+	// Calculate samples per second (estimate based on total series)
+	samplesPerSec := 0.0
+	if duration > 0 {
+		samplesPerSec = float64(totalSeries) / duration.Seconds()
+	}
+
+	// Calculate bytes per second (estimate)
+	bytesPerSec := 0.0
+	if duration > 0 {
+		// Estimate bytes based on labels and series
+		estimatedBytes := totalSeries * totalLabels * 100 // Rough estimate
+		bytesPerSec = float64(estimatedBytes) / duration.Seconds()
+	}
+
+	// Calculate utilization percentage (placeholder)
+	utilizationPct := 0.0
+	if totalRequests > 0 {
+		utilizationPct = (float64(allowedRequests) / float64(totalRequests)) * 100.0
+	}
+
+	return map[string]interface{}{
+		"tenant_id":         tenantID,
+		"time_range":        timeRange,
+		"total_requests":    totalRequests,
+		"allowed_requests":  allowedRequests,
+		"denied_requests":   deniedRequests,
+		"allow_rate":        allowRate,
+		"deny_rate":         denyRate,
+		"rps":               rps,
+		"samples_per_sec":   samplesPerSec,
+		"bytes_per_sec":     bytesPerSec,
+		"utilization_pct":   utilizationPct,
+		"total_series":      totalSeries,
+		"total_labels":      totalLabels,
+		"avg_response_time": avgResponseTime,
+		"bucket_count":      bucketCount,
+		"data_freshness":    time.Now().Format(time.RFC3339),
+	}
+}
+
+// GetTimeSeriesData returns time series data for charts
+func (ta *TimeAggregator) GetTimeSeriesData(timeRange string, metric string) []map[string]interface{} {
+	ta.mu.RLock()
+	defer ta.mu.RUnlock()
+
+	var buckets map[string]*TimeBucket
+	var duration time.Duration
+
+	switch timeRange {
+	case "15m":
+		buckets = ta.buckets15min
+		duration = 15 * time.Minute
+	case "1h":
+		buckets = ta.buckets1h
+		duration = time.Hour
+	case "24h":
+		buckets = ta.buckets24h
+		duration = 24 * time.Hour
+	case "1w":
+		buckets = ta.buckets1w
+		duration = 7 * 24 * time.Hour
+	default:
+		buckets = ta.buckets1h
+		duration = time.Hour
+	}
+
+	// Calculate cutoff time
+	cutoff := time.Now().Add(-duration)
+	var data []map[string]interface{}
+
+	for key, bucket := range buckets {
+		if bucket.StartTime.After(cutoff) {
+			point := map[string]interface{}{
+				"timestamp":  bucket.StartTime.Format(time.RFC3339),
+				"bucket_key": key,
+			}
+
+			switch metric {
+			case "requests":
+				point["value"] = bucket.TotalRequests
+			case "allow_rate":
+				if bucket.TotalRequests > 0 {
+					point["value"] = float64(bucket.AllowedRequests) / float64(bucket.TotalRequests) * 100.0
+				} else {
+					point["value"] = 0.0
+				}
+			case "series":
+				point["value"] = bucket.TotalSeries
+			case "labels":
+				point["value"] = bucket.TotalLabels
+			case "violations":
+				point["value"] = bucket.Violations
+			case "response_time":
+				point["value"] = bucket.AvgResponseTime
+			default:
+				point["value"] = bucket.TotalRequests
+			}
+
+			data = append(data, point)
+		}
+	}
+
+	return data
+}
+
+// GetAggregatedData returns aggregated data for the specified time range
+func (rls *RLS) GetAggregatedData(timeRange string) map[string]interface{} {
+	return rls.timeAggregator.GetAggregatedData(timeRange)
+}
+
+// GetTimeSeriesData returns time series data for charts
+func (rls *RLS) GetTimeSeriesData(timeRange string, metric string) []map[string]interface{} {
+	return rls.timeAggregator.GetTimeSeriesData(timeRange, metric)
+}
+
+// CacheEntry represents a cached API response
+type CacheEntry struct {
+	Data      interface{}
+	Timestamp time.Time
+	TTL       time.Duration
+}
+
+// IsExpired checks if the cache entry has expired
+func (ce *CacheEntry) IsExpired() bool {
+	return time.Since(ce.Timestamp) > ce.TTL
+}
+
+// GetCachedData retrieves data from cache if it exists and is not expired
+func (rls *RLS) GetCachedData(key string) (interface{}, bool) {
+	rls.cacheMu.RLock()
+	defer rls.cacheMu.RUnlock()
+
+	entry, exists := rls.cache[key]
+	if !exists || entry.IsExpired() {
+		return nil, false
+	}
+
+	return entry.Data, true
+}
+
+// SetCachedData stores data in cache with TTL
+func (rls *RLS) SetCachedData(key string, data interface{}, ttl time.Duration) {
+	rls.cacheMu.Lock()
+	defer rls.cacheMu.Unlock()
+
+	rls.cache[key] = &CacheEntry{
+		Data:      data,
+		Timestamp: time.Now(),
+		TTL:       ttl,
+	}
+}
+
+// CleanupExpiredCache removes expired cache entries
+func (rls *RLS) CleanupExpiredCache() {
+	rls.cacheMu.Lock()
+	defer rls.cacheMu.Unlock()
+
+	for key, entry := range rls.cache {
+		if entry.IsExpired() {
+			delete(rls.cache, key)
+		}
+	}
 }

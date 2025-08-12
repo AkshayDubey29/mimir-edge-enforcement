@@ -161,9 +161,10 @@ export function CardinalityDashboard() {
     ['cardinality', timeRange, selectedTenant],
     () => fetchCardinalityData(timeRange, selectedTenant),
     {
-      refetchInterval: 10000, // Refetch every 10 seconds
+      refetchInterval: 300000, // Refetch every 5 minutes for time-based data (increased from 10s)
       refetchIntervalInBackground: true,
-      staleTime: 5000,
+      staleTime: 180000, // Consider data stale after 3 minutes (increased from 5s)
+      cacheTime: 600000, // Cache for 10 minutes
     }
   );
 
@@ -208,6 +209,14 @@ export function CardinalityDashboard() {
 
   const cardinalityStatus = getCardinalityStatus();
 
+  // Time range options
+  const timeRangeOptions = [
+    { value: '15m', label: '15 Minutes' },
+    { value: '1h', label: '1 Hour' },
+    { value: '24h', label: '24 Hours' },
+    { value: '1w', label: '1 Week' },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -218,9 +227,26 @@ export function CardinalityDashboard() {
         </div>
         <div className="flex items-center space-x-4">
           <StatusBadge status={cardinalityStatus} />
+          
+          {/* Time Range Selector */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-500">Time Range:</span>
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {timeRangeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>Auto-refresh (10s)</span>
+            <span>Auto-refresh (5m)</span>
           </div>
         </div>
       </div>
