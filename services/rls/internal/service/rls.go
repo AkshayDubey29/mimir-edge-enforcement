@@ -843,6 +843,274 @@ func (rls *RLS) RecentDenials(tenantID string, since time.Duration) []limits.Den
 	return out
 }
 
+// EnhancedRecentDenials returns enriched denial information with context and insights
+func (rls *RLS) EnhancedRecentDenials(tenantID string, since time.Duration) []limits.EnhancedDenialInfo {
+	denials := rls.RecentDenials(tenantID, since)
+	enhanced := make([]limits.EnhancedDenialInfo, 0, len(denials))
+
+	for _, denial := range denials {
+		enhancedDenial := rls.enhanceDenialWithContext(denial, since)
+		enhanced = append(enhanced, enhancedDenial)
+	}
+
+	return enhanced
+}
+
+// enhanceDenialWithContext enriches a denial with tenant limits, insights, and recommendations
+func (rls *RLS) enhanceDenialWithContext(denial limits.DenialInfo, since time.Duration) limits.EnhancedDenialInfo {
+	enhanced := limits.EnhancedDenialInfo{
+		DenialInfo: denial,
+	}
+
+	// Get tenant limits
+	rls.tenantsMu.RLock()
+	tenant, exists := rls.tenants[denial.TenantID]
+	rls.tenantsMu.RUnlock()
+
+	if exists {
+		enhanced.TenantLimits = tenant.Info.Limits
+	} else {
+		// Use default limits if tenant not found
+		enhanced.TenantLimits = rls.config.DefaultLimits
+	}
+
+	// Calculate insights
+	enhanced.Insights = rls.calculateDenialInsights(denial, enhanced.TenantLimits)
+
+	// Generate recommendations
+	enhanced.Recommendations = rls.generateDenialRecommendations(denial, enhanced.Insights, enhanced.TenantLimits)
+
+	// Determine severity and category
+	enhanced.Severity = rls.determineDenialSeverity(enhanced.Insights)
+	enhanced.Category = rls.categorizeDenial(denial.Reason)
+
+	return enhanced
+}
+
+// calculateDenialInsights calculates insights about a denial
+func (rls *RLS) calculateDenialInsights(denial limits.DenialInfo, tenantLimits limits.TenantLimits) limits.DenialInsights {
+	insights := limits.DenialInsights{}
+
+	// Calculate exceedances
+	if tenantLimits.SamplesPerSecond > 0 {
+		insights.SamplesExceededBy = denial.ObservedSamples - int64(tenantLimits.SamplesPerSecond)
+	}
+
+	if tenantLimits.MaxBodyBytes > 0 {
+		insights.BodySizeExceededBy = denial.ObservedBodyBytes - tenantLimits.MaxBodyBytes
+	}
+
+	if tenantLimits.MaxSeriesPerRequest > 0 {
+		insights.SeriesExceededBy = int32(denial.ObservedSeries) - tenantLimits.MaxSeriesPerRequest
+	}
+
+	if tenantLimits.MaxLabelsPerSeries > 0 {
+		insights.LabelsExceededBy = int32(denial.ObservedLabels) - tenantLimits.MaxLabelsPerSeries
+	}
+
+	// Calculate utilization percentage
+	insights.UtilizationPercent = rls.calculateUtilizationPercent(denial, tenantLimits)
+
+	// Calculate trend direction (simplified - would need historical analysis)
+	insights.TrendDirection = "stable"
+
+	// Calculate frequency in period (simplified - would need historical analysis)
+	insights.FrequencyInPeriod = 1
+
+	return insights
+}
+
+// calculateUtilizationPercent calculates how close the request was to the limit
+func (rls *RLS) calculateUtilizationPercent(denial limits.DenialInfo, tenantLimits limits.TenantLimits) float64 {
+	var maxUtilization float64 = 0
+
+	// Check samples utilization
+	if tenantLimits.SamplesPerSecond > 0 {
+		utilization := float64(denial.ObservedSamples) / tenantLimits.SamplesPerSecond * 100
+		if utilization > maxUtilization {
+			maxUtilization = utilization
+		}
+	}
+
+	// Check body size utilization
+	if tenantLimits.MaxBodyBytes > 0 {
+		utilization := float64(denial.ObservedBodyBytes) / float64(tenantLimits.MaxBodyBytes) * 100
+		if utilization > maxUtilization {
+			maxUtilization = utilization
+		}
+	}
+
+	// Check series utilization
+	if tenantLimits.MaxSeriesPerRequest > 0 {
+		utilization := float64(denial.ObservedSeries) / float64(tenantLimits.MaxSeriesPerRequest) * 100
+		if utilization > maxUtilization {
+			maxUtilization = utilization
+		}
+	}
+
+	// Check labels utilization
+	if tenantLimits.MaxLabelsPerSeries > 0 {
+		utilization := float64(denial.ObservedLabels) / float64(tenantLimits.MaxLabelsPerSeries) * 100
+		if utilization > maxUtilization {
+			maxUtilization = utilization
+		}
+	}
+
+	return maxUtilization
+}
+
+// calculateTrendDirection determines if denials are increasing, decreasing, or stable
+func (rls *RLS) calculateTrendDirection(tenantID, reason string, since time.Duration) string {
+	// This is a simplified implementation
+	// In a real implementation, you'd analyze historical data
+	return "stable" // Placeholder
+}
+
+// calculateFrequencyInPeriod counts how many times this denial reason occurred
+func (rls *RLS) calculateFrequencyInPeriod(tenantID, reason string, since time.Duration) int {
+	count := 0
+	cutoff := time.Now().Add(-since)
+
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+
+	for _, denial := range rls.recentDenials {
+		if denial.Timestamp.After(cutoff) &&
+			(tenantID == "*" || denial.TenantID == tenantID) &&
+			denial.Reason == reason {
+			count++
+		}
+	}
+
+	return count
+}
+
+// generateDenialRecommendations generates actionable recommendations
+func (rls *RLS) generateDenialRecommendations(denial limits.DenialInfo, insights limits.DenialInsights, tenantLimits limits.TenantLimits) []string {
+	var recommendations []string
+
+	// Rate limiting recommendations
+	if strings.Contains(denial.Reason, "samples_per_second") {
+		recommendations = append(recommendations, "Consider reducing batch size or increasing collection interval")
+		recommendations = append(recommendations, "Review if all metrics are necessary")
+	}
+
+	if strings.Contains(denial.Reason, "burst") {
+		recommendations = append(recommendations, "Implement request throttling in your application")
+		recommendations = append(recommendations, "Consider using exponential backoff for retries")
+	}
+
+	// Cardinality recommendations
+	if strings.Contains(denial.Reason, "max_series_per_request") {
+		recommendations = append(recommendations, "Review label cardinality - avoid high-cardinality labels")
+		recommendations = append(recommendations, "Consider aggregating similar metrics")
+	}
+
+	if strings.Contains(denial.Reason, "max_labels_per_series") {
+		recommendations = append(recommendations, "Reduce the number of labels per metric")
+		recommendations = append(recommendations, "Use label aggregation where possible")
+	}
+
+	// Size recommendations
+	if strings.Contains(denial.Reason, "max_body_bytes") {
+		recommendations = append(recommendations, "Enable compression (gzip/snappy) for requests")
+		recommendations = append(recommendations, "Split large requests into smaller batches")
+	}
+
+	// Parsing error recommendations
+	if strings.Contains(denial.Reason, "parse_failed") {
+		recommendations = append(recommendations, "Verify protobuf message format")
+		recommendations = append(recommendations, "Check for data corruption in transmission")
+	}
+
+	// Utilization-based recommendations
+	if insights.UtilizationPercent > 95 {
+		recommendations = append(recommendations, "Request is very close to limits - consider proactive scaling")
+	} else if insights.UtilizationPercent > 80 {
+		recommendations = append(recommendations, "Monitor usage patterns - approaching limits")
+	}
+
+	// Frequency-based recommendations
+	if insights.FrequencyInPeriod > 10 {
+		recommendations = append(recommendations, "High frequency of denials - review application patterns")
+	}
+
+	return recommendations
+}
+
+// determineDenialSeverity determines the severity level of a denial
+func (rls *RLS) determineDenialSeverity(insights limits.DenialInsights) string {
+	if insights.UtilizationPercent > 95 {
+		return "critical"
+	} else if insights.UtilizationPercent > 80 {
+		return "high"
+	} else if insights.UtilizationPercent > 60 {
+		return "medium"
+	} else {
+		return "low"
+	}
+}
+
+// categorizeDenial categorizes the denial reason
+func (rls *RLS) categorizeDenial(reason string) string {
+	switch {
+	case strings.Contains(reason, "samples_per_second") || strings.Contains(reason, "burst"):
+		return "rate_limiting"
+	case strings.Contains(reason, "max_series") || strings.Contains(reason, "max_labels"):
+		return "cardinality"
+	case strings.Contains(reason, "max_body_bytes"):
+		return "size_limit"
+	case strings.Contains(reason, "parse_failed") || strings.Contains(reason, "body_extract"):
+		return "parsing_error"
+	default:
+		return "other"
+	}
+}
+
+// GetDenialTrends returns trend analysis for denials
+func (rls *RLS) GetDenialTrends(tenantID string, since time.Duration) []limits.DenialTrend {
+	trends := make([]limits.DenialTrend, 0)
+	reasonCounts := make(map[string]int)
+	reasonFirstSeen := make(map[string]time.Time)
+	reasonLastSeen := make(map[string]time.Time)
+
+	cutoff := time.Now().Add(-since)
+
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+
+	for _, denial := range rls.recentDenials {
+		if denial.Timestamp.After(cutoff) &&
+			(tenantID == "*" || denial.TenantID == tenantID) {
+
+			reasonCounts[denial.Reason]++
+
+			if firstSeen, exists := reasonFirstSeen[denial.Reason]; !exists || denial.Timestamp.Before(firstSeen) {
+				reasonFirstSeen[denial.Reason] = denial.Timestamp
+			}
+
+			if lastSeen, exists := reasonLastSeen[denial.Reason]; !exists || denial.Timestamp.After(lastSeen) {
+				reasonLastSeen[denial.Reason] = denial.Timestamp
+			}
+		}
+	}
+
+	for reason, count := range reasonCounts {
+		trend := limits.DenialTrend{
+			TenantID:        tenantID,
+			Reason:          reason,
+			Period:          since.String(),
+			Count:           count,
+			TrendDirection:  "stable", // Simplified - would need historical analysis
+			LastOccurrence:  reasonLastSeen[reason],
+			FirstOccurrence: reasonFirstSeen[reason],
+		}
+		trends = append(trends, trend)
+	}
+
+	return trends
+}
+
 // GetTenantSnapshot returns a single tenant info with metrics if present
 func (rls *RLS) GetTenantSnapshot(tenantID string) (limits.TenantInfo, bool) {
 	rls.tenantsMu.RLock()

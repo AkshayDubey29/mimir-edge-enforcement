@@ -54,6 +54,47 @@ type DenialInfo struct {
 	LimitExceeded     int64     `json:"limit_exceeded,omitempty"`
 }
 
+// EnhancedDenialInfo represents enriched information about a denied request
+type EnhancedDenialInfo struct {
+	DenialInfo
+	TenantLimits    TenantLimits   `json:"tenant_limits"`
+	Insights        DenialInsights `json:"insights"`
+	Recommendations []string       `json:"recommendations"`
+	Severity        string         `json:"severity"`
+	Category        string         `json:"category"`
+}
+
+// DenialInsights represents calculated insights about a denial
+type DenialInsights struct {
+	SamplesExceededBy  int64   `json:"samples_exceeded_by"`
+	BodySizeExceededBy int64   `json:"body_size_exceeded_by"`
+	SeriesExceededBy   int32   `json:"series_exceeded_by"`
+	LabelsExceededBy   int32   `json:"labels_exceeded_by"`
+	UtilizationPercent float64 `json:"utilization_percentage"`
+	TrendDirection     string  `json:"trend_direction"`
+	FrequencyInPeriod  int     `json:"frequency_in_period"`
+}
+
+// DenialTrend represents trend analysis for denials
+type DenialTrend struct {
+	TenantID        string    `json:"tenant_id"`
+	Reason          string    `json:"reason"`
+	Period          string    `json:"period"`
+	Count           int       `json:"count"`
+	TrendDirection  string    `json:"trend_direction"`
+	LastOccurrence  time.Time `json:"last_occurrence"`
+	FirstOccurrence time.Time `json:"first_occurrence"`
+}
+
+// DenialRecommendation represents a recommendation for fixing denials
+type DenialRecommendation struct {
+	Type        string `json:"type"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Priority    string `json:"priority"`
+	Action      string `json:"action"`
+}
+
 // OverviewStats represents overview statistics
 type OverviewStats struct {
 	TotalRequests   int64   `json:"total_requests"`
