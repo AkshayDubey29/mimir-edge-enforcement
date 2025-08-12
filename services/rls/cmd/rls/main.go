@@ -645,30 +645,45 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 
 func handleSetEnforcement(rls *service.RLS) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		id := mux.Vars(r)["id"]
-		enabledParam := r.URL.Query().Get("enabled")
-		burstParam := r.URL.Query().Get("burstPctOverride")
-		if enabledParam == "" && burstParam == "" {
-			http.Error(w, "missing parameters", http.StatusBadRequest)
-			return
-		}
-		enforcement := limits.EnforcementConfig{}
-		if enabledParam != "" {
-			enforcement.Enabled = enabledParam == "true"
-		}
-		if burstParam != "" {
-			v, err := strconv.ParseFloat(burstParam, 64)
-			if err != nil || v < 0 || v > 1 {
-				http.Error(w, "invalid burstPctOverride (0..1)", http.StatusBadRequest)
-				return
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleSetEnforcement")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
 			}
-			enforcement.BurstPctOverride = v
-		}
-		if err := rls.SetEnforcement(id, enforcement); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+		}()
+
+		id := mux.Vars(r)["id"]
+
+		// Parse request body for full enforcement configuration
+		var enforcement limits.EnforcementConfig
+		if err := json.NewDecoder(r.Body).Decode(&enforcement); err != nil {
+			log.Error().Err(err).Str("tenant_id", id).Msg("failed to decode enforcement configuration JSON")
+			http.Error(w, "invalid JSON body", http.StatusBadRequest)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"success": true})
+
+		// Set enforcement configuration in RLS
+		if err := rls.SetTenantEnforcement(id, enforcement); err != nil {
+			log.Error().Err(err).Str("tenant_id", id).Msg("failed to set tenant enforcement")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		log.Info().
+			Str("tenant_id", id).
+			Bool("enabled", enforcement.Enabled).
+			Bool("enforce_samples_per_second", enforcement.EnforceSamplesPerSecond).
+			Bool("enforce_max_body_bytes", enforcement.EnforceMaxBodyBytes).
+			Bool("enforce_max_labels_per_series", enforcement.EnforceMaxLabelsPerSeries).
+			Bool("enforce_max_series_per_request", enforcement.EnforceMaxSeriesPerRequest).
+			Bool("enforce_bytes_per_second", enforcement.EnforceBytesPerSecond).
+			Msg("RLS: tenant enforcement configuration set via HTTP API")
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":     true,
+			"tenant_id":   id,
+			"enforcement": enforcement,
+		})
 	}
 }
 
