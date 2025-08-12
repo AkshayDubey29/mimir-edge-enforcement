@@ -739,7 +739,7 @@ func handleEnhancedDenials(rls *service.RLS) http.HandlerFunc {
 		// Get basic denials first
 		basicDenials := rls.RecentDenials(tenant, adjustedSince)
 		totalCount := len(basicDenials)
-		
+
 		// Aggressively limit denials for performance
 		if len(basicDenials) > limit {
 			basicDenials = basicDenials[:limit]
@@ -751,23 +751,23 @@ func handleEnhancedDenials(rls *service.RLS) http.HandlerFunc {
 			if i >= limit { // Double check limit
 				break
 			}
-			
+
 			// Simplified enhanced denial without heavy processing
 			enhanced := map[string]any{
-				"tenant_id":          denial.TenantID,
-				"reason":            denial.Reason,
-				"timestamp":         denial.Timestamp.UTC().Format(time.RFC3339),
-				"observed_samples":  denial.ObservedSamples,
+				"tenant_id":           denial.TenantID,
+				"reason":              denial.Reason,
+				"timestamp":           denial.Timestamp.UTC().Format(time.RFC3339),
+				"observed_samples":    denial.ObservedSamples,
 				"observed_body_bytes": denial.ObservedBodyBytes,
-				"severity":          "low", // Default for performance
-				"category":          categorizeReason(denial.Reason),
+				"severity":            "low", // Default for performance
+				"category":            categorizeReason(denial.Reason),
 				"tenant_limits": map[string]any{
 					"samples_per_second": 1000,
-					"max_body_bytes":    1048576,
+					"max_body_bytes":     1048576,
 				},
 				"insights": map[string]any{
 					"utilization_percentage": 0.0,
-					"frequency_in_period":   1,
+					"frequency_in_period":    1,
 				},
 				"recommendations": []string{"Check tenant configuration"},
 			}
