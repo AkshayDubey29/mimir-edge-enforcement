@@ -75,7 +75,11 @@ spec:
             # Store configuration
             - "--store-backend={{ .Values.store.backend }}"
             {{- if eq .Values.store.backend "redis" }}
-            - "--redis-address={{ .Values.store.redis.address }}"
+            {{- if eq .Values.redis.mode "external" }}
+            - "--redis-address={{ .Values.redis.external.address }}"
+            {{- else }}
+            - "--redis-address=localhost:6379"
+            {{- end }}
             {{- end }}
             
             # Logging
@@ -94,12 +98,17 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-        {{- if .Values.redis.enabled }}
+          {{- if and .Values.redis.enabled (eq .Values.redis.mode "sidecar") .Values.redis.sidecar.persistence.enabled }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          {{- end }}
+        {{- if and .Values.redis.enabled (eq .Values.redis.mode "sidecar") }}
         - name: redis
-          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
-          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          image: "{{ .Values.redis.sidecar.image.repository }}:{{ .Values.redis.sidecar.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.sidecar.image.pullPolicy }}
           securityContext:
-            {{- with .Values.redis.securityContext }}
+            {{- with .Values.redis.sidecar.securityContext }}
             runAsNonRoot: {{ .runAsNonRoot }}
             runAsUser: {{ .runAsUser }}
             {{- end }}
@@ -109,11 +118,27 @@ spec:
           command:
             - redis-server
             - --appendonly
-            - "{{ if .Values.redis.persistence.enabled }}yes{{ else }}no{{ end }}"
+            - "{{ if .Values.redis.sidecar.persistence.enabled }}yes{{ else }}no{{ end }}"
             - --maxmemory
-            - "268435456"
+            - "{{ .Values.redis.sidecar.config.maxmemory | default "800mb" }}"
             - --maxmemory-policy
-            - allkeys-lru
+            - "{{ .Values.redis.sidecar.config.maxmemoryPolicy | default "allkeys-lru" }}"
+            {{- if .Values.redis.sidecar.config.save }}
+            {{- range .Values.redis.sidecar.config.save }}
+            - --save
+            - "{{ . }}"
+            {{- end }}
+            {{- end }}
+            - --timeout
+            - "{{ .Values.redis.sidecar.config.timeout | default "300" }}"
+            - --tcp-keepalive
+            - "{{ .Values.redis.sidecar.config.tcpKeepalive | default "300" }}"
+            - --protected-mode
+            - "{{ .Values.redis.sidecar.config.protectedMode | default "yes" }}"
+            - --tcp-backlog
+            - "{{ .Values.redis.sidecar.config.tcpBacklog | default "511" }}"
+            - --databases
+            - "{{ .Values.redis.sidecar.config.databases | default "16" }}"
           livenessProbe:
             tcpSocket:
               port: 6379
@@ -125,7 +150,12 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:
-            {{- toYaml .Values.redis.resources | nindent 12 }}
+            {{- toYaml .Values.redis.sidecar.resources | nindent 12 }}
+          {{- if .Values.redis.sidecar.persistence.enabled }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          {{- end }}
         {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -138,5 +168,11 @@ spec:
       {{- with .Values.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if and .Values.redis.enabled (eq .Values.redis.mode "sidecar") .Values.redis.sidecar.persistence.enabled }}
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "mimir-rls.fullname" . }}-redis-data
       {{- end }}
 

@@ -1,0 +1,17 @@
+{{- if and .Values.redis.enabled (eq .Values.redis.mode "sidecar") .Values.redis.sidecar.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mimir-rls.fullname" . }}-redis-data
+  labels:
+    {{- include "mimir-rls.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.redis.sidecar.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.sidecar.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.sidecar.persistence.size }}
+{{- end }}
