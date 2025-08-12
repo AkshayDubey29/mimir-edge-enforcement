@@ -14,6 +14,7 @@ import (
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/buckets"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/limits"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/parser"
+	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
@@ -33,6 +34,8 @@ type RLSConfig struct {
 	DefaultEnforcement limits.EnforcementConfig
 	MaxRequestBytes    int64
 	FailureModeAllow   bool
+	StoreBackend       string
+	RedisAddress       string
 }
 
 // RLS represents the Rate Limit Service
@@ -102,7 +105,10 @@ type RLS struct {
 	config *RLSConfig
 	logger zerolog.Logger
 
-	// Tenant management
+	// Store for tenant data
+	store store.Store
+
+	// Tenant management (in-memory cache)
 	tenants   map[string]*TenantState
 	tenantsMu sync.RWMutex
 
@@ -161,9 +167,22 @@ type Metrics struct {
 
 // NewRLS creates a new RLS service
 func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
+	// Log store backend configuration
+	logger.Info().
+		Str("store_backend", config.StoreBackend).
+		Str("redis_address", config.RedisAddress).
+		Msg("RLS: initializing with store backend")
+
+	// Initialize store
+	store, err := store.NewStore(config.StoreBackend, config.RedisAddress, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to initialize store")
+	}
+
 	rls := &RLS{
 		config:         config,
 		logger:         logger,
+		store:          store,
 		tenants:        make(map[string]*TenantState),
 		metrics:        nil, // Will be set after creation
 		health:         &HealthState{},
@@ -1408,24 +1427,53 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 		return tenant
 	}
 
-	// Create new tenant with enforcement disabled until overrides-sync sets limits
-	tenant = &TenantState{
-		Info: limits.TenantInfo{
-			ID:   tenantID,
-			Name: tenantID,
-			// 🔧 DEMO: Enable enforcement for demonstration
-			Limits: limits.TenantLimits{
-				SamplesPerSecond: 1000,    // 1000 samples per second limit
-				MaxBodyBytes:     1048576, // 1MB body size limit
+	// Try to load tenant from store first
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	if storeData, err := rls.store.GetTenant(ctx, tenantID); err == nil {
+		// Tenant exists in store, create TenantState from it
+		tenant = &TenantState{
+			Info: limits.TenantInfo{
+				ID:          storeData.ID,
+				Name:        storeData.Name,
+				Limits:      storeData.Limits,
+				Enforcement: storeData.Enforcement,
 			},
-			Enforcement: limits.EnforcementConfig{
-				Enabled: true, // 🔧 DEMO: Enable enforcement
+		}
+		
+		// Create buckets if limits are set
+		if storeData.Limits.SamplesPerSecond > 0 {
+			tenant.SamplesBucket = buckets.NewTokenBucket(storeData.Limits.SamplesPerSecond, storeData.Limits.SamplesPerSecond)
+		}
+		if storeData.Limits.MaxBodyBytes > 0 {
+			tenant.BytesBucket = buckets.NewTokenBucket(float64(storeData.Limits.MaxBodyBytes), float64(storeData.Limits.MaxBodyBytes))
+		}
+		
+		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: loaded tenant from store")
+	} else {
+		// Create new tenant with NO limits until overrides-sync sets them
+		// This prevents race conditions where requests see default limits before overrides-sync updates them
+		tenant = &TenantState{
+			Info: limits.TenantInfo{
+				ID:   tenantID,
+				Name: tenantID,
+				// 🔧 FIX: Start with NO limits to prevent race conditions
+				Limits: limits.TenantLimits{
+					SamplesPerSecond: 0, // No limit until overrides-sync sets it
+					MaxBodyBytes:     0, // No limit until overrides-sync sets it
+				},
+				Enforcement: limits.EnforcementConfig{
+					Enabled: false, // 🔧 FIX: Disable enforcement until overrides-sync enables it
+				},
 			},
-		},
-		// 🔧 DEMO: Create buckets for rate limiting
-		SamplesBucket:  buckets.NewTokenBucket(1000, 1000),       // 1000 samples per second
-		BytesBucket:    buckets.NewTokenBucket(1048576, 1048576), // 1MB per second
-		RequestsBucket: buckets.NewTokenBucket(100, 100),         // coarse safety if ever used
+			// 🔧 FIX: No buckets until overrides-sync creates them
+			SamplesBucket:  nil, // No rate limiting until overrides-sync sets it
+			BytesBucket:    nil, // No rate limiting until overrides-sync sets it
+			RequestsBucket: nil, // No rate limiting until overrides-sync sets it
+		}
+		
+		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: created new tenant (not in store)")
 	}
 
 	rls.tenants[tenantID] = tenant
@@ -1770,6 +1818,24 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 				Msg("RLS: removed bytes bucket (zero limit)")
 		}
 		tenant.BytesBucket = nil
+	}
+
+	// 🔧 STORE: Persist tenant data to store (Redis/Memory)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	
+	storeData := &store.TenantData{
+		ID:          tenant.Info.ID,
+		Name:        tenant.Info.Name,
+		Limits:      tenant.Info.Limits,
+		Enforcement: tenant.Info.Enforcement,
+	}
+	
+	if err := rls.store.SetTenant(ctx, tenantID, storeData); err != nil {
+		rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("RLS: failed to persist tenant to store")
+		// Don't return error - continue with in-memory state
+	} else {
+		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: persisted tenant to store")
 	}
 
 	return nil

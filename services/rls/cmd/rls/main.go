@@ -59,6 +59,10 @@ var (
 	enforceMaxSeriesPerMetric  = flag.Bool("enforce-max-series-per-metric", true, "Whether to enforce maximum series per metric limits")
 	enforceBytesPerSecond      = flag.Bool("enforce-bytes-per-second", true, "Whether to enforce bytes per second limits")
 
+	// Store configuration
+	storeBackend = flag.String("store-backend", "memory", "Store backend (memory or redis)")
+	redisAddress = flag.String("redis-address", "localhost:6379", "Redis server address")
+
 	// Logging
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
@@ -80,6 +84,8 @@ func main() {
 		EnforceBodyParsing: *enforceBodyParsing,
 		MaxRequestBytes:    *maxRequestBytes,
 		FailureModeAllow:   *failureModeAllow,
+		StoreBackend:       *storeBackend,
+		RedisAddress:       *redisAddress,
 		DefaultLimits: limits.TenantLimits{
 			SamplesPerSecond:    *defaultSamplesPerSecond,
 			BurstPercent:        *defaultBurstPercent,

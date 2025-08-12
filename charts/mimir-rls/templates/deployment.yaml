@@ -72,6 +72,12 @@ spec:
             - "--enforce-max-series-per-metric={{ .Values.enforcement.enforceMaxSeriesPerMetric | default true }}"
             - "--enforce-bytes-per-second={{ .Values.enforcement.enforceBytesPerSecond | default true }}"
             
+            # Store configuration
+            - "--store-backend={{ .Values.store.backend }}"
+            {{- if eq .Values.store.backend "redis" }}
+            - "--redis-address={{ .Values.store.redis.address }}"
+            {{- end }}
+            
             # Logging
             - "--log-level={{ .Values.log.level }}"
           livenessProbe:
@@ -88,6 +94,39 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+        {{- if .Values.redis.enabled }}
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          securityContext:
+            {{- with .Values.redis.securityContext }}
+            runAsNonRoot: {{ .runAsNonRoot }}
+            runAsUser: {{ .runAsUser }}
+            {{- end }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          command:
+            - redis-server
+            - --appendonly
+            - "{{ if .Values.redis.persistence.enabled }}yes{{ else }}no{{ end }}"
+            - --maxmemory
+            - "268435456"
+            - --maxmemory-policy
+            - allkeys-lru
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
