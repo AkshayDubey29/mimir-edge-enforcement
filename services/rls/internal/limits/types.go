@@ -33,12 +33,13 @@ type TenantInfo struct {
 
 // TenantMetrics represents metrics for a tenant
 type TenantMetrics struct {
-	RPS            float64 `json:"rps"`
-	BytesPerSec    float64 `json:"bytes_per_sec"`
-	SamplesPerSec  float64 `json:"samples_per_sec"`
-	DenyRate       float64 `json:"deny_rate"`
-	AllowRate      float64 `json:"allow_rate"`
-	UtilizationPct float64 `json:"utilization_pct"`
+	RPS             float64 `json:"rps"`
+	BytesPerSec     float64 `json:"bytes_per_sec"`
+	SamplesPerSec   float64 `json:"samples_per_sec"`
+	DenyRate        float64 `json:"deny_rate"`
+	AllowRate       float64 `json:"allow_rate"`
+	UtilizationPct  float64 `json:"utilization_pct"`
+	AvgResponseTime float64 `json:"avg_response_time,omitempty"`
 }
 
 // DenialInfo represents information about a denied request

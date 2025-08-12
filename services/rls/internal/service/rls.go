@@ -3267,3 +3267,93 @@ func (rls *RLS) CleanupExpiredCache() {
 		}
 	}
 }
+
+// GetTenantDetailsWithTimeRange returns comprehensive tenant details with time-based aggregated metrics
+func (rls *RLS) GetTenantDetailsWithTimeRange(tenantID string, timeRange string) (limits.TenantInfo, bool) {
+	rls.tenantsMu.RLock()
+	t, ok := rls.tenants[tenantID]
+	rls.tenantsMu.RUnlock()
+	if !ok {
+		return limits.TenantInfo{}, false
+	}
+
+	// Validate and normalize time range
+	validRanges := map[string]string{
+		"5m":  "15m", // Map 5m to 15m (minimum bucket size)
+		"15m": "15m",
+		"1h":  "1h",
+		"24h": "24h",
+		"1w":  "1w",
+	}
+
+	normalizedRange, exists := validRanges[timeRange]
+	if !exists {
+		normalizedRange = "1h" // Default to 1 hour
+	}
+
+	// Get time-based aggregated data for this tenant
+	tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(tenantID, normalizedRange)
+
+	// Get basic tenant info
+	info := t.Info
+
+	// Create comprehensive metrics from aggregated data
+	metrics := limits.TenantMetrics{
+		RPS:           tenantAggregatedData["rps"].(float64),
+		BytesPerSec:   tenantAggregatedData["bytes_per_sec"].(float64),
+		SamplesPerSec: tenantAggregatedData["samples_per_sec"].(float64),
+		AllowRate:     tenantAggregatedData["allow_rate"].(float64),
+		DenyRate:      tenantAggregatedData["deny_rate"].(float64),
+		UtilizationPct: func() float64 {
+			if info.Limits.SamplesPerSecond > 0 {
+				return (tenantAggregatedData["samples_per_sec"].(float64) / info.Limits.SamplesPerSecond) * 100
+			}
+			return 0
+		}(),
+	}
+
+	// Add additional metrics from traffic flow state
+	if rls.trafficFlow != nil {
+		if responseTime, exists := rls.trafficFlow.ResponseTimes[tenantID]; exists {
+			// Convert to milliseconds for display
+			metrics.AvgResponseTime = responseTime * 1000
+		}
+	}
+
+	info.Metrics = metrics
+	return info, true
+}
+
+// GetTenantRequestHistory returns historical request data for a tenant over a time range
+func (rls *RLS) GetTenantRequestHistory(tenantID string, timeRange string) []map[string]interface{} {
+	// Validate and normalize time range
+	validRanges := map[string]string{
+		"5m":  "15m",
+		"15m": "15m",
+		"1h":  "1h",
+		"24h": "24h",
+		"1w":  "1w",
+	}
+
+	normalizedRange, exists := validRanges[timeRange]
+	if !exists {
+		normalizedRange = "24h" // Default to 24 hours for history
+	}
+
+	// Get time series data for this tenant
+	timeSeriesData := rls.timeAggregator.GetTimeSeriesData(normalizedRange, "tenant_"+tenantID)
+
+	// Convert to the format expected by the frontend
+	history := make([]map[string]interface{}, 0, len(timeSeriesData))
+	for _, dataPoint := range timeSeriesData {
+		history = append(history, map[string]interface{}{
+			"timestamp":         dataPoint["timestamp"],
+			"requests":          dataPoint["requests"],
+			"samples":           dataPoint["samples"],
+			"denials":           dataPoint["denials"],
+			"avg_response_time": dataPoint["avg_response_time"],
+		})
+	}
+
+	return history
+}

@@ -104,39 +104,26 @@ function getLimitTypeFromReason(reason: string): string {
 }
 
 // Real API function - fetches actual tenant details with enhanced data
-async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
+async function fetchTenantDetails(tenantId: string, timeRange: string = '24h'): Promise<TenantDetails> {
   try {
-    // Fetch tenant details
-    const response = await fetch(`/api/tenants/${tenantId}`);
+    // Fetch tenant details with time range
+    const response = await fetch(`/api/tenants/${tenantId}?range=${timeRange}`);
     if (!response.ok) {
       throw new Error(`Failed to fetch tenant details: ${response.statusText}`);
     }
     const data = await response.json();
     
-    // Fetch additional traffic flow data
-    let trafficFlowData = null;
-    try {
-      const trafficResponse = await fetch('/api/debug/traffic-flow');
-      if (trafficResponse.ok) {
-        trafficFlowData = await trafficResponse.json();
-      }
-    } catch (error) {
-      console.warn('Could not fetch traffic flow data:', error);
-    }
-    
     // Extract tenant and denials data
     const tenant = data.tenant;
     const denials = data.recent_denials || [];
-    
-    // Get tenant-specific traffic flow data
-    const tenantTrafficFlow = trafficFlowData?.tenants?.[tenantId] || {};
+    const requestHistory = data.request_history || [];
     
     // Determine tenant status based on available data
     let status: 'active' | 'inactive' | 'suspended' | 'unknown' = 'unknown';
     if (tenant && tenant.enforcement?.enabled) {
       if (tenant.metrics && (tenant.metrics.allow_rate > 0 || tenant.metrics.deny_rate > 0)) {
         status = 'active';
-      } else if (tenantTrafficFlow.total_requests > 0) {
+      } else if (tenant.metrics && tenant.metrics.samples_per_sec > 0) {
         status = 'active';
       } else {
         status = 'inactive';
@@ -145,18 +132,8 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
       status = 'suspended';
     }
     
-    // Calculate additional metrics
-    const totalRequests = tenantTrafficFlow.total_requests || 0;
-    const allowedRequests = tenantTrafficFlow.allowed_requests || 0;
-    const deniedRequests = tenantTrafficFlow.denied_requests || 0;
-    const allowRate = totalRequests > 0 ? (allowedRequests / totalRequests) * 100 : 0;
-    const denyRate = totalRequests > 0 ? (deniedRequests / totalRequests) * 100 : 0;
-    
-    // Generate sample request history (since backend doesn't provide it yet)
-    const requestHistory = generateSampleRequestHistory(tenantTrafficFlow);
-    
-    // Generate sample alerts based on metrics
-    const alerts = generateSampleAlerts(tenant, tenantTrafficFlow);
+    // Generate alerts based on real metrics
+    const alerts = generateAlertsFromRealData(tenant, denials);
     
     // Convert backend tenant format to frontend format
     return {
@@ -180,24 +157,30 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
         max_series_per_request: tenant?.limits?.max_series_per_request || 0
       },
       metrics: {
-        current_samples_per_second: tenant?.metrics?.samples_per_sec || tenantTrafficFlow.current_samples_per_sec || 0,
-        current_series: tenantTrafficFlow.current_series || 0,
-        total_requests: totalRequests,
-        allowed_requests: allowedRequests,
-        denied_requests: deniedRequests,
-        allow_rate: allowRate,
-        deny_rate: denyRate,
-        avg_response_time: tenantTrafficFlow.avg_response_time || 0.28, // Default RLS response time
-        error_rate: tenantTrafficFlow.error_rate || 0,
+        current_samples_per_second: tenant?.metrics?.samples_per_sec || 0,
+        current_series: 0, // Not available in current API
+        total_requests: Math.round((tenant?.metrics?.allow_rate || 0) + (tenant?.metrics?.deny_rate || 0)),
+        allowed_requests: Math.round(tenant?.metrics?.allow_rate || 0),
+        denied_requests: Math.round(tenant?.metrics?.deny_rate || 0),
+        allow_rate: tenant?.metrics?.allow_rate || 0,
+        deny_rate: tenant?.metrics?.deny_rate || 0,
+        avg_response_time: tenant?.metrics?.avg_response_time || 0.28,
+        error_rate: 0, // Not available in current API
         utilization_pct: tenant?.metrics?.utilization_pct || 0
       },
-      request_history: requestHistory,
+      request_history: requestHistory.map((item: any) => ({
+        timestamp: item.timestamp,
+        requests: item.requests || 0,
+        samples: item.samples || 0,
+        denials: item.denials || 0,
+        avg_response_time: item.avg_response_time || 0.28
+      })),
       enforcement_history: denials.map((denial: any) => ({
         timestamp: denial.timestamp || new Date().toISOString(),
         reason: denial.reason || '',
         limit_type: getLimitTypeFromReason(denial.reason || ''),
         current_value: denial.observed_samples || denial.observed_body_bytes || 0,
-        limit_value: denial.limit_value || 0,
+        limit_value: denial.limit_exceeded || 0,
         action: 'denied'
       })),
       alerts: alerts
@@ -244,38 +227,14 @@ async function fetchTenantDetails(tenantId: string): Promise<TenantDetails> {
   }
 }
 
-// Generate sample request history based on traffic flow data
-function generateSampleRequestHistory(trafficFlow: any) {
-  const history = [];
-  const now = new Date();
-  
-  // Generate 24 hours of data
-  for (let i = 23; i >= 0; i--) {
-    const timestamp = new Date(now.getTime() - i * 60 * 60 * 1000);
-    const baseRequests = trafficFlow.total_requests ? Math.floor(trafficFlow.total_requests / 24) : 0;
-    const requests = baseRequests + Math.floor(Math.random() * 10);
-    const samples = requests * (Math.floor(Math.random() * 100) + 50); // 50-150 samples per request
-    const denials = Math.floor(requests * (trafficFlow.denied_requests / trafficFlow.total_requests || 0.1));
-    
-    history.push({
-      timestamp: timestamp.toISOString(),
-      requests,
-      samples,
-      denials,
-      avg_response_time: 0.28 + Math.random() * 0.3 // 0.28-0.58ms
-    });
-  }
-  
-  return history;
-}
-
-// Generate sample alerts based on tenant metrics
-function generateSampleAlerts(tenant: any, trafficFlow: any) {
+// Generate alerts based on real tenant data
+function generateAlertsFromRealData(tenant: any, denials: any[]) {
   const alerts = [];
   
   // Check for high denial rate
-  if (trafficFlow.denied_requests > 0 && trafficFlow.total_requests > 0) {
-    const denialRate = (trafficFlow.denied_requests / trafficFlow.total_requests) * 100;
+  if (tenant?.metrics?.deny_rate > 0 && tenant?.metrics?.allow_rate > 0) {
+    const totalRate = tenant.metrics.allow_rate + tenant.metrics.deny_rate;
+    const denialRate = (tenant.metrics.deny_rate / totalRate) * 100;
     if (denialRate > 20) {
       alerts.push({
         id: 'high-denial-rate',
@@ -292,7 +251,7 @@ function generateSampleAlerts(tenant: any, trafficFlow: any) {
     alerts.push({
       id: 'high-utilization',
       severity: 'warning' as const,
-      message: `High limit utilization: ${tenant.metrics.utilization_pct}% of samples per second limit`,
+      message: `High limit utilization: ${tenant.metrics.utilization_pct.toFixed(1)}% of samples per second limit`,
       timestamp: new Date().toISOString(),
       resolved: false
     });
@@ -310,7 +269,7 @@ function generateSampleAlerts(tenant: any, trafficFlow: any) {
   }
   
   // Check for no recent activity
-  if (trafficFlow.total_requests === 0) {
+  if (tenant?.metrics?.samples_per_sec === 0 && tenant?.metrics?.allow_rate === 0 && tenant?.metrics?.deny_rate === 0) {
     alerts.push({
       id: 'no-activity',
       severity: 'info' as const,
@@ -318,6 +277,25 @@ function generateSampleAlerts(tenant: any, trafficFlow: any) {
       timestamp: new Date().toISOString(),
       resolved: false
     });
+  }
+  
+  // Check for recent denials
+  if (denials.length > 0) {
+    const recentDenials = denials.filter(d => {
+      const denialTime = new Date(d.timestamp);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      return denialTime > oneHourAgo;
+    });
+    
+    if (recentDenials.length > 5) {
+      alerts.push({
+        id: 'recent-denials',
+        severity: 'warning' as const,
+        message: `${recentDenials.length} requests denied in the last hour`,
+        timestamp: new Date().toISOString(),
+        resolved: false
+      });
+    }
   }
   
   return alerts;
@@ -380,10 +358,13 @@ export function TenantDetails() {
   const [timeRange, setTimeRange] = useState('24h');
 
   const { data: tenantDetails, isLoading, error } = useQuery<TenantDetails>(
-    ['tenant-details', tenantId],
-    () => fetchTenantDetails(tenantId!),
+    ['tenant-details', tenantId, timeRange],
+    () => fetchTenantDetails(tenantId!, timeRange),
     {
-      refetchInterval: 30000, // Refetch every 30 seconds
+      refetchInterval: 300000, // Refetch every 5 minutes for time-based data
+      refetchIntervalInBackground: true,
+      staleTime: 180000, // Consider data stale after 3 minutes
+      cacheTime: 600000, // Cache for 10 minutes
     }
   );
 
@@ -459,10 +440,33 @@ export function TenantDetails() {
         </div>
         <div className="flex items-center space-x-4">
           <StatusBadge status={tenantDetails.status} />
+          <div className="flex items-center space-x-2">
+            <label htmlFor="timeRange" className="text-sm font-medium text-gray-700">
+              Time Range:
+            </label>
+            <select
+              id="timeRange"
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="15m">15 Minutes</option>
+              <option value="1h">1 Hour</option>
+              <option value="24h">24 Hours</option>
+              <option value="1w">1 Week</option>
+            </select>
+          </div>
           <button className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">
             Edit Limits
           </button>
         </div>
+      </div>
+
+      {/* Auto-refresh indicator */}
+      <div className="text-sm text-gray-500 text-center">
+        Auto-refresh (5m) • Data range: {timeRange === '15m' ? '15 Minutes' : 
+                                       timeRange === '1h' ? '1 Hour' : 
+                                       timeRange === '24h' ? '24 Hours' : '1 Week'}
       </div>
 
       {/* Key Metrics */}
@@ -569,62 +573,6 @@ export function TenantDetails() {
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Enhanced Metrics Dashboard */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* Performance Metrics */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
-            <Database className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenantDetails.metrics.total_requests.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Last 24 hours
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Current Series</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenantDetails.metrics.current_series.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">
-              Active series count
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Error Rate</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenantDetails.metrics.error_rate}%</div>
-            <p className="text-xs text-muted-foreground">
-              Request failures
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Utilization</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tenantDetails.metrics.utilization_pct}%</div>
-            <p className="text-xs text-muted-foreground">
-              Of rate limit
-            </p>
           </CardContent>
         </Card>
       </div>

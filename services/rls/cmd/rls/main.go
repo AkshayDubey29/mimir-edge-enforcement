@@ -536,12 +536,26 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 		}()
 
 		id := mux.Vars(r)["id"]
-		log.Debug().Str("tenant_id", id).Msg("handling /api/tenants/{id} request")
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "24h" // Default to 24 hours for tenant details
+		}
+
+		// Validate time range
+		validRanges := map[string]bool{
+			"5m": true, "15m": true, "1h": true, "24h": true, "1w": true,
+		}
+		if !validRanges[timeRange] {
+			timeRange = "24h" // Default to 24 hours if invalid
+		}
+
+		log.Debug().Str("tenant_id", id).Str("time_range", timeRange).Msg("handling /api/tenants/{id} request")
 
 		// Debug: Check what tenants are available
 		allTenants := rls.ListTenantsWithMetrics()
 		log.Info().
 			Str("requested_tenant_id", id).
+			Str("time_range", timeRange).
 			Int("total_tenants", len(allTenants)).
 			Strs("available_tenant_ids", func() []string {
 				ids := make([]string, len(allTenants))
@@ -552,8 +566,8 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 			}()).
 			Msg("debug: checking tenant availability")
 
-		// Try to get tenant snapshot
-		tenant, ok := rls.GetTenantSnapshot(id)
+		// Try to get tenant details with time-based aggregation
+		tenant, ok := rls.GetTenantDetailsWithTimeRange(id, timeRange)
 		if !ok {
 			// Fallback: Try to find the tenant in the list (case-insensitive search)
 			var foundTenant *limits.TenantInfo
@@ -568,11 +582,11 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 				log.Info().
 					Str("requested_tenant_id", id).
 					Str("found_tenant_id", foundTenant.ID).
-					Msg("tenant found in list but not in snapshot (case sensitivity issue)")
+					Msg("tenant found in list but not in time-based details (case sensitivity issue)")
 				tenant = *foundTenant
 				ok = true
 			} else {
-				log.Info().Str("tenant_id", id).Msg("tenant not found in GetTenantSnapshot or list")
+				log.Info().Str("tenant_id", id).Msg("tenant not found in GetTenantDetailsWithTimeRange or list")
 				writeJSON(w, http.StatusNotFound, map[string]any{
 					"error":     "tenant not found",
 					"tenant_id": id,
@@ -582,13 +596,28 @@ func handleGetTenant(rls *service.RLS) http.HandlerFunc {
 			}
 		}
 
+		// Get recent denials
 		denials := rls.RecentDenials(id, 24*time.Hour)
+
+		// Get request history for the specified time range
+		requestHistory := rls.GetTenantRequestHistory(id, timeRange)
+
 		log.Info().
 			Str("tenant_id", id).
+			Str("time_range", timeRange).
 			Int("denials_count", len(denials)).
+			Int("history_points", len(requestHistory)).
 			Msg("tenant details API response")
 
-		writeJSON(w, http.StatusOK, map[string]any{"tenant": tenant, "recent_denials": denials})
+		response := map[string]any{
+			"tenant":          tenant,
+			"recent_denials":  denials,
+			"request_history": requestHistory,
+			"time_range":      timeRange,
+			"data_freshness":  time.Now().Format(time.RFC3339),
+		}
+
+		writeJSON(w, http.StatusOK, response)
 	}
 }
 
