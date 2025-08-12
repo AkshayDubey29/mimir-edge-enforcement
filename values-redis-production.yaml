@@ -24,6 +24,10 @@ spec:
       labels:
         app: redis-shared
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
       containers:
       - name: redis
         image: redis:7.2-alpine
@@ -76,7 +80,6 @@ spec:
         securityContext:
           runAsNonRoot: true
           runAsUser: 999
-          fsGroup: 999
       volumes:
       - name: redis-data
         persistentVolumeClaim:
