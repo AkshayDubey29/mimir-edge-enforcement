@@ -53,6 +53,7 @@ type DenialInfo struct {
 	ObservedLabels    int64          `json:"observed_labels,omitempty"`
 	LimitExceeded     int64          `json:"limit_exceeded,omitempty"`
 	SampleMetrics     []SampleMetric `json:"sample_metrics,omitempty"`
+    ParseInfo         *ParseDiagnostics `json:"parse_info,omitempty"`
 }
 
 // SampleMetric represents a sample metric that was denied
@@ -62,6 +63,16 @@ type SampleMetric struct {
 	Value      float64           `json:"value"`
 	Timestamp  int64             `json:"timestamp"`
 	SeriesHash string            `json:"series_hash,omitempty"`
+}
+
+// ParseDiagnostics provides partial, useful details when parsing fails
+type ParseDiagnostics struct {
+    ContentEncoding string   `json:"content_encoding,omitempty"`
+    BodySize        int      `json:"body_size,omitempty"`
+    Error           string   `json:"error,omitempty"`
+    HexPreview      []string `json:"hex_preview,omitempty"`
+    GuessedCause    string   `json:"guessed_cause,omitempty"`
+    Suggestions     []string `json:"suggestions,omitempty"`
 }
 
 // EnhancedDenialInfo represents enriched information about a denied request
