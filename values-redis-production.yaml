@@ -1,0 +1,124 @@
+# Production Redis Deployment Configuration
+# This should be deployed separately from RLS for true shared state
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: redis-shared
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-shared
+  namespace: redis-shared
+  labels:
+    app: redis-shared
+spec:
+  replicas: 1  # Single instance for shared state
+  selector:
+    matchLabels:
+      app: redis-shared
+  template:
+    metadata:
+      labels:
+        app: redis-shared
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - containerPort: 6379
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 512Mi
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "1600mb"
+        - --maxmemory-policy
+        - "allkeys-lru"
+        - --save
+        - "900 1"
+        - --save
+        - "300 10"
+        - --save
+        - "60 10000"
+        - --timeout
+        - "300"
+        - --tcp-keepalive
+        - "300"
+        - --protected-mode
+        - "yes"
+        - --tcp-backlog
+        - "511"
+        - --databases
+        - "16"
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+          fsGroup: 999
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: redis-shared
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard  # Adjust based on your cluster
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-shared-service
+  namespace: redis-shared
+  labels:
+    app: redis-shared
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+  selector:
+    app: redis-shared
+  type: ClusterIP
+
+---
+# Usage in RLS values-rls.yaml:
+# redis:
+#   mode: "external"
+#   external:
+#     enabled: true
+#     address: "redis-shared-service.redis-shared.svc.cluster.local:6379"
+#     password: ""
+#     database: 0
