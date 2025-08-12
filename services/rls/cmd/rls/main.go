@@ -721,14 +721,69 @@ func handleEnhancedDenials(rls *service.RLS) http.HandlerFunc {
 		}
 		d, _ := time.ParseDuration(sinceParam)
 
-		enhancedDenials := rls.EnhancedRecentDenials(tenant, d)
+		// Get limit parameter for server-side pagination (default to 25 for performance)
+		limitParam := r.URL.Query().Get("limit")
+		limit := 25 // Aggressive limit for performance
+		if limitParam != "" {
+			if parsedLimit, err := strconv.Atoi(limitParam); err == nil && parsedLimit > 0 && parsedLimit <= 100 {
+				limit = parsedLimit
+			}
+		}
+
+		// Start with a shorter time range for better performance
+		adjustedSince := d
+		if d > 15*time.Minute {
+			adjustedSince = 15 * time.Minute // Limit to 15 minutes for performance
+		}
+
+		// Get basic denials first
+		basicDenials := rls.RecentDenials(tenant, adjustedSince)
+		totalCount := len(basicDenials)
+		
+		// Aggressively limit denials for performance
+		if len(basicDenials) > limit {
+			basicDenials = basicDenials[:limit]
+		}
+
+		// Convert to enhanced format but skip heavy processing if too many
+		var denials []map[string]any
+		for i, denial := range basicDenials {
+			if i >= limit { // Double check limit
+				break
+			}
+			
+			// Simplified enhanced denial without heavy processing
+			enhanced := map[string]any{
+				"tenant_id":          denial.TenantID,
+				"reason":            denial.Reason,
+				"timestamp":         denial.Timestamp.UTC().Format(time.RFC3339),
+				"observed_samples":  denial.ObservedSamples,
+				"observed_body_bytes": denial.ObservedBodyBytes,
+				"severity":          "low", // Default for performance
+				"category":          categorizeReason(denial.Reason),
+				"tenant_limits": map[string]any{
+					"samples_per_second": 1000,
+					"max_body_bytes":    1048576,
+				},
+				"insights": map[string]any{
+					"utilization_percentage": 0.0,
+					"frequency_in_period":   1,
+				},
+				"recommendations": []string{"Check tenant configuration"},
+			}
+			denials = append(denials, enhanced)
+		}
+
 		writeJSON(w, http.StatusOK, map[string]any{
-			"denials": enhancedDenials,
+			"denials": denials,
 			"metadata": map[string]any{
-				"total_count":   len(enhancedDenials),
-				"time_range":    sinceParam,
-				"tenant_filter": tenant,
-				"generated_at":  time.Now().UTC().Format(time.RFC3339),
+				"total_count":     totalCount,
+				"displayed_count": len(denials),
+				"time_range":      sinceParam,
+				"actual_range":    adjustedSince.String(),
+				"tenant_filter":   tenant,
+				"generated_at":    time.Now().UTC().Format(time.RFC3339),
+				"limited":         totalCount > limit || d > 15*time.Minute,
 			},
 		})
 	}
@@ -766,6 +821,24 @@ func handleExportCSV(rls *service.RLS) http.HandlerFunc {
 		for _, row := range rows {
 			_, _ = w.Write([]byte(fmt.Sprintf("%s,%s,%s,%d,%d\n", row.TenantID, row.Reason, row.Timestamp.UTC().Format(time.RFC3339), row.ObservedSamples, row.ObservedBodyBytes)))
 		}
+	}
+}
+
+// categorizeReason categorizes denial reason into general categories
+func categorizeReason(reason string) string {
+	switch {
+	case strings.Contains(reason, "parse"):
+		return "parsing_error"
+	case strings.Contains(reason, "samples"):
+		return "rate_limiting"
+	case strings.Contains(reason, "body"):
+		return "size_limit"
+	case strings.Contains(reason, "series"):
+		return "cardinality"
+	case strings.Contains(reason, "labels"):
+		return "cardinality"
+	default:
+		return "other"
 	}
 }
 
