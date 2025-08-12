@@ -9,8 +9,8 @@ fullnameOverride: ""
 
 # Image configuration
 image:
-  repository: ghcr.io/akshaydubey29/mimir-overrides-sync
-  tag: "latest"
+  repository: ghcr.io/akshaydubey29/overrides-sync
+  tag: "latest-dual-limits-arm64"
   pullPolicy: IfNotPresent
 
 # Service configuration
@@ -148,7 +148,7 @@ pdb:
 
 # Service Monitor for Prometheus
 serviceMonitor:
-  enabled: true
+  enabled: false
   interval: 10s            # 🔧 OPTIMIZED: Reduced from 30s to 10s
   scrapeTimeout: 5s        # 🔧 OPTIMIZED: Reduced from 10s to 5s
   labels: {}

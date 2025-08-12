@@ -591,18 +591,18 @@ func (c *Controller) parseLimitValue(limits *limits.TenantLimits, limitName, val
 			c.logger.Debug().
 				Str("mimir_field", limitName).
 				Int32("mapped_value", int32(val)).
-				Msg("mapped max_global_series_per_user to max_series_per_request")
+				Msg("mapped max_global_series_per_user to max_series_per_request (per-user limit)")
 		} else {
 			return fmt.Errorf("invalid max_global_series_per_user: %s", value)
 		}
 
 	case "max_global_series_per_metric":
 		if val, err := strconv.ParseInt(value, 10, 32); err == nil {
-			limits.MaxSeriesPerRequest = int32(val)
+			limits.MaxSeriesPerMetric = int32(val)
 			c.logger.Debug().
 				Str("mimir_field", limitName).
 				Int32("mapped_value", int32(val)).
-				Msg("mapped max_global_series_per_metric to max_series_per_request")
+				Msg("mapped max_global_series_per_metric to max_series_per_metric (per-metric limit)")
 		} else {
 			return fmt.Errorf("invalid max_global_series_per_metric: %s", value)
 		}

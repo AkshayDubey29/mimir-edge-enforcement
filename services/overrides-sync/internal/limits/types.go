@@ -8,4 +8,5 @@ type TenantLimits struct {
 	MaxLabelsPerSeries  int32   `json:"max_labels_per_series"`
 	MaxLabelValueLength int32   `json:"max_label_value_length"`
 	MaxSeriesPerRequest int32   `json:"max_series_per_request"`
+	MaxSeriesPerMetric  int32   `json:"max_series_per_metric"` // 🔧 NEW: Per-metric series limit
 }
