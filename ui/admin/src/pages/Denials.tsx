@@ -86,15 +86,17 @@ interface Denial {
 
 export function Denials() {
   const [view, setView] = useState<'enhanced' | 'basic' | 'trends'>('enhanced');
-  const [timeRange, setTimeRange] = useState('1h');
+  const [timeRange, setTimeRange] = useState('15m'); // Start with shorter time range for better performance
   const [selectedTenant, setSelectedTenant] = useState('');
 
   // Enhanced denials query
   const { data: enhancedData, isLoading: enhancedLoading, error: enhancedError } = useQuery({ 
     queryKey: ['enhanced-denials', timeRange, selectedTenant], 
     queryFn: () => fetchEnhancedDenials(timeRange, selectedTenant),
-    refetchInterval: 10000, // Auto-refresh every 10 seconds
-    refetchIntervalInBackground: true,
+    refetchInterval: 30000, // Auto-refresh every 30 seconds (reduced for performance)
+    refetchIntervalInBackground: false, // Don't refresh in background
+    staleTime: 15000, // Consider data stale after 15 seconds
+    cacheTime: 60000, // Keep in cache for 1 minute
     enabled: view === 'enhanced'
   });
 
@@ -102,8 +104,10 @@ export function Denials() {
   const { data: trendsData, isLoading: trendsLoading, error: trendsError } = useQuery({ 
     queryKey: ['denial-trends', timeRange, selectedTenant], 
     queryFn: () => fetchDenialTrends(timeRange, selectedTenant),
-    refetchInterval: 30000, // Auto-refresh every 30 seconds
-    refetchIntervalInBackground: true,
+    refetchInterval: 60000, // Auto-refresh every 60 seconds
+    refetchIntervalInBackground: false,
+    staleTime: 30000, // Consider data stale after 30 seconds
+    cacheTime: 120000, // Keep in cache for 2 minutes
     enabled: view === 'trends'
   });
 
@@ -111,8 +115,10 @@ export function Denials() {
   const { data: basicData, isLoading: basicLoading, error: basicError } = useQuery({ 
     queryKey: ['basic-denials', timeRange, selectedTenant], 
     queryFn: () => fetchBasicDenials(timeRange, selectedTenant),
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
-    refetchIntervalInBackground: true,
+    refetchInterval: 15000, // Auto-refresh every 15 seconds (reduced for performance)
+    refetchIntervalInBackground: false,
+    staleTime: 10000, // Consider data stale after 10 seconds
+    cacheTime: 30000, // Keep in cache for 30 seconds
     enabled: view === 'basic'
   });
 
@@ -264,6 +270,10 @@ function renderEnhancedView(denials: EnhancedDenial[], metadata?: any) {
     );
   }
 
+  // Limit displayed denials for performance (show only first 50)
+  const displayedDenials = denials.slice(0, 50);
+  const hasMore = denials.length > 50;
+
   return (
     <div className="space-y-4">
       {/* Metadata */}
@@ -274,14 +284,17 @@ function renderEnhancedView(denials: EnhancedDenial[], metadata?: any) {
               <Clock className="w-4 h-4 inline mr-1" />
               Generated: {new Date(metadata.generated_at).toLocaleString()}
             </span>
-            <span className="text-blue-700">Total: {metadata.total_count}</span>
+            <span className="text-blue-700">
+              Total: {metadata.total_count} 
+              {hasMore && <span className="text-blue-600 ml-2">(Showing first 50)</span>}
+            </span>
           </div>
         </div>
       )}
 
       {/* Enhanced denials cards */}
       <div className="space-y-4">
-        {denials.map((denial, index) => (
+        {displayedDenials.map((denial, index) => (
           <Card key={index} className="p-6">
             <div className="space-y-4">
               {/* Header */}
@@ -411,8 +424,19 @@ function renderBasicView(denials: Denial[]) {
     );
   }
 
+  // Limit displayed denials for performance (show only first 100 in table)
+  const displayedDenials = denials.slice(0, 100);
+  const hasMore = denials.length > 100;
+
   return (
     <Card className="overflow-hidden">
+      {hasMore && (
+        <div className="bg-yellow-50 p-3 border-b">
+          <p className="text-sm text-yellow-800">
+            Showing first 100 of {denials.length} denials for performance. Use filters to narrow results.
+          </p>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-50">
@@ -425,7 +449,7 @@ function renderBasicView(denials: Denial[]) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {denials.map((denial: Denial, index: number) => (
+            {displayedDenials.map((denial: Denial, index: number) => (
               <tr key={index} className="hover:bg-gray-50">
                 <td className="py-3 px-4 text-sm">
                   <div className="font-mono text-gray-900">
