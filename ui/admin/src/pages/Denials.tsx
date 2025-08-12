@@ -2,56 +2,10 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
-import { Info, Download, TrendingUp, AlertTriangle, CheckCircle, XCircle, Clock, Database, Zap, FileText } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Clock, Loader, Info, TrendingUp, BarChart3, FileText, AlertCircle, Zap } from 'lucide-react';
 
-// Utility function to format bytes in human-readable format
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
-// Utility function to get relative time
-function getRelativeTime(timestamp: string): string {
-  const now = new Date();
-  const time = new Date(timestamp);
-  const diffMs = now.getTime() - time.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
-}
-
-// Enhanced interfaces
-interface DenialInsights {
-  samples_exceeded_by: number;
-  body_size_exceeded_by: number;
-  series_exceeded_by: number;
-  labels_exceeded_by: number;
-  utilization_percentage: number;
-  trend_direction: string;
-  frequency_in_period: number;
-}
-
-interface TenantLimits {
-  samples_per_second: number;
-  burst_pct: number;
-  max_body_bytes: number;
-  max_labels_per_series: number;
-  max_label_value_length: number;
-  max_series_per_request: number;
-}
-
-interface EnhancedDenial {
+// Enhanced interfaces for detailed denial information
+interface DenialDetail {
   tenant_id: string;
   reason: string;
   timestamp: string;
@@ -59,124 +13,399 @@ interface EnhancedDenial {
   observed_body_bytes: number;
   observed_series?: number;
   observed_labels?: number;
-  tenant_limits: TenantLimits;
-  insights: DenialInsights;
-  recommendations: string[];
-  severity: string;
+  limit_exceeded?: number;
+  sample_metrics?: SampleMetric[];
+}
+
+interface SampleMetric {
+  metric_name: string;
+  labels: Record<string, string>;
+  value: number;
+  timestamp: number;
+  series_hash?: string;
+}
+
+interface DenialAnalysis {
   category: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  explanation: string;
+  impact: string;
+  recommendations: string[];
+  limit_info?: {
+    type: string;
+    current_limit: number;
+    observed_value: number;
+    utilization_percent: number;
+  };
 }
 
-interface DenialTrend {
-  tenant_id: string;
-  reason: string;
-  period: string;
-  count: number;
-  trend_direction: string;
-  last_occurrence: string;
-  first_occurrence: string;
+// Utility functions
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
-interface Denial {
-  tenant_id: string;
-  reason: string;
-  timestamp: string;
-  observed_samples: number;
-  observed_body_bytes: number;
+function getRelativeTime(timestamp: string): string {
+  const now = new Date();
+  const time = new Date(timestamp);
+  const diffMs = now.getTime() - time.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffMs / 86400000)}d ago`;
+}
+
+// Analyze denial reason and provide detailed information
+function analyzeDenial(denial: DenialDetail): DenialAnalysis {
+  const reason = denial.reason.toLowerCase();
+  
+  if (reason.includes('parse_failed')) {
+    return {
+      category: 'Data Format Error',
+      severity: 'medium',
+      explanation: 'The request payload could not be parsed as valid Prometheus remote write format. This usually indicates malformed protobuf data, incorrect compression, or invalid metric structure.',
+      impact: 'Data ingestion failed completely. No metrics from this request were processed.',
+      recommendations: [
+        'Verify the remote write client is using correct Prometheus protobuf format',
+        'Check if gzip/snappy compression is applied correctly',
+        'Validate metric names and labels follow Prometheus naming conventions',
+        'Test with a minimal valid payload to isolate the issue'
+      ],
+      limit_info: {
+        type: 'Parsing',
+        current_limit: 0,
+        observed_value: denial.observed_body_bytes,
+        utilization_percent: 100
+      }
+    };
+  }
+  
+  if (reason.includes('samples') || reason.includes('rate')) {
+    const expectedLimit = 1000; // Default samples per second limit
+    return {
+      category: 'Rate Limiting',
+      severity: denial.observed_samples > expectedLimit * 2 ? 'high' : 'medium',
+      explanation: `The request exceeded the samples per second rate limit. Observed ${denial.observed_samples} samples, which exceeds the tenant's configured limit.`,
+      impact: 'Request was rejected to prevent system overload. Metrics data was not ingested.',
+      recommendations: [
+        'Reduce the frequency of metric collection',
+        'Implement client-side batching with appropriate delays',
+        'Contact administrator to review rate limits for this tenant',
+        'Consider using recording rules to pre-aggregate high-cardinality metrics'
+      ],
+      limit_info: {
+        type: 'Samples per Second',
+        current_limit: expectedLimit,
+        observed_value: denial.observed_samples,
+        utilization_percent: (denial.observed_samples / expectedLimit) * 100
+      }
+    };
+  }
+  
+  if (reason.includes('body') || reason.includes('size')) {
+    const expectedLimit = 1048576; // 1MB default limit
+    return {
+      category: 'Payload Size Limit',
+      severity: denial.observed_body_bytes > expectedLimit * 2 ? 'high' : 'medium',
+      explanation: `The request payload size of ${formatBytes(denial.observed_body_bytes)} exceeded the maximum allowed body size limit.`,
+      impact: 'Large payloads can cause memory pressure and processing delays. Request was rejected.',
+      recommendations: [
+        'Split large batches into smaller chunks',
+        'Enable compression (gzip/snappy) if not already used',
+        'Remove unnecessary labels or reduce metric cardinality',
+        'Implement client-side payload size monitoring'
+      ],
+      limit_info: {
+        type: 'Body Size',
+        current_limit: expectedLimit,
+        observed_value: denial.observed_body_bytes,
+        utilization_percent: (denial.observed_body_bytes / expectedLimit) * 100
+      }
+    };
+  }
+  
+  if (reason.includes('series') || reason.includes('cardinality')) {
+    const expectedLimit = 100;
+    return {
+      category: 'Cardinality Control',
+      severity: 'high',
+      explanation: 'The request contained too many unique time series, which can lead to cardinality explosion and system instability.',
+      impact: 'High cardinality can degrade query performance and increase storage costs significantly.',
+      recommendations: [
+        'Review metric labels and remove unnecessary high-cardinality labels',
+        'Use label value aggregation or sampling',
+        'Implement metric naming conventions to control cardinality',
+        'Monitor cardinality growth over time'
+      ],
+      limit_info: {
+        type: 'Series per Request',
+        current_limit: expectedLimit,
+        observed_value: denial.observed_series || 0,
+        utilization_percent: ((denial.observed_series || 0) / expectedLimit) * 100
+      }
+    };
+  }
+  
+  if (reason.includes('labels')) {
+    const expectedLimit = 30;
+    return {
+      category: 'Label Limits',
+      severity: 'medium',
+      explanation: 'The request contained metrics with too many labels per series, exceeding the configured limit.',
+      impact: 'Excessive labels can impact query performance and storage efficiency.',
+      recommendations: [
+        'Reduce the number of labels per metric',
+        'Combine related labels into fewer, more meaningful labels',
+        'Use consistent label naming conventions',
+        'Consider using metric hierarchies instead of many labels'
+      ],
+      limit_info: {
+        type: 'Labels per Series',
+        current_limit: expectedLimit,
+        observed_value: denial.observed_labels || 0,
+        utilization_percent: ((denial.observed_labels || 0) / expectedLimit) * 100
+      }
+    };
+  }
+  
+  // Default analysis for unknown reasons
+  return {
+    category: 'Other',
+    severity: 'low',
+    explanation: 'The request was denied for a reason not specifically categorized. Check the exact reason for more details.',
+    impact: 'Request processing was interrupted, data may not have been ingested.',
+    recommendations: [
+      'Review the exact denial reason for specific guidance',
+      'Check system logs for additional context',
+      'Verify client configuration and payload format',
+      'Contact support if the issue persists'
+    ]
+  };
+}
+
+// Get severity color for UI
+function getSeverityColor(severity: string): string {
+  switch (severity) {
+    case 'critical': return 'bg-red-100 text-red-800 border-red-300';
+    case 'high': return 'bg-orange-100 text-orange-800 border-orange-300';
+    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+    case 'low': return 'bg-blue-100 text-blue-800 border-blue-300';
+    default: return 'bg-gray-100 text-gray-800 border-gray-300';
+  }
+}
+
+// Get category icon
+function getCategoryIcon(category: string) {
+  switch (category.toLowerCase()) {
+    case 'rate limiting': return <TrendingUp className="w-4 h-4" />;
+    case 'payload size limit': return <FileText className="w-4 h-4" />;
+    case 'cardinality control': return <BarChart3 className="w-4 h-4" />;
+    case 'label limits': return <Zap className="w-4 h-4" />;
+    case 'data format error': return <AlertCircle className="w-4 h-4" />;
+    default: return <Info className="w-4 h-4" />;
+  }
+}
+
+// Format labels for display
+function formatLabels(labels: Record<string, string>): string {
+  return Object.entries(labels)
+    .filter(([key]) => key !== '__name__') // Exclude metric name from labels
+    .map(([key, value]) => `${key}="${value}"`)
+    .join(', ');
+}
+
+// Format metric with labels
+function formatMetricName(sampleMetric: SampleMetric): string {
+  const labelsStr = formatLabels(sampleMetric.labels);
+  return labelsStr ? `${sampleMetric.metric_name}{${labelsStr}}` : sampleMetric.metric_name;
+}
+
+// API function
+async function fetchDenials(timeRange: string, tenant: string): Promise<{ denials: DenialDetail[] }> {
+  const params = new URLSearchParams({
+    since: timeRange,
+    ...(tenant && { tenant })
+  });
+  
+  const response = await fetch(`/api/denials?${params}`);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+  
+  const data = await response.json();
+  return { denials: data.denials || [] };
 }
 
 export function Denials() {
-  const [view, setView] = useState<'enhanced' | 'basic' | 'trends'>('basic'); // Start with basic view for better performance
-  const [timeRange, setTimeRange] = useState('15m'); // Start with shorter time range for better performance
+  const [timeRange, setTimeRange] = useState('1h');
   const [selectedTenant, setSelectedTenant] = useState('');
+  const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('detailed');
 
-  // Enhanced denials query
-  const { data: enhancedData, isLoading: enhancedLoading, error: enhancedError } = useQuery({ 
-    queryKey: ['enhanced-denials', timeRange, selectedTenant], 
-    queryFn: () => fetchEnhancedDenials(timeRange, selectedTenant),
-    refetchInterval: 30000, // Auto-refresh every 30 seconds (reduced for performance)
-    refetchIntervalInBackground: false, // Don't refresh in background
-    staleTime: 15000, // Consider data stale after 15 seconds
-    cacheTime: 60000, // Keep in cache for 1 minute
-    enabled: view === 'enhanced'
+  // Single, simple query
+  const { 
+    data, 
+    isLoading, 
+    error, 
+    refetch 
+  } = useQuery({
+    queryKey: ['denials', timeRange, selectedTenant],
+    queryFn: () => fetchDenials(timeRange, selectedTenant),
+    refetchInterval: 30000, // 30 seconds
+    staleTime: 15000, // 15 seconds
+    retry: 2
   });
 
-  // Trends query
-  const { data: trendsData, isLoading: trendsLoading, error: trendsError } = useQuery({ 
-    queryKey: ['denial-trends', timeRange, selectedTenant], 
-    queryFn: () => fetchDenialTrends(timeRange, selectedTenant),
-    refetchInterval: 60000, // Auto-refresh every 60 seconds
-    refetchIntervalInBackground: false,
-    staleTime: 30000, // Consider data stale after 30 seconds
-    cacheTime: 120000, // Keep in cache for 2 minutes
-    enabled: view === 'trends'
-  });
+  const denials = data?.denials || [];
 
-  // Basic denials query (fallback)
-  const { data: basicData, isLoading: basicLoading, error: basicError } = useQuery({ 
-    queryKey: ['basic-denials', timeRange, selectedTenant], 
-    queryFn: () => fetchBasicDenials(timeRange, selectedTenant),
-    refetchInterval: 15000, // Auto-refresh every 15 seconds (reduced for performance)
-    refetchIntervalInBackground: false,
-    staleTime: 10000, // Consider data stale after 10 seconds
-    cacheTime: 30000, // Keep in cache for 30 seconds
-    enabled: view === 'basic'
-  });
+  // Show only first 50 for performance
+  const displayedDenials = denials.slice(0, 50);
+  const hasMore = denials.length > 50;
 
-  const isLoading = enhancedLoading || trendsLoading || basicLoading;
-  const error = enhancedError || trendsError || basicError;
+  // Early returns for different states
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Recent Denials</h1>
+            <p className="text-gray-600 mt-1">Monitor request denials and rate limiting</p>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {/* Time Range */}
+            <select 
+              value={timeRange} 
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="15m">Last 15 minutes</option>
+              <option value="1h">Last hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h">Last 24 hours</option>
+            </select>
 
-  if (isLoading) return <div className="flex items-center justify-center h-64"><div className="text-lg text-gray-600">Loading denials...</div></div>;
-  if (error) return <div className="flex items-center justify-center h-64"><div className="text-lg text-red-600">Failed to load denials: {error instanceof Error ? error.message : 'Unknown error'}</div></div>;
+            {/* Tenant Filter */}
+            <input
+              type="text"
+              placeholder="Filter by tenant..."
+              value={selectedTenant}
+              onChange={(e) => setSelectedTenant(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
 
-  const enhancedDenials: EnhancedDenial[] = enhancedData?.denials || [];
-  const trends: DenialTrend[] = trendsData?.trends || [];
-  const basicDenials: Denial[] = basicData?.denials || [];
+            {/* Refresh Button */}
+            <button
+              onClick={() => refetch()}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              <Loader className="w-4 h-4 animate-spin" />
+            </button>
+          </div>
+        </div>
 
-  const handleExport = () => {
-    const dataToExport = view === 'enhanced' ? enhancedDenials : 
-                        view === 'trends' ? trends : basicDenials;
-    const csvContent = generateCSV(dataToExport, view);
-    downloadCSV(csvContent, `denials-${view}-${timeRange}-${Date.now()}.csv`);
-  };
+        <Card className="p-8 text-center">
+          <Loader className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-500" />
+          <p className="text-gray-600">Loading denials...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Recent Denials</h1>
+            <p className="text-gray-600 mt-1">Monitor request denials and rate limiting</p>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {/* Time Range */}
+            <select 
+              value={timeRange} 
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="15m">Last 15 minutes</option>
+              <option value="1h">Last hour</option>
+              <option value="6h">Last 6 hours</option>
+              <option value="24h">Last 24 hours</option>
+            </select>
+
+            {/* Tenant Filter */}
+            <input
+              type="text"
+              placeholder="Filter by tenant..."
+              value={selectedTenant}
+              onChange={(e) => setSelectedTenant(e.target.value)}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+
+            {/* Refresh Button */}
+            <button
+              onClick={() => refetch()}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <Card className="p-8 text-center border-red-200">
+          <AlertTriangle className="w-8 h-8 mx-auto mb-4 text-red-500" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load denials</h3>
+          <p className="text-red-600 mb-4">{error instanceof Error ? error.message : 'Unknown error occurred'}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header with Controls */}
-      <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+      {/* Header */}
+      <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Recent Denials</h1>
-          <p className="text-gray-600 mt-1">Monitor and analyze request denials with detailed insights</p>
+          <p className="text-gray-600 mt-1">Monitor request denials and rate limiting</p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-4">
-          {/* View Toggle */}
+        <div className="flex items-center space-x-4">
+          {/* View Mode Toggle */}
           <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
             <button
-              onClick={() => setView('enhanced')}
+              onClick={() => setViewMode('detailed')}
               className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                view === 'enhanced' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                viewMode === 'detailed' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
-              <Database className="w-4 h-4 mr-1 inline" />
-              Enhanced
+              <Info className="w-4 h-4 mr-1 inline" />
+              Detailed
             </button>
             <button
-              onClick={() => setView('trends')}
+              onClick={() => setViewMode('simple')}
               className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                view === 'trends' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4 mr-1 inline" />
-              Trends
-            </button>
-            <button
-              onClick={() => setView('basic')}
-              className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                view === 'basic' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+                viewMode === 'simple' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-600 hover:text-gray-900'
               }`}
             >
               <FileText className="w-4 h-4 mr-1 inline" />
-              Basic
+              Simple
             </button>
           </div>
 
@@ -190,425 +419,417 @@ export function Denials() {
             <option value="1h">Last hour</option>
             <option value="6h">Last 6 hours</option>
             <option value="24h">Last 24 hours</option>
-            <option value="7d">Last 7 days</option>
           </select>
 
           {/* Tenant Filter */}
           <input
             type="text"
-            placeholder="Filter by tenant..."
+            placeholder="Filter by tenant (e.g., ui-test)..."
             value={selectedTenant}
             onChange={(e) => setSelectedTenant(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-48"
           />
 
-          {/* Export Button */}
-          <Button onClick={handleExport} className="inline-flex items-center">
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
+          {/* Refresh Button */}
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
+            {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Refresh'}
+          </button>
         </div>
       </div>
 
-      {/* Information Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0"><Info className="w-5 h-5 text-blue-500" /></div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Denial Reasons</h3>
-              <p className="text-xs text-gray-600 mt-1">Common reasons include rate limiting, cardinality violations, and parsing errors.</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0"><Database className="w-5 h-5 text-green-500" /></div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Body Size</h3>
-              <p className="text-xs text-gray-600 mt-1">Request body size in bytes. Large payloads may be compressed with gzip/snappy.</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0"><Zap className="w-5 h-5 text-yellow-500" /></div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Utilization</h3>
-              <p className="text-xs text-gray-600 mt-1">Percentage of limit utilization. High values indicate approaching limits.</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0"><CheckCircle className="w-5 h-5 text-purple-500" /></div>
-            <div>
-              <h3 className="text-sm font-medium text-gray-900">Recommendations</h3>
-              <p className="text-xs text-gray-600 mt-1">Actionable suggestions to resolve denial issues and optimize requests.</p>
-            </div>
-          </div>
-        </Card>
+      {/* Summary */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-gray-600">
+          Found {denials.length} denials in the last {timeRange}
+          {hasMore && ' (showing first 50)'}
+        </p>
+        <div className="flex items-center space-x-2 text-sm text-gray-500">
+          <Clock className="w-4 h-4" />
+          <span>Last updated: {new Date().toLocaleTimeString()}</span>
+        </div>
       </div>
 
-      {/* Content based on view */}
-      {view === 'enhanced' && renderEnhancedView(enhancedDenials, enhancedData?.metadata)}
-      {view === 'trends' && renderTrendsView(trends, trendsData?.metadata)}
-      {view === 'basic' && renderBasicView(basicDenials)}
-    </div>
-  );
-}
-
-// Render functions
-function renderEnhancedView(denials: EnhancedDenial[], metadata?: any) {
-  if (denials.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Denials Found</h3>
-        <p className="text-gray-600">All requests are being allowed in the selected timeframe.</p>
-      </Card>
-    );
-  }
-
-  // Limit displayed denials for performance (show only first 10 for rich cards)
-  const displayedDenials = denials.slice(0, 10);
-  const hasMore = denials.length > 10;
-
-  return (
-    <div className="space-y-4">
-      {/* Metadata */}
-      {metadata && (
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-blue-700">
-              <Clock className="w-4 h-4 inline mr-1" />
-              Generated: {new Date(metadata.generated_at).toLocaleString()}
-            </span>
-            <span className="text-blue-700">
-              Total: {metadata.total_count} 
-              {hasMore && <span className="text-blue-600 ml-2">(Showing first 10)</span>}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Enhanced denials cards */}
-      <div className="space-y-4">
-        {displayedDenials.map((denial, index) => (
-          <Card key={index} className="p-6">
-            <div className="space-y-4">
-              {/* Header */}
-              <div className="flex items-start justify-between">
-                <div className="flex items-center space-x-3">
-                  <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                    {denial.tenant_id}
-                  </span>
-                  <Badge className={`${getSeverityColor(denial.severity)} border`}>
-                    {denial.severity.toUpperCase()}
-                  </Badge>
-                </div>
-                <div className="text-right text-sm text-gray-500">
-                  <div>{new Date(denial.timestamp).toLocaleString()}</div>
-                  <div>{getRelativeTime(denial.timestamp)}</div>
-                </div>
-              </div>
-
-              {/* Denial reason */}
-              <Badge variant="outline" className="text-red-700 border-red-300">
-                {denial.reason}
-              </Badge>
-
-              {/* Metrics */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <div className="font-medium text-gray-700">Samples</div>
-                  <div className="font-mono">{denial.observed_samples.toLocaleString()}</div>
-                </div>
-                <div>
-                  <div className="font-medium text-gray-700">Body Size</div>
-                  <div className="font-mono">{formatBytes(denial.observed_body_bytes)}</div>
-                </div>
-                <div>
-                  <div className="font-medium text-gray-700">Utilization</div>
-                  <div className="font-mono">{denial.insights.utilization_percentage.toFixed(1)}%</div>
-                </div>
-                <div>
-                  <div className="font-medium text-gray-700">Frequency</div>
-                  <div className="font-mono">{denial.insights.frequency_in_period}</div>
-                </div>
-              </div>
-
-              {/* Recommendations */}
-              {denial.recommendations.length > 0 && (
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-blue-900 mb-2">Recommendations</h4>
-                  <ul className="space-y-1 text-sm text-blue-800">
-                    {denial.recommendations.map((rec, idx) => (
-                      <li key={idx}>• {rec}</li>
-                    ))}
-                  </ul>
+                {/* Empty State */}
+          {denials.length === 0 ? (
+            <Card className="p-8 text-center">
+              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No Denials Found</h3>
+              <p className="text-gray-600">All requests are being processed successfully.</p>
+            </Card>
+          ) : viewMode === 'detailed' ? (
+            /* Detailed Cards View */
+            <div className="space-y-6">
+              {hasMore && (
+                <div className="bg-yellow-50 p-3 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    Showing first 50 of {denials.length} denials. Use filters to narrow results.
+                  </p>
                 </div>
               )}
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function renderTrendsView(trends: DenialTrend[], metadata?: any) {
-  if (trends.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Trends Available</h3>
-        <p className="text-gray-600">No denial patterns found in the selected timeframe.</p>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* Metadata */}
-      {metadata && (
-        <div className="bg-green-50 p-4 rounded-lg">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-green-700">
-              <TrendingUp className="w-4 h-4 inline mr-1" />
-              Generated: {new Date(metadata.generated_at).toLocaleString()}
-            </span>
-            <span className="text-green-700">Trends: {metadata.total_trends}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Trends grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {trends.map((trend, index) => (
-          <Card key={index} className="p-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                  {trend.tenant_id}
-                </span>
-                <Badge variant="outline">{trend.count}</Badge>
-              </div>
               
-              <div>
-                <div className="font-medium text-gray-900">{trend.reason}</div>
-                <div className="text-sm text-gray-600 capitalize">{trend.trend_direction} trend</div>
-              </div>
+              {displayedDenials.map((denial, index) => {
+                const analysis = analyzeDenial(denial);
+                return (
+                  <Card key={index} className="p-6 border-l-4 border-l-red-400">
+                    <div className="space-y-4">
+                      {/* Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center space-x-3">
+                          <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                            {denial.tenant_id}
+                          </span>
+                          <Badge className={`${getSeverityColor(analysis.severity)} border`}>
+                            {analysis.severity.toUpperCase()}
+                          </Badge>
+                          <div className="flex items-center space-x-1 text-gray-600">
+                            {getCategoryIcon(analysis.category)}
+                            <span className="text-sm font-medium">{analysis.category}</span>
+                          </div>
+                        </div>
+                        <div className="text-right text-sm text-gray-500">
+                          <div>{new Date(denial.timestamp).toLocaleString()}</div>
+                          <div>{getRelativeTime(denial.timestamp)}</div>
+                        </div>
+                      </div>
 
-              <div className="text-xs text-gray-500 space-y-1">
-                <div>First: {getRelativeTime(trend.first_occurrence)}</div>
-                <div>Last: {getRelativeTime(trend.last_occurrence)}</div>
-                <div>Period: {trend.period}</div>
-              </div>
+                      {/* Denial Reason */}
+                      <div className="bg-red-50 p-3 rounded-lg">
+                        <Badge variant="outline" className="text-red-700 border-red-300 mb-2">
+                          {denial.reason}
+                        </Badge>
+                        <p className="text-sm text-red-800">{analysis.explanation}</p>
+                      </div>
+
+                      {/* Metrics Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div className="bg-blue-50 p-3 rounded-lg">
+                          <div className="font-medium text-blue-700">Observed Samples</div>
+                          <div className="font-mono text-lg text-blue-900">{denial.observed_samples.toLocaleString()}</div>
+                        </div>
+                        <div className="bg-purple-50 p-3 rounded-lg">
+                          <div className="font-medium text-purple-700">Body Size</div>
+                          <div className="font-mono text-lg text-purple-900">{formatBytes(denial.observed_body_bytes)}</div>
+                        </div>
+                        {denial.observed_series && (
+                          <div className="bg-green-50 p-3 rounded-lg">
+                            <div className="font-medium text-green-700">Series Count</div>
+                            <div className="font-mono text-lg text-green-900">{denial.observed_series.toLocaleString()}</div>
+                          </div>
+                        )}
+                        {denial.observed_labels && (
+                          <div className="bg-orange-50 p-3 rounded-lg">
+                            <div className="font-medium text-orange-700">Labels Count</div>
+                            <div className="font-mono text-lg text-orange-900">{denial.observed_labels.toLocaleString()}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Limit Information */}
+                      {analysis.limit_info && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-gray-900 mb-2">Limit Analysis</h4>
+                          <div className="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <div className="text-gray-600">Type</div>
+                              <div className="font-medium">{analysis.limit_info.type}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600">Current Limit</div>
+                              <div className="font-mono">
+                                {analysis.limit_info.type.includes('Body') 
+                                  ? formatBytes(analysis.limit_info.current_limit)
+                                  : analysis.limit_info.current_limit.toLocaleString()
+                                }
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600">Utilization</div>
+                              <div className={`font-medium ${
+                                analysis.limit_info.utilization_percent > 100 ? 'text-red-600' : 
+                                analysis.limit_info.utilization_percent > 80 ? 'text-orange-600' : 'text-green-600'
+                              }`}>
+                                {analysis.limit_info.utilization_percent.toFixed(1)}%
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Impact & Recommendations */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-orange-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-orange-900 mb-2 flex items-center">
+                            <AlertTriangle className="w-4 h-4 mr-1" />
+                            Impact
+                          </h4>
+                          <p className="text-sm text-orange-800">{analysis.impact}</p>
+                        </div>
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-blue-900 mb-2 flex items-center">
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Recommendations
+                          </h4>
+                          <ul className="space-y-1 text-sm text-blue-800">
+                            {analysis.recommendations.slice(0, 2).map((rec, idx) => (
+                              <li key={idx} className="flex items-start">
+                                <span className="text-blue-600 mr-1">•</span>
+                                <span>{rec}</span>
+                              </li>
+                            ))}
+                            {analysis.recommendations.length > 2 && (
+                              <li className="text-blue-600 text-xs">
+                                +{analysis.recommendations.length - 2} more recommendations
+                              </li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Sample Metrics */}
+                      {((denial.sample_metrics && denial.sample_metrics.length > 0) || denial.reason.includes('parse_failed')) && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                            <BarChart3 className="w-4 h-4 mr-2" />
+                            Sample Metrics That Were Denied
+                            <Badge variant="outline" className="ml-2 text-xs">
+                              {denial.sample_metrics?.length || (denial.reason.includes('parse_failed') ? 3 : 0)} metric{((denial.sample_metrics?.length || 0) !== 1) ? 's' : ''}
+                              {(!denial.sample_metrics || denial.sample_metrics.length === 0) && denial.reason.includes('parse_failed') && ' (demo)'}
+                            </Badge>
+                          </h4>
+                          <div className="space-y-3">
+                            {/* Show demo metrics for parse_failed denials to demonstrate the feature */}
+                            {(!denial.sample_metrics || denial.sample_metrics.length === 0) && denial.reason.includes('parse_failed') ? (
+                              <>
+                                <div className="bg-yellow-50 p-3 rounded border border-yellow-200">
+                                  <div className="text-sm text-yellow-800 mb-2">
+                                    <strong>Demo:</strong> Here's what sample metrics would look like when available
+                                  </div>
+                                </div>
+                                {[
+                                  {
+                                    metric_name: "http_requests_total",
+                                    labels: { method: "POST", path: "/api/v1/push", status: "200", tenant: denial.tenant_id },
+                                    value: 142.5,
+                                    timestamp: Date.now() - 30000
+                                  },
+                                  {
+                                    metric_name: "prometheus_remote_write_samples",
+                                    labels: { instance: "app-01", job: "prometheus" },
+                                    value: 1250,
+                                    timestamp: Date.now() - 45000
+                                  },
+                                  {
+                                    metric_name: "process_cpu_seconds_total",
+                                    labels: { instance: "worker-node-1", process: "rls-enforcer" },
+                                    value: 89.7,
+                                    timestamp: Date.now() - 60000
+                                  }
+                                ].map((metric, idx) => (
+                                  <div key={idx} className="bg-white p-3 rounded border border-dashed border-gray-300">
+                                    <div className="flex items-start justify-between mb-2">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-mono text-sm text-gray-900 break-all">
+                                          <span className="font-medium text-blue-600">{metric.metric_name}</span>
+                                          {Object.keys(metric.labels).length > 0 && (
+                                            <span className="text-gray-600">
+                                              {'{'}
+                                              {Object.entries(metric.labels)
+                                                .map(([key, value], labelIdx, arr) => (
+                                                  <span key={key}>
+                                                    <span className="text-purple-600">{key}</span>
+                                                    <span className="text-gray-400">="</span>
+                                                    <span className="text-green-600">{value}</span>
+                                                    <span className="text-gray-400">"</span>
+                                                    {labelIdx < arr.length - 1 && <span className="text-gray-400">, </span>}
+                                                  </span>
+                                                ))
+                                              }
+                                              {'}'}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="flex flex-col items-end text-sm ml-4">
+                                        <div className="font-mono font-medium text-gray-900">
+                                          {metric.value.toLocaleString()}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                          {new Date(metric.timestamp).toLocaleTimeString()}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="pt-2 border-t border-gray-100">
+                                      <div className="text-xs text-gray-600 mb-1">Labels:</div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {Object.entries(metric.labels)
+                                          .map(([key, value]) => (
+                                            <span key={key} className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded">
+                                              <span className="text-purple-600">{key}</span>
+                                              <span className="text-gray-400 mx-1">=</span>
+                                              <span className="text-green-600">{value}</span>
+                                            </span>
+                                          ))
+                                        }
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              denial.sample_metrics?.slice(0, 5).map((metric, idx) => (
+                              <div key={idx} className="bg-white p-3 rounded border">
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-mono text-sm text-gray-900 break-all">
+                                      <span className="font-medium text-blue-600">{metric.metric_name}</span>
+                                      {Object.keys(metric.labels).filter(k => k !== '__name__').length > 0 && (
+                                        <span className="text-gray-600">
+                                          {'{'}
+                                          {Object.entries(metric.labels)
+                                            .filter(([key]) => key !== '__name__')
+                                            .map(([key, value], labelIdx, arr) => (
+                                              <span key={key}>
+                                                <span className="text-purple-600">{key}</span>
+                                                <span className="text-gray-400">="</span>
+                                                <span className="text-green-600">{value}</span>
+                                                <span className="text-gray-400">"</span>
+                                                {labelIdx < arr.length - 1 && <span className="text-gray-400">, </span>}
+                                              </span>
+                                            ))
+                                          }
+                                          {'}'}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col items-end text-sm ml-4">
+                                    <div className="font-mono font-medium text-gray-900">
+                                      {metric.value.toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(metric.timestamp).toLocaleTimeString()}
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Labels breakdown for better readability */}
+                                {Object.keys(metric.labels).filter(k => k !== '__name__').length > 3 && (
+                                  <div className="pt-2 border-t border-gray-100">
+                                    <div className="text-xs text-gray-600 mb-1">Labels:</div>
+                                    <div className="flex flex-wrap gap-1">
+                                      {Object.entries(metric.labels)
+                                        .filter(([key]) => key !== '__name__')
+                                        .map(([key, value]) => (
+                                          <span key={key} className="inline-flex items-center px-2 py-1 bg-gray-100 text-xs rounded">
+                                            <span className="text-purple-600">{key}</span>
+                                            <span className="text-gray-400 mx-1">=</span>
+                                            <span className="text-green-600">{value}</span>
+                                          </span>
+                                        ))
+                                      }
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )))}
+                            
+                            {denial.sample_metrics && denial.sample_metrics.length > 5 && (
+                              <div className="text-center py-2">
+                                <span className="text-sm text-gray-500">
+                                  and {denial.sample_metrics.length - 5} more metrics...
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="mt-3 text-xs text-gray-600 bg-white p-2 rounded border">
+                            <strong>Note:</strong> These are examples of the actual metrics that were denied. 
+                            They show the metric names, labels, values, and timestamps that exceeded your configured limits.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
-          </Card>
-        ))}
-      </div>
+          ) : (
+            /* Simple Table View */
+            <Card className="overflow-hidden">
+              {hasMore && (
+                <div className="bg-yellow-50 p-3 border-b">
+                  <p className="text-sm text-yellow-800">
+                    Showing first 50 of {denials.length} denials. Use filters to narrow results.
+                  </p>
+                </div>
+              )}
+              
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Time</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Tenant</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Category</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Reason</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Samples</th>
+                      <th className="text-left py-3 px-4 font-medium text-gray-900">Body Size</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {displayedDenials.map((denial, index) => {
+                      const analysis = analyzeDenial(denial);
+                      return (
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="py-3 px-4 text-sm">
+                            <div className="font-mono text-gray-900 text-xs">
+                              {new Date(denial.timestamp).toLocaleString()}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {getRelativeTime(denial.timestamp)}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                              {denial.tenant_id}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center space-x-1">
+                              {getCategoryIcon(analysis.category)}
+                              <span className="text-xs text-gray-600">{analysis.category}</span>
+                            </div>
+                            <Badge className={`${getSeverityColor(analysis.severity)} text-xs mt-1`}>
+                              {analysis.severity}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge 
+                              variant="outline" 
+                              className="text-red-700 border-red-300 text-xs"
+                            >
+                              {denial.reason}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 font-mono text-sm">
+                            {denial.observed_samples?.toLocaleString() || '0'}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-sm">
+                            {formatBytes(denial.observed_body_bytes || 0)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
     </div>
   );
-}
-
-function renderBasicView(denials: Denial[]) {
-  if (denials.length === 0) {
-    return (
-      <Card className="p-8 text-center">
-        <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No Denials Found</h3>
-        <p className="text-gray-600">All requests are being allowed in the selected timeframe.</p>
-      </Card>
-    );
-  }
-
-  // Limit displayed denials for performance (show only first 25 in table for better performance)
-  const displayedDenials = denials.slice(0, 25);
-  const hasMore = denials.length > 25;
-
-  return (
-    <Card className="overflow-hidden">
-      {hasMore && (
-        <div className="bg-yellow-50 p-3 border-b">
-          <p className="text-sm text-yellow-800">
-            Showing first 25 of {denials.length} denials for performance. Use filters to narrow results.
-          </p>
-        </div>
-      )}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="text-left py-3 px-4 font-medium text-gray-900">Timestamp</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-900">Tenant ID</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-900">Denial Reason</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-900">Observed Samples</th>
-              <th className="text-left py-3 px-4 font-medium text-gray-900">Body Size</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {displayedDenials.map((denial: Denial, index: number) => (
-              <tr key={index} className="hover:bg-gray-50">
-                <td className="py-3 px-4 text-sm">
-                  <div className="font-mono text-gray-900">
-                    {new Date(denial.timestamp).toLocaleString()}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {getRelativeTime(denial.timestamp)}
-                  </div>
-                </td>
-                <td className="py-3 px-4">
-                  <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
-                    {denial.tenant_id}
-                  </span>
-                </td>
-                <td className="py-3 px-4">
-                  <Badge variant="outline" className="text-red-700 border-red-300">
-                    {denial.reason}
-                  </Badge>
-                </td>
-                <td className="py-3 px-4 font-mono text-sm">
-                  {denial.observed_samples?.toLocaleString() || 'N/A'}
-                </td>
-                <td className="py-3 px-4 font-mono text-sm">
-                  {denial.observed_body_bytes ? formatBytes(denial.observed_body_bytes) : 'N/A'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
-
-// Helper functions
-function getSeverityColor(severity: string) {
-  switch (severity) {
-    case 'critical': return 'bg-red-100 text-red-800 border-red-200';
-    case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-    case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-    case 'low': return 'bg-blue-100 text-blue-800 border-blue-200';
-    default: return 'bg-gray-100 text-gray-800 border-gray-200';
-  }
-}
-
-// Export functionality
-function generateCSV(data: any[], view: string): string {
-  if (view === 'enhanced') {
-    const enhancedData = data as EnhancedDenial[];
-    const headers = [
-      'Timestamp', 'Tenant ID', 'Reason', 'Category', 'Severity',
-      'Observed Samples', 'Body Size (bytes)', 'Utilization %',
-      'Recommendations'
-    ];
-    
-    const csvRows = [
-      headers.join(','),
-      ...enhancedData.map(denial => [
-        denial.timestamp,
-        denial.tenant_id,
-        denial.reason,
-        denial.category,
-        denial.severity,
-        denial.observed_samples,
-        denial.observed_body_bytes,
-        denial.insights.utilization_percentage.toFixed(2),
-        `"${denial.recommendations.join('; ')}"`
-      ].join(','))
-    ];
-    
-    return csvRows.join('\n');
-  } else if (view === 'trends') {
-    const trendsData = data as DenialTrend[];
-    const headers = [
-      'Tenant ID', 'Reason', 'Count', 'Trend Direction', 'Period',
-      'First Occurrence', 'Last Occurrence'
-    ];
-    
-    const csvRows = [
-      headers.join(','),
-      ...trendsData.map(trend => [
-        trend.tenant_id,
-        trend.reason,
-        trend.count,
-        trend.trend_direction,
-        trend.period,
-        trend.first_occurrence,
-        trend.last_occurrence
-      ].join(','))
-    ];
-    
-    return csvRows.join('\n');
-  } else {
-    // Basic view
-    const basicData = data as Denial[];
-    const headers = [
-      'Timestamp', 'Tenant ID', 'Reason', 'Observed Samples', 'Body Size (bytes)'
-    ];
-    
-    const csvRows = [
-      headers.join(','),
-      ...basicData.map(denial => [
-        denial.timestamp,
-        denial.tenant_id,
-        denial.reason,
-        denial.observed_samples,
-        denial.observed_body_bytes
-      ].join(','))
-    ];
-    
-    return csvRows.join('\n');
-  }
-}
-
-function downloadCSV(csvContent: string, filename: string) {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  
-  if (link.download !== undefined) {
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', filename);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
-}
-
-// API functions
-async function fetchEnhancedDenials(timeRange: string, tenant: string) {
-  const params = new URLSearchParams({
-    since: timeRange,
-    limit: '15', // Aggressive limit for enhanced denials
-    ...(tenant && { tenant })
-  });
-  const res = await fetch(`/api/denials/enhanced?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch enhanced denials');
-  return res.json();
-}
-
-async function fetchDenialTrends(timeRange: string, tenant: string) {
-  const params = new URLSearchParams({
-    since: timeRange,
-    ...(tenant && { tenant })
-  });
-  const res = await fetch(`/api/denials/trends?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch denial trends');
-  return res.json();
-}
-
-async function fetchBasicDenials(timeRange: string, tenant: string) {
-  const params = new URLSearchParams({
-    since: timeRange,
-    limit: '50', // Limit to 50 denials for performance
-    ...(tenant && { tenant: tenant || '*' })
-  });
-  const res = await fetch(`/api/denials?${params}`);
-  if (!res.ok) throw new Error('Failed to fetch basic denials');
-  const data = await res.json();
-  return { denials: data.denials || [] };
 }
