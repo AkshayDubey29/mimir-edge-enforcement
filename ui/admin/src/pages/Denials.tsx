@@ -246,6 +246,7 @@ export function Denials() {
   const [timeRange, setTimeRange] = useState('1h');
   const [selectedTenant, setSelectedTenant] = useState('');
   const [viewMode, setViewMode] = useState<'simple' | 'detailed'>('detailed');
+  const [reasonFilter, setReasonFilter] = useState<string>('');
 
   // Single, simple query
   const { 
@@ -263,9 +264,21 @@ export function Denials() {
 
   const denials = data?.denials || [];
 
+  // Unique reasons for filter select
+  const uniqueReasons = React.useMemo(
+    () => Array.from(new Set(denials.map((d) => d.reason))).sort(),
+    [denials]
+  );
+
+  // Apply client-side filtering by reason
+  const filteredDenials = React.useMemo(() => {
+    if (!reasonFilter) return denials;
+    return denials.filter((d) => d.reason === reasonFilter);
+  }, [denials, reasonFilter]);
+
   // Show only first 50 for performance
-  const displayedDenials = denials.slice(0, 50);
-  const hasMore = denials.length > 50;
+  const displayedDenials = filteredDenials.slice(0, 50);
+  const hasMore = filteredDenials.length > 50;
 
   // Early returns for different states
   if (isLoading) {
@@ -430,6 +443,19 @@ export function Denials() {
             className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-48"
           />
 
+          {/* Reason Filter */}
+          <select
+            value={reasonFilter}
+            onChange={(e) => setReasonFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            title="Filter by denial reason"
+          >
+            <option value="">All reasons</option>
+            {uniqueReasons.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+
           {/* Refresh Button */}
           <button
             onClick={() => refetch()}
@@ -444,7 +470,7 @@ export function Denials() {
       {/* Summary */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-gray-600">
-          Found {denials.length} denials in the last {timeRange}
+          Found {filteredDenials.length} denials in the last {timeRange}
           {hasMore && ' (showing first 50)'}
         </p>
         <div className="flex items-center space-x-2 text-sm text-gray-500">
@@ -454,7 +480,7 @@ export function Denials() {
       </div>
 
                 {/* Empty State */}
-          {denials.length === 0 ? (
+          {filteredDenials.length === 0 ? (
             <Card className="p-8 text-center">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No Denials Found</h3>
@@ -466,7 +492,7 @@ export function Denials() {
               {hasMore && (
                 <div className="bg-yellow-50 p-3 rounded-lg">
                   <p className="text-sm text-yellow-800">
-                    Showing first 50 of {denials.length} denials. Use filters to narrow results.
+                    Showing first 50 of {filteredDenials.length} denials. Use filters to narrow results.
                   </p>
                 </div>
               )}
@@ -683,7 +709,7 @@ export function Denials() {
               {hasMore && (
                 <div className="bg-yellow-50 p-3 border-b">
                   <p className="text-sm text-yellow-800">
-                    Showing first 50 of {denials.length} denials. Use filters to narrow results.
+                    Showing first 50 of {filteredDenials.length} denials. Use filters to narrow results.
                   </p>
                 </div>
               )}
