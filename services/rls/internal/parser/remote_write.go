@@ -50,9 +50,14 @@ func ParseRemoteWriteRequest(body []byte, contentEncoding string) (*ParseResult,
 		fmt.Printf("DEBUG: Body hex preview: %s\n", strings.Join(hexPreview, " "))
 	}
 
-	// 🔧 FIX: Check for potentially truncated bodies
-	if contentEncoding == "snappy" && len(body) < 10 {
-		return nil, fmt.Errorf("snappy body too small (%d bytes), likely truncated", len(body))
+	// 🔧 ENHANCED FIX: Better snappy validation and diagnostics
+	if contentEncoding == "snappy" {
+		if len(body) < 4 {
+			return nil, fmt.Errorf("snappy body too small (%d bytes), likely truncated", len(body))
+		}
+		if body[0] != 0xff {
+			return nil, fmt.Errorf("invalid snappy frame header (expected 0xff, got 0x%02x), body size: %d bytes", body[0], len(body))
+		}
 	}
 
 	// 🔧 PRODUCTION FIX: More lenient body size checks for production data
@@ -164,10 +169,26 @@ func decompress(body []byte, contentEncoding string) ([]byte, error) {
 		return decompressed, nil
 
 	case "snappy":
+		// 🔧 ENHANCED FIX: Better snappy error handling with detailed diagnostics
+		if len(body) < 4 {
+			return nil, fmt.Errorf("snappy body too small (%d bytes), likely truncated or corrupted", len(body))
+		}
+		
+		// Check for snappy frame format
+		if body[0] != 0xff {
+			return nil, fmt.Errorf("invalid snappy frame header (expected 0xff, got 0x%02x), body size: %d bytes", body[0], len(body))
+		}
+		
 		decompressed, err := snappy.Decode(nil, body)
 		if err != nil {
-			// 🔧 FIX: Provide more detailed error information for debugging
-			return nil, fmt.Errorf("failed to decode snappy data (body size: %d bytes): %w", len(body), err)
+			// 🔧 PRODUCTION FIX: Provide detailed error context for debugging
+			hexPreview := make([]string, minInt(16, len(body)))
+			for i := 0; i < minInt(16, len(body)); i++ {
+				hexPreview[i] = fmt.Sprintf("%02x", body[i])
+			}
+			
+			return nil, fmt.Errorf("snappy decompression failed (body size: %d bytes, hex preview: %s): %w", 
+				len(body), strings.Join(hexPreview, " "), err)
 		}
 		return decompressed, nil
 
