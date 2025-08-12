@@ -12,6 +12,7 @@ type TenantLimits struct {
 	MaxLabelsPerSeries  int32   `json:"max_labels_per_series"`
 	MaxLabelValueLength int32   `json:"max_label_value_length"`
 	MaxSeriesPerRequest int32   `json:"max_series_per_request"`
+	MaxSeriesPerMetric  int32   `json:"max_series_per_metric"` // 🔧 NEW: Per-metric series limit
 }
 
 // EnforcementConfig represents enforcement settings for a tenant
@@ -24,6 +25,7 @@ type EnforcementConfig struct {
 	EnforceMaxBodyBytes        bool `json:"enforce_max_body_bytes,omitempty"`
 	EnforceMaxLabelsPerSeries  bool `json:"enforce_max_labels_per_series,omitempty"`
 	EnforceMaxSeriesPerRequest bool `json:"enforce_max_series_per_request,omitempty"`
+	EnforceMaxSeriesPerMetric  bool `json:"enforce_max_series_per_metric,omitempty"` // 🔧 NEW: Per-metric enforcement
 	EnforceBytesPerSecond      bool `json:"enforce_bytes_per_second,omitempty"`
 }
 

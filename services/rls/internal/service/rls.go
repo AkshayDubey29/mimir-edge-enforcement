@@ -1434,6 +1434,19 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 
 // checkLimits checks if the request is within limits including cardinality controls
 func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, requestInfo *limits.RequestInfo) limits.Decision {
+	// 🔧 DEBUG: Add logging to track cardinality limit checks
+	rls.logger.Info().
+		Str("tenant", tenant.Info.ID).
+		Int64("observed_series", requestInfo.ObservedSeries).
+		Int32("max_series_per_request", tenant.Info.Limits.MaxSeriesPerRequest).
+		Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+		Int32("max_series_per_metric", tenant.Info.Limits.MaxSeriesPerMetric).
+		Bool("enforce_max_series_per_metric", tenant.Info.Enforcement.EnforceMaxSeriesPerMetric).
+		Int64("observed_labels", requestInfo.ObservedLabels).
+		Int32("max_labels_per_series", tenant.Info.Limits.MaxLabelsPerSeries).
+		Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
+		Msg("DEBUG: checkLimits cardinality check")
+
 	// Check body size (only if enforcement is enabled)
 	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 && bodyBytes > tenant.Info.Limits.MaxBodyBytes {
 		return limits.Decision{
@@ -1445,6 +1458,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 
 	// 🔧 CARDINALITY CONTROL: Check series per request limit (only if enforcement is enabled)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 && requestInfo.ObservedSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+		rls.logger.Info().
+			Str("tenant", tenant.Info.ID).
+			Int64("observed_series", requestInfo.ObservedSeries).
+			Int32("max_series_per_request", tenant.Info.Limits.MaxSeriesPerRequest).
+			Msg("DEBUG: DENY - max_series_per_request_exceeded")
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "max_series_per_request_exceeded",
@@ -1454,9 +1472,28 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 
 	// 🔧 CARDINALITY CONTROL: Check labels per series limit (only if enforcement is enabled)
 	if tenant.Info.Enforcement.EnforceMaxLabelsPerSeries && tenant.Info.Limits.MaxLabelsPerSeries > 0 && requestInfo.ObservedLabels > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
+		rls.logger.Info().
+			Str("tenant", tenant.Info.ID).
+			Int64("observed_labels", requestInfo.ObservedLabels).
+			Int32("max_labels_per_series", tenant.Info.Limits.MaxLabelsPerSeries).
+			Msg("DEBUG: DENY - max_labels_per_series_exceeded")
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "max_labels_per_series_exceeded",
+			Code:    http.StatusTooManyRequests,
+		}
+	}
+
+	// 🔧 CARDINALITY CONTROL: Check series per metric limit (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 && requestInfo.ObservedSeries > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
+		rls.logger.Info().
+			Str("tenant", tenant.Info.ID).
+			Int64("observed_series", requestInfo.ObservedSeries).
+			Int32("max_series_per_metric", tenant.Info.Limits.MaxSeriesPerMetric).
+			Msg("DEBUG: DENY - max_series_per_metric_exceeded")
+		return limits.Decision{
+			Allowed: false,
+			Reason:  "max_series_per_metric_exceeded",
 			Code:    http.StatusTooManyRequests,
 		}
 	}
@@ -1658,6 +1695,7 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 		Int32("max_labels_per_series", newLimits.MaxLabelsPerSeries).
 		Int32("max_label_value_length", newLimits.MaxLabelValueLength).
 		Int32("max_series_per_request", newLimits.MaxSeriesPerRequest).
+		Int32("max_series_per_metric", newLimits.MaxSeriesPerMetric).
 		Int("total_tenants_after", len(rls.tenants)).
 		Msg("RLS: received tenant limits from overrides-sync")
 
@@ -1681,6 +1719,7 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 			Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
 			Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
 			Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+			Bool("enforce_max_series_per_metric", tenant.Info.Enforcement.EnforceMaxSeriesPerMetric).
 			Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
 			Msg("RLS: applied default enforcement configuration")
 	}

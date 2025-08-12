@@ -56,6 +56,7 @@ var (
 	enforceMaxBodyBytes        = flag.Bool("enforce-max-body-bytes", true, "Whether to enforce maximum body size limits")
 	enforceMaxLabelsPerSeries  = flag.Bool("enforce-max-labels-per-series", true, "Whether to enforce maximum labels per series limits")
 	enforceMaxSeriesPerRequest = flag.Bool("enforce-max-series-per-request", true, "Whether to enforce maximum series per request limits")
+	enforceMaxSeriesPerMetric  = flag.Bool("enforce-max-series-per-metric", true, "Whether to enforce maximum series per metric limits")
 	enforceBytesPerSecond      = flag.Bool("enforce-bytes-per-second", true, "Whether to enforce bytes per second limits")
 
 	// Logging
@@ -93,6 +94,7 @@ func main() {
 			EnforceMaxBodyBytes:        *enforceMaxBodyBytes,
 			EnforceMaxLabelsPerSeries:  *enforceMaxLabelsPerSeries,
 			EnforceMaxSeriesPerRequest: *enforceMaxSeriesPerRequest,
+			EnforceMaxSeriesPerMetric:  *enforceMaxSeriesPerMetric,
 			EnforceBytesPerSecond:      *enforceBytesPerSecond,
 		},
 	}
