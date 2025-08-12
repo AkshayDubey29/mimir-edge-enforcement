@@ -2,8 +2,6 @@ package limits
 
 import (
 	"time"
-
-	adminpb "github.com/AkshayDubey29/mimir-edge-enforcement/protos/admin"
 )
 
 // TenantLimits represents the limits for a tenant
@@ -20,6 +18,13 @@ type TenantLimits struct {
 type EnforcementConfig struct {
 	Enabled          bool    `json:"enabled"`
 	BurstPctOverride float64 `json:"burst_pct_override"`
+
+	// Granular enforcement controls
+	EnforceSamplesPerSecond    bool `json:"enforce_samples_per_second,omitempty"`
+	EnforceMaxBodyBytes        bool `json:"enforce_max_body_bytes,omitempty"`
+	EnforceMaxLabelsPerSeries  bool `json:"enforce_max_labels_per_series,omitempty"`
+	EnforceMaxSeriesPerRequest bool `json:"enforce_max_series_per_request,omitempty"`
+	EnforceBytesPerSecond      bool `json:"enforce_bytes_per_second,omitempty"`
 }
 
 // TenantInfo represents tenant information with limits and metrics
@@ -44,16 +49,16 @@ type TenantMetrics struct {
 
 // DenialInfo represents information about a denied request
 type DenialInfo struct {
-	TenantID          string         `json:"tenant_id"`
-	Reason            string         `json:"reason"`
-	Timestamp         time.Time      `json:"timestamp"`
-	ObservedSamples   int64          `json:"observed_samples"`
-	ObservedBodyBytes int64          `json:"observed_body_bytes"`
-	ObservedSeries    int64          `json:"observed_series,omitempty"`
-	ObservedLabels    int64          `json:"observed_labels,omitempty"`
-	LimitExceeded     int64          `json:"limit_exceeded,omitempty"`
-	SampleMetrics     []SampleMetric `json:"sample_metrics,omitempty"`
-    ParseInfo         *ParseDiagnostics `json:"parse_info,omitempty"`
+	TenantID          string            `json:"tenant_id"`
+	Reason            string            `json:"reason"`
+	Timestamp         time.Time         `json:"timestamp"`
+	ObservedSamples   int64             `json:"observed_samples"`
+	ObservedBodyBytes int64             `json:"observed_body_bytes"`
+	ObservedSeries    int64             `json:"observed_series,omitempty"`
+	ObservedLabels    int64             `json:"observed_labels,omitempty"`
+	LimitExceeded     int64             `json:"limit_exceeded,omitempty"`
+	SampleMetrics     []SampleMetric    `json:"sample_metrics,omitempty"`
+	ParseInfo         *ParseDiagnostics `json:"parse_info,omitempty"`
 }
 
 // SampleMetric represents a sample metric that was denied
@@ -67,12 +72,12 @@ type SampleMetric struct {
 
 // ParseDiagnostics provides partial, useful details when parsing fails
 type ParseDiagnostics struct {
-    ContentEncoding string   `json:"content_encoding,omitempty"`
-    BodySize        int      `json:"body_size,omitempty"`
-    Error           string   `json:"error,omitempty"`
-    HexPreview      []string `json:"hex_preview,omitempty"`
-    GuessedCause    string   `json:"guessed_cause,omitempty"`
-    Suggestions     []string `json:"suggestions,omitempty"`
+	ContentEncoding string   `json:"content_encoding,omitempty"`
+	BodySize        int      `json:"body_size,omitempty"`
+	Error           string   `json:"error,omitempty"`
+	HexPreview      []string `json:"hex_preview,omitempty"`
+	GuessedCause    string   `json:"guessed_cause,omitempty"`
+	Suggestions     []string `json:"suggestions,omitempty"`
 }
 
 // EnhancedDenialInfo represents enriched information about a denied request
@@ -125,6 +130,20 @@ type OverviewStats struct {
 	ActiveTenants   int32   `json:"active_tenants"`
 }
 
+// RequestInfo represents information about an incoming request
+type RequestInfo struct {
+	ObservedSamples int64
+	ObservedSeries  int64
+	ObservedLabels  int64
+}
+
+// Decision represents the result of an authorization check
+type Decision struct {
+	Allowed bool
+	Reason  string
+	Code    int32 // HTTP status code
+}
+
 // CardinalityMetrics represents cardinality-specific metrics
 type CardinalityMetrics struct {
 	TotalSeries           int64   `json:"total_series"`
@@ -156,20 +175,6 @@ type CardinalityTrend struct {
 	TotalRequests       int64     `json:"total_requests"`
 }
 
-// TenantCardinality represents per-tenant cardinality data
-type TenantCardinality struct {
-	TenantID       string    `json:"tenant_id"`
-	Name           string    `json:"name"`
-	CurrentSeries  int64     `json:"current_series"`
-	CurrentLabels  int64     `json:"current_labels"`
-	ViolationCount int64     `json:"violation_count"`
-	LastViolation  time.Time `json:"last_violation"`
-	Limits         struct {
-		MaxSeriesPerRequest int32 `json:"max_series_per_request"`
-		MaxLabelsPerSeries  int32 `json:"max_labels_per_series"`
-	} `json:"limits"`
-}
-
 // CardinalityAlert represents a cardinality alert
 type CardinalityAlert struct {
 	ID        string    `json:"id"`
@@ -192,82 +197,16 @@ type CardinalityData struct {
 	Alerts     []CardinalityAlert     `json:"alerts"`
 }
 
-// RequestInfo represents information about an incoming request
-type RequestInfo struct {
-	TenantID            string
-	Method              string
-	Path                string
-	ContentLength       int64
-	ContentEncoding     string
-	Body                []byte
-	ObservedSamples     int64
-	ObservedSeries      int64
-	ObservedLabels      int64
-	MaxLabelsPerSeries  int64 // Maximum labels found in any single series
-	MaxLabelValueLength int64 // Maximum label value length found
-}
-
-// Decision represents the result of an authorization check
-type Decision struct {
-	Allowed bool
-	Reason  string
-	Code    int32 // HTTP status code
-}
-
-// ToProto converts TenantLimits to protobuf
-func (tl *TenantLimits) ToProto() *adminpb.TenantLimits {
-	return &adminpb.TenantLimits{
-		SamplesPerSecond:    tl.SamplesPerSecond,
-		BurstPct:            tl.BurstPercent,
-		MaxBodyBytes:        tl.MaxBodyBytes,
-		MaxLabelsPerSeries:  tl.MaxLabelsPerSeries,
-		MaxLabelValueLength: tl.MaxLabelValueLength,
-		MaxSeriesPerRequest: tl.MaxSeriesPerRequest,
-	}
-}
-
-// FromProto converts protobuf to TenantLimits
-func (tl *TenantLimits) FromProto(pb *adminpb.TenantLimits) {
-	tl.SamplesPerSecond = pb.SamplesPerSecond
-	tl.BurstPercent = pb.BurstPct
-	tl.MaxBodyBytes = pb.MaxBodyBytes
-	tl.MaxLabelsPerSeries = pb.MaxLabelsPerSeries
-	tl.MaxLabelValueLength = pb.MaxLabelValueLength
-	tl.MaxSeriesPerRequest = pb.MaxSeriesPerRequest
-}
-
-// ToProto converts EnforcementConfig to protobuf
-func (ec *EnforcementConfig) ToProto() *adminpb.EnforcementConfig {
-	return &adminpb.EnforcementConfig{
-		Enabled:          ec.Enabled,
-		BurstPctOverride: ec.BurstPctOverride,
-	}
-}
-
-// FromProto converts protobuf to EnforcementConfig
-func (ec *EnforcementConfig) FromProto(pb *adminpb.EnforcementConfig) {
-	ec.Enabled = pb.Enabled
-	ec.BurstPctOverride = pb.BurstPctOverride
-}
-
-// ToProto converts TenantMetrics to protobuf
-func (tm *TenantMetrics) ToProto() *adminpb.TenantMetrics {
-	return &adminpb.TenantMetrics{
-		Rps:            tm.RPS,
-		BytesPerSec:    tm.BytesPerSec,
-		SamplesPerSec:  tm.SamplesPerSec,
-		DenyRate:       tm.DenyRate,
-		AllowRate:      tm.AllowRate,
-		UtilizationPct: tm.UtilizationPct,
-	}
-}
-
-// FromProto converts protobuf to TenantMetrics
-func (tm *TenantMetrics) FromProto(pb *adminpb.TenantMetrics) {
-	tm.RPS = pb.Rps
-	tm.BytesPerSec = pb.BytesPerSec
-	tm.SamplesPerSec = pb.SamplesPerSec
-	tm.DenyRate = pb.DenyRate
-	tm.AllowRate = pb.AllowRate
-	tm.UtilizationPct = pb.UtilizationPct
+// TenantCardinality represents per-tenant cardinality data
+type TenantCardinality struct {
+	TenantID       string    `json:"tenant_id"`
+	Name           string    `json:"name"`
+	CurrentSeries  int64     `json:"current_series"`
+	CurrentLabels  int64     `json:"current_labels"`
+	ViolationCount int64     `json:"violation_count"`
+	LastViolation  time.Time `json:"last_violation"`
+	Limits         struct {
+		MaxSeriesPerRequest int32 `json:"max_series_per_request"`
+		MaxLabelsPerSeries  int32 `json:"max_labels_per_series"`
+	} `json:"limits"`
 }

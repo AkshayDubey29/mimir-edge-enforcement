@@ -30,6 +30,7 @@ type RLSConfig struct {
 	TenantHeader       string
 	EnforceBodyParsing bool
 	DefaultLimits      limits.TenantLimits
+	DefaultEnforcement limits.EnforcementConfig
 	MaxRequestBytes    int64
 	FailureModeAllow   bool
 }
@@ -332,7 +333,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		// 🔧 FIX: Update traffic flow state even when enforcement is disabled
 		rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
 
-        rls.recordDecision(tenantID, true, "enforcement_disabled", 0, 0, nil, nil, nil)
+		rls.recordDecision(tenantID, true, "enforcement_disabled", 0, 0, nil, nil, nil)
 		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 		return rls.allowResponse(), nil
 	}
@@ -369,7 +370,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
 					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-                    rls.recordDecision(tenantID, false, "body_extract_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+					rls.recordDecision(tenantID, false, "body_extract_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
 					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
 				}
 
@@ -378,7 +379,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-                rls.recordDecision(tenantID, true, "body_extract_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+				rls.recordDecision(tenantID, true, "body_extract_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
 				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
@@ -390,7 +391,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
 
 			// 🔧 FIX: Record decision for body extraction failure (deny mode)
-            rls.recordDecision(tenantID, false, "body_extract_failed_deny", 0, 0, nil, nil, nil)
+			rls.recordDecision(tenantID, false, "body_extract_failed_deny", 0, 0, nil, nil, nil)
 
 			return rls.denyResponse("failed to extract request body", http.StatusBadRequest), nil
 		}
@@ -428,7 +429,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 					rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 					rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
 					rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
-                    rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+					rls.recordDecision(tenantID, false, "parse_failed_limit_exceeded", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
 					return rls.denyResponse(decision.Reason, int32(decision.Code)), nil
 				}
 
@@ -437,7 +438,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 				rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 				rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 				rls.updateTrafficFlowState(time.Since(start).Seconds(), true)
-                rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
+				rls.recordDecision(tenantID, true, "parse_failed_allow", fallbackSamples, fallbackBodyBytes, fallbackRequestInfo, nil, nil)
 				rls.updateBucketMetrics(tenant)
 				return rls.allowResponse(), nil
 			}
@@ -451,37 +452,39 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			rls.updateTrafficFlowState(time.Since(start).Seconds(), false)
 
 			// 🔧 FIX: Record decision for parse failure (deny mode)
-            // Build parse diagnostics for visibility
-            parseDiag := &limits.ParseDiagnostics{
-                ContentEncoding: contentEncoding,
-                BodySize:        len(body),
-                Error:           err.Error(),
-                HexPreview:      nil,
-                GuessedCause:    "",
-                Suggestions: []string{
-                    "Ensure the payload is valid Prometheus remote_write protobuf",
-                    "Verify compression header matches payload (gzip/snappy)",
-                    "Avoid truncation by checking client/proxy timeouts and body size",
-                },
-            }
-            // Small hex preview (first 10 bytes) without heavy logging
-            max := 10
-            if len(body) < max { max = len(body) }
-            if max > 0 {
-                hex := make([]string, max)
-                for i := 0; i < max; i++ {
-                    hex[i] = fmt.Sprintf("%02x", body[i])
-                }
-                parseDiag.HexPreview = hex
-            }
-            // Simple guess for common cases
-            if contentEncoding == "snappy" && len(body) < 10 {
-                parseDiag.GuessedCause = "snappy compressed body too small (likely truncated)"
-            } else if contentEncoding == "gzip" && len(body) < 20 {
-                parseDiag.GuessedCause = "gzip body very small (likely truncated/invalid)"
-            }
+			// Build parse diagnostics for visibility
+			parseDiag := &limits.ParseDiagnostics{
+				ContentEncoding: contentEncoding,
+				BodySize:        len(body),
+				Error:           err.Error(),
+				HexPreview:      nil,
+				GuessedCause:    "",
+				Suggestions: []string{
+					"Ensure the payload is valid Prometheus remote_write protobuf",
+					"Verify compression header matches payload (gzip/snappy)",
+					"Avoid truncation by checking client/proxy timeouts and body size",
+				},
+			}
+			// Small hex preview (first 10 bytes) without heavy logging
+			max := 10
+			if len(body) < max {
+				max = len(body)
+			}
+			if max > 0 {
+				hex := make([]string, max)
+				for i := 0; i < max; i++ {
+					hex[i] = fmt.Sprintf("%02x", body[i])
+				}
+				parseDiag.HexPreview = hex
+			}
+			// Simple guess for common cases
+			if contentEncoding == "snappy" && len(body) < 10 {
+				parseDiag.GuessedCause = "snappy compressed body too small (likely truncated)"
+			} else if contentEncoding == "gzip" && len(body) < 20 {
+				parseDiag.GuessedCause = "gzip body very small (likely truncated/invalid)"
+			}
 
-            rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes, nil, nil, parseDiag)
+			rls.recordDecision(tenantID, false, "parse_failed_deny", 0, bodyBytes, nil, nil, parseDiag)
 
 			return rls.denyResponse("failed to parse request body", http.StatusBadRequest), nil
 		}
@@ -544,7 +547,7 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		sampleMetrics = convertParserMetrics(result.SampleMetrics)
 	}
 
-    rls.recordDecision(tenantID, decision.Allowed, decision.Reason, samples, bodyBytes, requestInfo, sampleMetrics, nil)
+	rls.recordDecision(tenantID, decision.Allowed, decision.Reason, samples, bodyBytes, requestInfo, sampleMetrics, nil)
 	rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 
 	// Update bucket metrics
@@ -632,7 +635,7 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 	} else {
 		c.Denied++
 		// 🔧 PERFORMANCE FIX: Use ring buffer for recent denials to avoid array resizing
-        di := limits.DenialInfo{
+		di := limits.DenialInfo{
 			TenantID:          tenantID,
 			Reason:            reason,
 			Timestamp:         time.Now(),
@@ -642,15 +645,15 @@ func (rls *RLS) recordDecision(tenantID string, allowed bool, reason string, sam
 		}
 
 		// Add cardinality data if available
-        if requestInfo != nil {
+		if requestInfo != nil {
 			di.ObservedSeries = requestInfo.ObservedSeries
 			di.ObservedLabels = requestInfo.ObservedLabels
 		}
 
-        // Attach parse diagnostics if any
-        if parseInfo != nil {
-            di.ParseInfo = parseInfo
-        }
+		// Attach parse diagnostics if any
+		if parseInfo != nil {
+			di.ParseInfo = parseInfo
+		}
 
 		rls.recentDenials = append(rls.recentDenials, di)
 		// Keep only last 1000 denials to prevent memory growth (increased from 500)
@@ -1474,8 +1477,8 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 
 // checkLimits checks if the request is within limits including cardinality controls
 func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, requestInfo *limits.RequestInfo) limits.Decision {
-	// Check body size
-	if tenant.Info.Limits.MaxBodyBytes > 0 && bodyBytes > tenant.Info.Limits.MaxBodyBytes {
+	// Check body size (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 && bodyBytes > tenant.Info.Limits.MaxBodyBytes {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "body_size_exceeded",
@@ -1483,8 +1486,8 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 		}
 	}
 
-	// 🔧 CARDINALITY CONTROL: Check series per request limit
-	if tenant.Info.Limits.MaxSeriesPerRequest > 0 && requestInfo.ObservedSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+	// 🔧 CARDINALITY CONTROL: Check series per request limit (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 && requestInfo.ObservedSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "max_series_per_request_exceeded",
@@ -1492,8 +1495,8 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 		}
 	}
 
-	// 🔧 CARDINALITY CONTROL: Check labels per series limit
-	if tenant.Info.Limits.MaxLabelsPerSeries > 0 && requestInfo.ObservedLabels > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
+	// 🔧 CARDINALITY CONTROL: Check labels per series limit (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceMaxLabelsPerSeries && tenant.Info.Limits.MaxLabelsPerSeries > 0 && requestInfo.ObservedLabels > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "max_labels_per_series_exceeded",
@@ -1501,8 +1504,8 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 		}
 	}
 
-	// Check samples per second
-	if tenant.SamplesBucket != nil && tenant.Info.Limits.SamplesPerSecond > 0 && !tenant.SamplesBucket.Take(float64(samples)) {
+	// Check samples per second (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceSamplesPerSecond && tenant.SamplesBucket != nil && tenant.Info.Limits.SamplesPerSecond > 0 && !tenant.SamplesBucket.Take(float64(samples)) {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "samples_rate_exceeded",
@@ -1510,8 +1513,8 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples, bodyBytes int64, reque
 		}
 	}
 
-	// Check bytes per second
-	if tenant.BytesBucket != nil && tenant.Info.Limits.MaxBodyBytes > 0 && !tenant.BytesBucket.Take(float64(bodyBytes)) {
+	// Check bytes per second (only if enforcement is enabled)
+	if tenant.Info.Enforcement.EnforceBytesPerSecond && tenant.BytesBucket != nil && tenant.Info.Limits.MaxBodyBytes > 0 && !tenant.BytesBucket.Take(float64(bodyBytes)) {
 		return limits.Decision{
 			Allowed: false,
 			Reason:  "bytes_rate_exceeded",
@@ -1662,8 +1665,18 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 
 	tenant.Info.Limits = newLimits
 
-	// 🔧 FIX: Enable enforcement when limits are set from overrides-sync
-	tenant.Info.Enforcement.Enabled = true
+	// 🔧 FIX: Use default enforcement configuration for new tenants
+	if isNewTenant {
+		tenant.Info.Enforcement = rls.config.DefaultEnforcement
+		rls.logger.Info().
+			Str("tenant_id", tenantID).
+			Bool("enforce_samples_per_second", tenant.Info.Enforcement.EnforceSamplesPerSecond).
+			Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
+			Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
+			Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+			Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
+			Msg("RLS: applied default enforcement configuration")
+	}
 
 	// Update buckets only for non-zero limits; nil buckets mean no enforcement for that dimension
 	if newLimits.SamplesPerSecond > 0 {
@@ -1713,6 +1726,30 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 		}
 		tenant.BytesBucket = nil
 	}
+
+	return nil
+}
+
+// SetTenantEnforcement sets the enforcement configuration for a tenant
+func (rls *RLS) SetTenantEnforcement(tenantID string, enforcement limits.EnforcementConfig) error {
+	rls.tenantsMu.Lock()
+	defer rls.tenantsMu.Unlock()
+
+	tenant, exists := rls.tenants[tenantID]
+	if !exists {
+		return fmt.Errorf("tenant %s not found", tenantID)
+	}
+
+	tenant.Info.Enforcement = enforcement
+	rls.logger.Info().
+		Str("tenant_id", tenantID).
+		Bool("enabled", enforcement.Enabled).
+		Bool("enforce_samples_per_second", enforcement.EnforceSamplesPerSecond).
+		Bool("enforce_max_body_bytes", enforcement.EnforceMaxBodyBytes).
+		Bool("enforce_max_labels_per_series", enforcement.EnforceMaxLabelsPerSeries).
+		Bool("enforce_max_series_per_request", enforcement.EnforceMaxSeriesPerRequest).
+		Bool("enforce_bytes_per_second", enforcement.EnforceBytesPerSecond).
+		Msg("RLS: updated tenant enforcement configuration")
 
 	return nil
 }

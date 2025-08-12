@@ -405,7 +405,7 @@ export function Denials() {
       {/* Header */}
       <div className="flex flex-col space-y-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Recent Denials</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Recent Denials</h1>
           <p className="text-gray-600 mt-1">Monitor request denials and rate limiting</p>
         </div>
         
@@ -475,7 +475,7 @@ export function Denials() {
             {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Refresh'}
           </button>
         </div>
-      </div>
+          </div>
 
       {/* Summary */}
       <div className="flex items-center justify-between">
@@ -488,7 +488,7 @@ export function Denials() {
           <span>Last updated: {new Date().toLocaleTimeString()}</span>
         </div>
       </div>
-
+      
                 {/* Empty State */}
           {filteredDenials.length === 0 ? (
             <Card className="p-8 text-center">
@@ -715,8 +715,8 @@ export function Denials() {
                                     </div>
                                     <div className="text-xs text-gray-500">
                                       {new Date(metric.timestamp).toLocaleTimeString()}
-                                    </div>
-                                  </div>
+            </div>
+          </div>
                                 </div>
                                 
                                 {/* Labels breakdown for better readability */}
@@ -759,8 +759,8 @@ export function Denials() {
                   </Card>
                 );
               })}
-            </div>
-          ) : (
+        </div>
+      ) : (
             /* Simple Table View */
             <Card className="overflow-hidden">
               {hasMore && (
@@ -771,37 +771,37 @@ export function Denials() {
                 </div>
               )}
               
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
                       <th className="text-left py-3 px-4 font-medium text-gray-900">Time</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-900">Tenant</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-900">Category</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-900">Reason</th>
                       <th className="text-left py-3 px-4 font-medium text-gray-900">Samples</th>
-                      <th className="text-left py-3 px-4 font-medium text-gray-900">Body Size</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <th className="text-left py-3 px-4 font-medium text-gray-900">Body Size</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
                     {displayedDenials.map((denial, index) => {
                       const analysis = analyzeDenial(denial);
                       return (
-                        <tr key={index} className="hover:bg-gray-50">
-                          <td className="py-3 px-4 text-sm">
+                  <tr key={index} className="hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm">
                             <div className="font-mono text-gray-900 text-xs">
-                              {new Date(denial.timestamp).toLocaleString()}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {getRelativeTime(denial.timestamp)}
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
+                        {new Date(denial.timestamp).toLocaleString()}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {getRelativeTime(denial.timestamp)}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
                             <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">
-                              {denial.tenant_id}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
+                        {denial.tenant_id}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
                             <div className="flex items-center space-x-1">
                               {getCategoryIcon(analysis.category)}
                               <span className="text-xs text-gray-600">{analysis.category}</span>
@@ -815,23 +815,23 @@ export function Denials() {
                               variant="outline" 
                               className="text-red-700 border-red-300 text-xs"
                             >
-                              {denial.reason}
+                        {denial.reason}
                             </Badge>
-                          </td>
-                          <td className="py-3 px-4 font-mono text-sm">
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm">
                             {denial.observed_samples?.toLocaleString() || '0'}
-                          </td>
-                          <td className="py-3 px-4 font-mono text-sm">
+                    </td>
+                    <td className="py-3 px-4 font-mono text-sm">
                             {formatBytes(denial.observed_body_bytes || 0)}
-                          </td>
-                        </tr>
+                    </td>
+                  </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+              </tbody>
+            </table>
+          </div>
             </Card>
-          )}
+      )}
     </div>
   );
 }

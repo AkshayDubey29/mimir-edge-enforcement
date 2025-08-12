@@ -35,6 +35,18 @@ limits:
   defaultMaxLabelValueLength: 2048
   defaultMaxSeriesPerRequest: 100000
 
+# Selective enforcement configuration
+enforcement:
+  enabled: true
+  # Cardinality limits - ENFORCED
+  enforceMaxSeriesPerRequest: true   # per_metric_series_limit
+  enforceMaxLabelsPerSeries: true    # per_user_series_limit
+  # Rate limiting - DISABLED
+  enforceSamplesPerSecond: false     # No rate limiting
+  enforceBytesPerSecond: false       # No bytes rate limiting
+  # Body size - DISABLED
+  enforceMaxBodyBytes: false         # No body size enforcement
+
 # Store configuration
 store:
   backend: "memory"  # memory or redis
