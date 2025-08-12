@@ -45,6 +45,8 @@ spec:
           mountPath: /data
         command:
         - redis-server
+        - --bind
+        - "0.0.0.0"
         - --appendonly
         - "yes"
         - --maxmemory
@@ -62,7 +64,7 @@ spec:
         - --tcp-keepalive
         - "300"
         - --protected-mode
-        - "yes"
+        - "no"
         - --tcp-backlog
         - "511"
         - --databases
