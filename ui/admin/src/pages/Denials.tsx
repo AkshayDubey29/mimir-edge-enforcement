@@ -15,6 +15,7 @@ interface DenialDetail {
   observed_labels?: number;
   limit_exceeded?: number;
   sample_metrics?: SampleMetric[];
+  parse_info?: ParseDiagnostics;
 }
 
 interface SampleMetric {
@@ -23,6 +24,15 @@ interface SampleMetric {
   value: number;
   timestamp: number;
   series_hash?: string;
+}
+
+interface ParseDiagnostics {
+  content_encoding?: string;
+  body_size?: number;
+  error?: string;
+  hex_preview?: string[];
+  guessed_cause?: string;
+  suggestions?: string[];
 }
 
 interface DenialAnalysis {
@@ -529,6 +539,53 @@ export function Denials() {
                         </Badge>
                         <p className="text-sm text-red-800">{analysis.explanation}</p>
                       </div>
+
+                      {/* Parse diagnostics (shown for parse_failed_* reasons) */}
+                      {denial.parse_info && (
+                        <div className="bg-gray-50 p-4 rounded-lg border">
+                          <h4 className="font-medium text-gray-900 mb-2">Parse diagnostics</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div>
+                              <div className="text-gray-600">Content encoding</div>
+                              <div className="font-mono">{denial.parse_info.content_encoding || 'unknown'}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600">Body size</div>
+                              <div className="font-mono">{typeof denial.parse_info.body_size === 'number' ? formatBytes(denial.parse_info.body_size) : 'n/a'}</div>
+                            </div>
+                            <div>
+                              <div className="text-gray-600">Guessed cause</div>
+                              <div className="font-mono">{denial.parse_info.guessed_cause || '—'}</div>
+                            </div>
+                          </div>
+                          {denial.parse_info.error && (
+                            <div className="mt-3">
+                              <div className="text-gray-600 text-sm mb-1">Error</div>
+                              <pre className="bg-white border rounded p-2 text-xs overflow-x-auto text-red-700">{denial.parse_info.error}</pre>
+                            </div>
+                          )}
+                          {denial.parse_info.hex_preview && denial.parse_info.hex_preview.length > 0 && (
+                            <div className="mt-3">
+                              <div className="text-gray-600 text-sm mb-1">Body hex preview</div>
+                              <div className="flex flex-wrap gap-1">
+                                {denial.parse_info.hex_preview.map((b, i) => (
+                                  <span key={i} className="px-1.5 py-0.5 bg-gray-200 rounded text-xs font-mono">{b}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {denial.parse_info.suggestions && denial.parse_info.suggestions.length > 0 && (
+                            <div className="mt-3">
+                              <div className="text-gray-600 text-sm mb-1">Suggestions</div>
+                              <ul className="list-disc list-inside text-sm text-gray-800">
+                                {denial.parse_info.suggestions.map((s, i) => (
+                                  <li key={i}>{s}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Metrics Grid */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
