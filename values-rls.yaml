@@ -55,7 +55,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-limits-fix"  # Production: Use the latest limits-fix image
+  tag: "latest-cardinality-enforcement-arm64"  # Production: Use the latest cardinality enforcement ARM64 image
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
 # Resource configuration - Production
@@ -112,8 +112,7 @@ affinity: {}
 
 # Service Monitor for Prometheus - Production
 serviceMonitor:
-  enabled: true   # Production: Enable for monitoring
-  interval: 30s
+  enabled: false  # Disable ServiceMonitor for local testing
   scrapeTimeout: 10s
   labels: {}
   annotations: {}
