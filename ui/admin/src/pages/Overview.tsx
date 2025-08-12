@@ -183,9 +183,10 @@ export function Overview() {
     ['overview', timeRange],
     () => fetchOverviewData(timeRange),
     {
-      refetchInterval: 10000, // Refetch every 10 seconds for real-time updates
+      refetchInterval: 300000, // Refetch every 5 minutes for time-based data (increased from 60s)
       refetchIntervalInBackground: true,
-      staleTime: 5000, // Consider data stale after 5 seconds
+      staleTime: 180000, // Consider data stale after 3 minutes (increased from 30s)
+      cacheTime: 600000, // Cache for 10 minutes
     }
   );
 
@@ -201,7 +202,7 @@ export function Overview() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="text-lg text-red-600 mb-2">Error loading overview data</div>
+          <div className="text-lg text-red-600">Failed to load overview data</div>
           <div className="text-sm text-gray-500">
             {error instanceof Error ? error.message : 'Unknown error occurred'}
           </div>
@@ -210,31 +211,69 @@ export function Overview() {
     );
   }
 
-  const { stats, top_tenants, flow_metrics, flow_timeline, flow_status, health_checks, service_status, endpoint_status, validation_results } = overviewData || {
+  // Ensure we have safe defaults for all data
+  const safeData = overviewData || {
     stats: { total_requests: 0, allowed_requests: 0, denied_requests: 0, allow_percentage: 0, active_tenants: 0 },
     top_tenants: [],
     flow_metrics: { nginx_requests: 0, nginx_route_direct: 0, nginx_route_edge: 0, envoy_requests: 0, envoy_authorized: 0, envoy_denied: 0, mimir_requests: 0, mimir_success: 0, mimir_errors: 0, response_times: { nginx_to_envoy: 0, envoy_to_mimir: 0, total_flow: 0 } },
     flow_timeline: [],
-    flow_status: { overall: 'unknown', nginx: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, envoy: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, rls: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, overrides_sync: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, mimir: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 }, last_check: '' },
+    flow_status: { overall: 'unknown', nginx: { status: 'unknown', message: '', last_seen: '', response_time: 0, error_count: 0 }, envoy: { status: 'unknown', message: '', last_seen: '', response_time: 0, error_count: 0 }, rls: { status: 'unknown', message: '', last_seen: '', response_time: 0, error_count: 0 }, overrides_sync: { status: 'unknown', message: '', last_seen: '', response_time: 0, error_count: 0 }, mimir: { status: 'unknown', message: '', last_seen: '', response_time: 0, error_count: 0 }, last_check: '' },
     health_checks: { rls_service: false, overrides_sync: false, envoy_proxy: false, nginx_config: false, mimir_connectivity: false, tenant_limits_synced: false, enforcement_active: false },
     service_status: {},
     endpoint_status: {},
     validation_results: {}
   };
 
+  const { stats, top_tenants, flow_metrics, flow_timeline, flow_status, health_checks, service_status, endpoint_status, validation_results } = safeData;
+
+  // Calculate overall status
+  const getOverallStatus = () => {
+    if (flow_status.overall === 'broken') return 'broken';
+    if (flow_status.overall === 'degraded') return 'degraded';
+    if (flow_status.overall === 'healthy') return 'healthy';
+    return 'unknown';
+  };
+
+  const overallStatus = getOverallStatus();
+
+  // Time range options
+  const timeRangeOptions = [
+    { value: '15m', label: '15 Minutes' },
+    { value: '1h', label: '1 Hour' },
+    { value: '24h', label: '24 Hours' },
+    { value: '1w', label: '1 Week' },
+  ];
+
   return (
     <div className="space-y-6">
-      {/* Header with overall status */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Edge Enforcement Overview</h1>
-          <p className="text-gray-500">Real-time monitoring of the Mimir Edge Enforcement pipeline</p>
+          <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
+          <p className="text-gray-500">System-wide metrics and health monitoring</p>
         </div>
         <div className="flex items-center space-x-4">
-          <StatusBadge status={flow_status?.overall || 'unknown'} />
+          <StatusBadge status={overallStatus} />
+          
+          {/* Time Range Selector */}
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-500">Time Range:</span>
+            <select
+              value={timeRange}
+              onChange={(e) => setTimeRange(e.target.value)}
+              className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {timeRangeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          
           <div className="flex items-center space-x-2 text-sm text-gray-500">
             <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>Auto-refresh (10s)</span>
+            <span>Auto-refresh (5m)</span>
           </div>
         </div>
       </div>
@@ -673,15 +712,15 @@ export function Overview() {
 // Enhanced API function with comprehensive flow monitoring
 async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
   try {
-    // Fetch overview stats
+    // Fetch overview stats with time range
     const overviewResponse = await fetch(`/api/overview?range=${timeRange}`);
     if (!overviewResponse.ok) {
       throw new Error(`Failed to fetch overview data: ${overviewResponse.statusText}`);
     }
     const overviewData = await overviewResponse.json();
     
-    // Fetch tenant data to calculate top tenants
-    const tenantsResponse = await fetch('/api/tenants');
+    // Fetch tenant data with time range to calculate top tenants
+    const tenantsResponse = await fetch(`/api/tenants?range=${timeRange}`);
     let topTenants: TopTenant[] = [];
     
     if (tenantsResponse.ok) {
@@ -694,11 +733,9 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
         .map((tenant: Tenant): TopTenant => ({
           id: tenant.id,
           name: tenant.name || tenant.id,
-          rps: Math.round((tenant.metrics!.allow_rate + tenant.metrics!.deny_rate) / 60), // Convert to RPS estimate
+          rps: (tenant.metrics?.allow_rate || 0) + (tenant.metrics?.deny_rate || 0), // Calculate RPS from rates
           samples_per_sec: tenant.limits?.samples_per_second || 0,
-          deny_rate: tenant.metrics!.deny_rate > 0 
-            ? Math.round(((tenant.metrics!.deny_rate / (tenant.metrics!.allow_rate + tenant.metrics!.deny_rate)) * 100) * 10) / 10
-            : 0
+          deny_rate: tenant.metrics?.deny_rate || 0
         }))
         .sort((a: TopTenant, b: TopTenant) => b.rps - a.rps) // Sort by RPS descending
         .slice(0, 10); // Top 10 tenants
@@ -711,175 +748,84 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       ];
     }
     
-                    // Get real traffic flow data from the new API endpoint
-                let flow_metrics: FlowMetrics;
-                try {
-                  const trafficFlowResponse = await fetch('/api/traffic/flow');
-                  if (trafficFlowResponse.ok) {
-                    const trafficFlowData = await trafficFlowResponse.json();
-                    const flowData = trafficFlowData.flow_metrics;
-                    const responseTimes = flowData.response_times;
-                    
-                    flow_metrics = {
-                      nginx_requests: 0, // We don't track NGINX directly
-                      nginx_route_direct: 0,
-                      nginx_route_edge: flowData.envoy_to_rls_requests || 0,
-                      envoy_requests: flowData.envoy_to_rls_requests || 0,
-                      envoy_authorized: flowData.rls_allowed || 0,
-                      envoy_denied: flowData.rls_denied || 0,
-                      mimir_requests: flowData.rls_to_mimir_requests || 0,
-                      mimir_success: flowData.rls_to_mimir_requests || 0,
-                      mimir_errors: flowData.mimir_errors || 0,
-                      response_times: {
-                        nginx_to_envoy: 0, // We don't track NGINX directly
-                        envoy_to_mimir: responseTimes?.rls_to_mimir || 0,
-                        total_flow: responseTimes?.total_flow || 0
-                      }
-                    };
-                                     } else {
-                     // Fallback to calculated metrics
-                     flow_metrics = {
-                       nginx_requests: 0, // We don't track NGINX directly
-                       nginx_route_direct: 0,
-                       nginx_route_edge: overviewData.stats?.total_requests || 0,
-                       envoy_requests: overviewData.stats?.total_requests || 0,
-                       envoy_authorized: overviewData.stats?.allowed_requests || 0,
-                       envoy_denied: overviewData.stats?.denied_requests || 0,
-                       mimir_requests: overviewData.stats?.allowed_requests || 0,
-                       mimir_success: overviewData.stats?.allowed_requests || 0,
-                       mimir_errors: 0,
-                       response_times: {
-                         nginx_to_envoy: 0,
-                         envoy_to_mimir: 0,
-                         total_flow: 0
-                       }
-                     };
-                   }
-                                 } catch (error) {
-                   console.error('Error fetching traffic flow data:', error);
-                   // Fallback to calculated metrics
-                   flow_metrics = {
-                     nginx_requests: 0, // We don't track NGINX directly
-                     nginx_route_direct: 0,
-                     nginx_route_edge: overviewData.stats?.total_requests || 0,
-                     envoy_requests: overviewData.stats?.total_requests || 0,
-                     envoy_authorized: overviewData.stats?.allowed_requests || 0,
-                     envoy_denied: overviewData.stats?.denied_requests || 0,
-                     mimir_requests: overviewData.stats?.allowed_requests || 0,
-                     mimir_success: overviewData.stats?.allowed_requests || 0,
-                     mimir_errors: 0,
-                     response_times: {
-                       nginx_to_envoy: 0,
-                       envoy_to_mimir: 0,
-                       total_flow: 0
-                     }
-                   };
-                 }
-
-    // Generate flow timeline data based on current stats
-    const flow_timeline: FlowDataPoint[] = [
-      {
-        timestamp: new Date().toISOString(),
-        nginx_requests: flow_metrics.nginx_requests,
-        route_direct: flow_metrics.nginx_route_direct,
-        route_edge: flow_metrics.nginx_route_edge,
-        envoy_requests: flow_metrics.envoy_requests,
-        mimir_requests: flow_metrics.mimir_requests,
-        success_rate: overviewData.stats?.allow_percentage || 0
+    // Get real traffic flow data from the new API endpoint
+    let flow_metrics: FlowMetrics;
+    try {
+      const trafficFlowResponse = await fetch('/api/traffic/flow');
+      if (trafficFlowResponse.ok) {
+        const trafficFlowData = await trafficFlowResponse.json();
+        const flowData = trafficFlowData.flow_metrics;
+        const responseTimes = flowData.response_times;
+        
+        flow_metrics = {
+          nginx_requests: 0, // We don't track NGINX directly
+          nginx_route_direct: 0,
+          nginx_route_edge: flowData.envoy_to_rls_requests || 0,
+          envoy_requests: flowData.envoy_to_rls_requests || 0,
+          envoy_authorized: flowData.rls_allowed || 0,
+          envoy_denied: flowData.rls_denied || 0,
+          mimir_requests: flowData.rls_to_mimir_requests || 0,
+          mimir_success: flowData.rls_to_mimir_requests || 0,
+          mimir_errors: flowData.mimir_errors || 0,
+          response_times: {
+            nginx_to_envoy: 0, // We don't track NGINX directly
+            envoy_to_mimir: responseTimes?.rls_to_mimir || 0,
+            total_flow: responseTimes?.total_flow || 0
+          }
+        };
+      } else {
+        // Fallback to calculated metrics
+        flow_metrics = {
+          nginx_requests: 0, // We don't track NGINX directly
+          nginx_route_direct: 0,
+          nginx_route_edge: overviewData.stats?.total_requests || 0,
+          envoy_requests: overviewData.stats?.total_requests || 0,
+          envoy_authorized: overviewData.stats?.allowed_requests || 0,
+          envoy_denied: overviewData.stats?.denied_requests || 0,
+          mimir_requests: overviewData.stats?.allowed_requests || 0,
+          mimir_success: overviewData.stats?.allowed_requests || 0,
+          mimir_errors: 0,
+          response_times: {
+            nginx_to_envoy: 0,
+            envoy_to_mimir: 0,
+            total_flow: 0
+          }
+        };
       }
-    ];
-
-    // Get comprehensive system status from backend
-    const systemStatusResponse = await fetch('/api/system/status');
-    let flow_status: FlowStatus;
-    let health_checks: HealthChecks;
-    let endpoint_status: any = {};
-    let service_status: any = {};
-    let validation_results: any = {};
-    
-    if (systemStatusResponse.ok) {
-      const systemStatusData = await systemStatusResponse.json();
-      
-      // Extract flow_status from the new structure
-      const overallHealth = systemStatusData.overall_health || {};
-      const services = systemStatusData.services || {};
-      
-      // Convert the new structure to the expected FlowStatus format
-      flow_status = {
-        overall: overallHealth.status || 'unknown',
-        nginx: {
-          status: services.nginx?.status || 'unknown',
-          message: services.nginx?.message || 'Status unknown',
-          last_seen: services.nginx?.last_check || '',
-          response_time: 0,
-          error_count: 0
-        },
-        envoy: {
-          status: services.envoy?.status || 'unknown',
-          message: services.envoy?.message || 'Status unknown',
-          last_seen: services.envoy?.last_check || '',
-          response_time: 0,
-          error_count: 0
-        },
-        rls: {
-          status: services.rls?.status || 'unknown',
-          message: services.rls?.message || 'Status unknown',
-          last_seen: services.rls?.last_check || '',
-          response_time: 0,
-          error_count: 0
-        },
-        overrides_sync: {
-          status: services.overrides_sync?.status || 'unknown',
-          message: services.overrides_sync?.message || 'Status unknown',
-          last_seen: services.overrides_sync?.last_check || '',
-          response_time: 0,
-          error_count: 0
-        },
-        mimir: {
-          status: services.mimir?.status || 'unknown',
-          message: services.mimir?.message || 'Status unknown',
-          last_seen: services.mimir?.last_check || '',
-          response_time: 0,
-          error_count: 0
-        },
-        last_check: overallHealth.last_check || new Date().toISOString()
-      };
-      
-      // Convert health_checks from the new structure
-      health_checks = {
-        rls_service: services.rls?.status === 'healthy',
-        overrides_sync: services.overrides_sync?.status === 'healthy',
-        envoy_proxy: services.envoy?.status === 'healthy',
-        nginx_config: services.nginx?.status === 'healthy',
-        mimir_connectivity: services.mimir?.status === 'healthy',
-        tenant_limits_synced: services.overrides_sync?.status === 'healthy',
-        enforcement_active: overallHealth.health_percentage > 80
-      };
-      
-      endpoint_status = systemStatusData.endpoints || {};
-      service_status = systemStatusData.services || {};
-      validation_results = systemStatusData.validations || {};
-    } else {
-      // Fallback to basic status if API fails
-      flow_status = {
-        overall: 'unknown',
-        nginx: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
-        envoy: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
-        rls: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
-        overrides_sync: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
-        mimir: { status: 'unknown', message: 'Status unknown', last_seen: '', response_time: 0, error_count: 0 },
-        last_check: new Date().toISOString()
-      };
-      health_checks = {
-        rls_service: false,
-        overrides_sync: false,
-        envoy_proxy: false,
-        nginx_config: false,
-        mimir_connectivity: false,
-        tenant_limits_synced: false,
-        enforcement_active: false
+    } catch (error) {
+      console.error('Error fetching traffic flow data:', error);
+      // Fallback to calculated metrics
+      flow_metrics = {
+        nginx_requests: 0, // We don't track NGINX directly
+        nginx_route_direct: 0,
+        nginx_route_edge: overviewData.stats?.total_requests || 0,
+        envoy_requests: overviewData.stats?.total_requests || 0,
+        envoy_authorized: overviewData.stats?.allowed_requests || 0,
+        envoy_denied: overviewData.stats?.denied_requests || 0,
+        mimir_requests: overviewData.stats?.allowed_requests || 0,
+        mimir_success: overviewData.stats?.allowed_requests || 0,
+        mimir_errors: 0,
+        response_times: {
+          nginx_to_envoy: 0,
+          envoy_to_mimir: 0,
+          total_flow: 0
+        }
       };
     }
+
+    // Generate flow timeline data based on time range
+    const flow_timeline: FlowDataPoint[] = generateFlowTimeline(timeRange, flow_metrics);
+
+    // Perform health checks
+    const health_checks = await performHealthChecks();
+
+    // Determine flow status based on health checks and metrics
+    const flow_status = await determineFlowStatus(health_checks, overviewData, flow_metrics);
+
+    // Get service and endpoint status
+    const service_status = await getServiceStatus();
+    const endpoint_status = await getEndpointStatus();
+    const validation_results = await getValidationResults();
 
     return {
       stats: overviewData.stats,
@@ -890,60 +836,99 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
       health_checks,
       service_status,
       endpoint_status,
-      validation_results
+      validation_results,
     };
   } catch (error) {
     console.error('Error fetching overview data:', error);
-    // Return empty data structure on error
-    return {
-      stats: {
-        total_requests: 0,
-        allowed_requests: 0,
-        denied_requests: 0,
-        allow_percentage: 0,
-        active_tenants: 0
-      },
-      top_tenants: [],
-      flow_metrics: {
-        nginx_requests: 0,
-        nginx_route_direct: 0,
-        nginx_route_edge: 0,
-        envoy_requests: 0,
-        envoy_authorized: 0,
-        envoy_denied: 0,
-        mimir_requests: 0,
-        mimir_success: 0,
-        mimir_errors: 0,
-        response_times: {
-          nginx_to_envoy: 0,
-          envoy_to_mimir: 0,
-          total_flow: 0
-        }
-      },
-      flow_timeline: [],
-      flow_status: {
-        overall: 'broken',
-        nginx: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
-        envoy: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
-        rls: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
-        overrides_sync: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
-        mimir: { status: 'broken', message: 'Service unavailable', last_seen: '', response_time: 0, error_count: 1 },
-        last_check: new Date().toISOString()
-      },
-      health_checks: {
-        rls_service: false,
-        overrides_sync: false,
-        envoy_proxy: false,
-        nginx_config: false,
-        mimir_connectivity: false,
-        tenant_limits_synced: false,
-        enforcement_active: false
-      },
-      service_status: {},
-      endpoint_status: {},
-      validation_results: {}
-    };
+    throw error;
   }
+}
+
+// Helper function to generate flow timeline data
+function generateFlowTimeline(timeRange: string, flow_metrics: FlowMetrics): FlowDataPoint[] {
+  const now = new Date();
+  const points: FlowDataPoint[] = [];
+  
+  let interval: number;
+  let count: number;
+  
+  switch (timeRange) {
+    case '15m':
+      interval = 1 * 60 * 1000; // 1 minute
+      count = 15;
+      break;
+    case '1h':
+      interval = 5 * 60 * 1000; // 5 minutes
+      count = 12;
+      break;
+    case '24h':
+      interval = 60 * 60 * 1000; // 1 hour
+      count = 24;
+      break;
+    case '1w':
+      interval = 24 * 60 * 60 * 1000; // 1 day
+      count = 7;
+      break;
+    default:
+      interval = 5 * 60 * 1000; // 5 minutes
+      count = 12;
+  }
+  
+  for (let i = count - 1; i >= 0; i--) {
+    const timestamp = new Date(now.getTime() - (i * interval));
+    points.push({
+      timestamp: timestamp.toISOString(),
+      nginx_requests: Math.floor(flow_metrics.nginx_requests / count),
+      route_direct: Math.floor(flow_metrics.nginx_route_direct / count),
+      route_edge: Math.floor(flow_metrics.nginx_route_edge / count),
+      envoy_requests: Math.floor(flow_metrics.envoy_requests / count),
+      mimir_requests: Math.floor(flow_metrics.mimir_requests / count),
+      success_rate: flow_metrics.mimir_requests > 0 ? 
+        (flow_metrics.mimir_success / flow_metrics.mimir_requests) * 100 : 0
+    });
+  }
+  
+  return points;
+}
+
+// Helper functions for status checks
+async function getServiceStatus(): Promise<Record<string, any>> {
+  try {
+    const response = await fetch('/api/system/status');
+    if (response.ok) {
+      const data = await response.json();
+      return data.services || {};
+    }
+  } catch (error) {
+    console.error('Error fetching service status:', error);
+  }
+  return {};
+}
+
+async function getEndpointStatus(): Promise<Record<string, any>> {
+  try {
+    const response = await fetch('/api/system/status');
+    if (response.ok) {
+      const data = await response.json();
+      return data.endpoints || {};
+    }
+  } catch (error) {
+    console.error('Error fetching endpoint status:', error);
+  }
+  return {};
+}
+
+async function getValidationResults(): Promise<Record<string, any>> {
+  try {
+    const response = await fetch('/api/system/status');
+    if (response.ok) {
+      const data = await response.json();
+      return data.validations || {};
+    }
+  } catch (error) {
+    console.error('Error fetching validation results:', error);
+  }
+  return {};
 }
 
 // Perform comprehensive health checks

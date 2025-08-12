@@ -335,6 +335,15 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/cardinality/trends", handleCardinalityTrends(rls)).Methods("GET")
 	router.HandleFunc("/api/cardinality/alerts", handleCardinalityAlerts(rls)).Methods("GET")
 
+	// Time-based aggregated data endpoints
+	router.HandleFunc("/api/aggregated/{timeRange}", handleAggregatedData(rls)).Methods("GET")
+	router.HandleFunc("/api/timeseries/{timeRange}/{metric}", handleTimeSeriesData(rls)).Methods("GET")
+
+	// Test route to verify route registration
+	router.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"message": "test route works"})
+	}).Methods("GET")
+
 	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
 	// Routes are now only logged at debug level if needed
 
@@ -418,13 +427,32 @@ func handleOverview(rls *service.RLS) http.HandlerFunc {
 			}
 		}()
 
-		// 🔧 PERFORMANCE FIX: Remove excessive logging for high-frequency endpoint
-		stats := rls.OverviewSnapshot()
+		// Extract time range from query parameter
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "1h" // Default to 1 hour
+		}
 
-		response := map[string]any{"stats": stats}
+		// Validate time range
+		validRanges := map[string]bool{
+			"5m": true, "15m": true, "1h": true, "24h": true, "1w": true,
+		}
+		if !validRanges[timeRange] {
+			timeRange = "1h" // Default to 1 hour if invalid
+		}
+
+		// Use time-based aggregated data for stable overview
+		stats := rls.GetOverviewSnapshotWithTimeRange(timeRange)
+
+		response := map[string]any{
+			"stats":          stats,
+			"time_range":     timeRange,
+			"data_freshness": time.Now().Format(time.RFC3339),
+		}
 
 		// 🔧 PERFORMANCE FIX: Only log at debug level to reduce overhead
 		log.Debug().
+			Str("time_range", timeRange).
 			Int64("total_requests", stats.TotalRequests).
 			Int64("allowed_requests", stats.AllowedRequests).
 			Int64("denied_requests", stats.DeniedRequests).
@@ -445,11 +473,27 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 			}
 		}()
 
-		// 🔧 PERFORMANCE FIX: Remove excessive logging for high-frequency endpoint
-		tenants := rls.ListTenantsWithMetrics()
+		// Extract time range from query parameter
+		timeRange := r.URL.Query().Get("range")
+		if timeRange == "" {
+			timeRange = "1h" // Default to 1 hour
+		}
+
+		// Validate time range
+		validRanges := map[string]bool{
+			"5m": true, "15m": true, "1h": true, "24h": true, "1w": true,
+		}
+		if !validRanges[timeRange] {
+			timeRange = "1h" // Default to 1 hour if invalid
+		}
+
+		// Use time-based aggregated data for stable tenant metrics
+		tenants := rls.GetTenantsWithTimeRange(timeRange)
 
 		// 🔧 PERFORMANCE FIX: Only log at debug level to reduce overhead
-		tenantLogger := log.Debug().Int("tenant_count", len(tenants))
+		tenantLogger := log.Debug().
+			Str("time_range", timeRange).
+			Int("tenant_count", len(tenants))
 
 		if len(tenants) == 0 {
 			tenantLogger.Msg("tenants API response: NO TENANTS FOUND - this explains zero active tenants!")
@@ -473,7 +517,11 @@ func handleListTenants(rls *service.RLS) http.HandlerFunc {
 			tenantLogger.Msg("tenants API response with tenant details")
 		}
 
-		response := map[string]any{"tenants": tenants}
+		response := map[string]any{
+			"tenants":        tenants,
+			"time_range":     timeRange,
+			"data_freshness": time.Now().Format(time.RFC3339),
+		}
 		writeJSON(w, http.StatusOK, response)
 	}
 }
@@ -838,5 +886,78 @@ func handleCardinalityAlerts(rls *service.RLS) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"alerts": alerts,
 		})
+	}
+}
+
+// handleAggregatedData returns time-based aggregated data
+func handleAggregatedData(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleAggregatedData")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		vars := mux.Vars(r)
+		timeRange := vars["timeRange"]
+
+		// Validate time range
+		validRanges := map[string]bool{"15m": true, "1h": true, "24h": true, "1w": true}
+		if !validRanges[timeRange] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "Invalid time range. Supported values: 15m, 1h, 24h, 1w",
+			})
+			return
+		}
+
+		log.Info().Str("timeRange", timeRange).Msg("RLS: INFO - Aggregated data endpoint called")
+
+		data := rls.GetAggregatedData(timeRange)
+		log.Info().Interface("data", data).Msg("RLS: INFO - Aggregated data")
+		writeJSON(w, http.StatusOK, data)
+	}
+}
+
+// handleTimeSeriesData returns time series data for charts
+func handleTimeSeriesData(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in handleTimeSeriesData")
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+			}
+		}()
+
+		vars := mux.Vars(r)
+		timeRange := vars["timeRange"]
+		metric := vars["metric"]
+
+		// Validate time range
+		validRanges := map[string]bool{"15m": true, "1h": true, "24h": true, "1w": true}
+		if !validRanges[timeRange] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "Invalid time range. Supported values: 15m, 1h, 24h, 1w",
+			})
+			return
+		}
+
+		// Validate metric
+		validMetrics := map[string]bool{
+			"requests": true, "allow_rate": true, "series": true,
+			"labels": true, "violations": true, "response_time": true,
+		}
+		if !validMetrics[metric] {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "Invalid metric. Supported values: requests, allow_rate, series, labels, violations, response_time",
+			})
+			return
+		}
+
+		log.Info().Str("timeRange", timeRange).Str("metric", metric).Msg("RLS: INFO - Time series data endpoint called")
+
+		data := rls.GetTimeSeriesData(timeRange, metric)
+		log.Info().Interface("data", data).Msg("RLS: INFO - Time series data")
+		writeJSON(w, http.StatusOK, data)
 	}
 }
