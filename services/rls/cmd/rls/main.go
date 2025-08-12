@@ -286,6 +286,8 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/tenants/{id}/enforcement", handleSetEnforcement(rls)).Methods("POST")
 	router.HandleFunc("/api/tenants/{id}/limits", handleSetTenantLimits(rls)).Methods("PUT")
 	router.HandleFunc("/api/denials", handleListDenials(rls)).Methods("GET")
+	router.HandleFunc("/api/denials/enhanced", handleEnhancedDenials(rls)).Methods("GET")
+	router.HandleFunc("/api/denials/trends", handleDenialTrends(rls)).Methods("GET")
 	router.HandleFunc("/api/export/csv", handleExportCSV(rls)).Methods("GET")
 
 	// Pipeline and Metrics endpoints for Admin UI
@@ -706,6 +708,52 @@ func handleListDenials(rls *service.RLS) http.HandlerFunc {
 		d, _ := time.ParseDuration(sinceParam)
 		denials := rls.RecentDenials(tenant, d)
 		writeJSON(w, http.StatusOK, map[string]any{"denials": denials})
+	}
+}
+
+// handleEnhancedDenials returns enriched denial information with context and insights
+func handleEnhancedDenials(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenant := r.URL.Query().Get("tenant")
+		sinceParam := r.URL.Query().Get("since")
+		if sinceParam == "" {
+			sinceParam = "1h"
+		}
+		d, _ := time.ParseDuration(sinceParam)
+
+		enhancedDenials := rls.EnhancedRecentDenials(tenant, d)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"denials": enhancedDenials,
+			"metadata": map[string]any{
+				"total_count":   len(enhancedDenials),
+				"time_range":    sinceParam,
+				"tenant_filter": tenant,
+				"generated_at":  time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+	}
+}
+
+// handleDenialTrends returns trend analysis for denials
+func handleDenialTrends(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenant := r.URL.Query().Get("tenant")
+		sinceParam := r.URL.Query().Get("since")
+		if sinceParam == "" {
+			sinceParam = "24h"
+		}
+		d, _ := time.ParseDuration(sinceParam)
+
+		trends := rls.GetDenialTrends(tenant, d)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"trends": trends,
+			"metadata": map[string]any{
+				"total_trends":  len(trends),
+				"time_range":    sinceParam,
+				"tenant_filter": tenant,
+				"generated_at":  time.Now().UTC().Format(time.RFC3339),
+			},
+		})
 	}
 }
 
