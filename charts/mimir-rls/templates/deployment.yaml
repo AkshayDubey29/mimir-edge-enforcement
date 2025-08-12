@@ -69,6 +69,7 @@ spec:
             - "--enforce-max-body-bytes={{ .Values.enforcement.enforceMaxBodyBytes | default true }}"
             - "--enforce-max-labels-per-series={{ .Values.enforcement.enforceMaxLabelsPerSeries | default true }}"
             - "--enforce-max-series-per-request={{ .Values.enforcement.enforceMaxSeriesPerRequest | default true }}"
+            - "--enforce-max-series-per-metric={{ .Values.enforcement.enforceMaxSeriesPerMetric | default true }}"
             - "--enforce-bytes-per-second={{ .Values.enforcement.enforceBytesPerSecond | default true }}"
             
             # Logging
