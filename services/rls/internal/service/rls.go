@@ -1710,19 +1710,18 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 
 	tenant.Info.Limits = newLimits
 
-	// 🔧 FIX: Use default enforcement configuration for new tenants
-	if isNewTenant {
-		tenant.Info.Enforcement = rls.config.DefaultEnforcement
-		rls.logger.Info().
-			Str("tenant_id", tenantID).
-			Bool("enforce_samples_per_second", tenant.Info.Enforcement.EnforceSamplesPerSecond).
-			Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
-			Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
-			Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
-			Bool("enforce_max_series_per_metric", tenant.Info.Enforcement.EnforceMaxSeriesPerMetric).
-			Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
-			Msg("RLS: applied default enforcement configuration")
-	}
+	// 🔧 FIX: Always apply default enforcement configuration (for both new and existing tenants)
+	tenant.Info.Enforcement = rls.config.DefaultEnforcement
+	rls.logger.Info().
+		Str("tenant_id", tenantID).
+		Bool("is_new_tenant", isNewTenant).
+		Bool("enforce_samples_per_second", tenant.Info.Enforcement.EnforceSamplesPerSecond).
+		Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
+		Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
+		Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+		Bool("enforce_max_series_per_metric", tenant.Info.Enforcement.EnforceMaxSeriesPerMetric).
+		Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
+		Msg("RLS: applied default enforcement configuration")
 
 	// Update buckets only for non-zero limits; nil buckets mean no enforcement for that dimension
 	if newLimits.SamplesPerSecond > 0 {
