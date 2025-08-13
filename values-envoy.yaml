@@ -31,58 +31,57 @@ rls:
   extAuthzPort: 8080
   rateLimitPort: 8081
 
-# External authorization configuration - Production
-# Configured for cardinality enforcement (per_metric_series_limit and per_user_series_limit)
+# External authorization configuration - ULTRA OPTIMIZED
 extAuthz:
-  maxRequestBytes: 10485760  # 10 MiB - Increased for large Alloy payloads
-  failureModeAllow: false    # Production: Deny requests when gRPC fails (SECURITY)
-  timeout: "5s"              # Production: Optimized timeout
-  disableBodyParsing: false  # Production: Enable body parsing for cardinality analysis
+  maxRequestBytes: 5242880   # 5 MiB - Reduced for faster processing
+  failureModeAllow: true     # Allow on failure for maximum throughput
+  timeout: "1s"              # Ultra-fast timeout
+  disableBodyParsing: false  # Keep body parsing for limits
   
-  # Buffer settings for large requests
-  bufferMaxBytes: "52428800"       # 50MB buffer for large requests
-  bufferTimeout: "10s"             # Buffer timeout
+  # Buffer settings for ultra-fast processing
+  bufferMaxBytes: "10485760"       # 10MB buffer for faster processing
+  bufferTimeout: "2s"              # Ultra-fast buffer timeout
   
-  # Retry configuration
-  retryOn: "connect-failure,refused-stream,unavailable,cancelled,retriable-status-codes"
-  numRetries: 2                    # Number of retries
-  retryBackoffBaseInterval: "100ms" # Base retry interval
+  # Retry configuration - Ultra-fast
+  retryOn: "connect-failure,unavailable"  # Minimal retry conditions
+  numRetries: 0                    # No retries for ultra-fast fail
+  retryBackoffBaseInterval: "50ms" # Ultra-fast retry interval
   
-  # Performance optimizations
+  # Performance optimizations - Ultra-fast
   includePeerCertificate: false    # Disable for performance
   includeTlsSession: false         # Disable for performance
 
-# Rate limiting configuration - Production
+# Rate limiting configuration - ULTRA OPTIMIZED
 rateLimit:
-  failureModeDeny: false    # Production: Allow requests when rate limit service fails
+  failureModeDeny: false    # Allow requests when rate limit service fails
   domain: "mimir_remote_write"
-  grpcTimeout: "3s"         # Production: Optimized timeout
-  timeout: "2s"             # Rate limit timeout
+  grpcTimeout: "1s"         # Ultra-fast timeout
+  timeout: "500ms"          # Ultra-fast timeout
 
-# Proxy configuration - Production
+# Proxy configuration - ULTRA OPTIMIZED
 proxy:
-  upstreamTimeout: "30s"  # Production: Optimized timeout for metric payloads
+  upstreamTimeout: "10s"  # Ultra-fast timeout for metric payloads
   httpProtocol:
     acceptHttp10: true
     useRemoteAddress: true
     xffNumTrustedHops: 1
 
-# Load balancing configuration - Production
+# Load balancing configuration - ULTRA OPTIMIZED
 loadBalancer:
-  policy: "round_robin"            # Round-robin load balancing
+  policy: "least_request"        # Least request for better distribution
   healthCheck:
     enabled: true
-    interval: "10s"
-    timeout: "2s"
-    unhealthyThreshold: 3
-    healthyThreshold: 2
+    interval: "5s"               # Faster health checks
+    timeout: "1s"                # Faster timeout
+    unhealthyThreshold: 2        # Faster failure detection
+    healthyThreshold: 1          # Faster recovery
 
-# Logging configuration - Production
+# Logging configuration - ULTRA OPTIMIZED
 logging:
-  level: "info"                 # Production: Info level for performance
-  enableAccessLogs: true        # Production: Enable HTTP access logs
-  enableDebugLogs: false        # Production: Disable debug logging for performance
-  enableDetailedLogs: false     # Production: Disable detailed logs for performance
+  level: "warn"                  # Minimal logging for maximum performance
+  enableAccessLogs: false        # Disable access logs for performance
+  enableDebugLogs: false         # Disable debug logging for performance
+  enableDetailedLogs: false      # Disable detailed logs for performance
 
 # Resource limits and overload management
 resourceLimits:

@@ -1,9 +1,13 @@
 # Runtime stage - minimal distroless image
 FROM gcr.io/distroless/static:nonroot
 
+# Add labels for ultra-fast version
+LABEL org.opencontainers.image.version="latest-ultra-fast"
+LABEL org.opencontainers.image.description="Ultra-fast RLS service with aggressive performance optimizations"
+
 # Architecture-aware binary copy
 ARG TARGETARCH
-COPY rls-${TARGETARCH} /usr/local/bin/rls
+COPY rls-ultra-fast /usr/local/bin/rls
 
 # Expose ports
 EXPOSE 8080 8081 8082 9090

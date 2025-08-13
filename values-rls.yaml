@@ -45,49 +45,54 @@ enforcement:
 store:
   backend: "redis"  # Required for multi-pod deployment with shared state
 
-# Logging configuration - DEBUG MODE (Temporarily enabled for troubleshooting)
+# Logging configuration - PRODUCTION OPTIMIZED
 log:
-  level: "debug"  # Temporarily set to debug to see detailed logs
-  enableGRPCLogs: true  # Temporarily enable gRPC logs for debugging
-  enableDetailedLogs: true  # Temporarily enable detailed logs for debugging
+  level: "warn"  # Minimal logging for maximum performance
+  enableGRPCLogs: false  # Disable gRPC logs for performance
+  enableDetailedLogs: false  # Disable detailed logs for performance
 
-# Performance tuning - Production
+# Performance tuning - ULTRA OPTIMIZED
 performance:
   # Request processing optimization
-  maxConcurrentRequests: 1000    # Increase concurrent request handling
-  requestTimeout: "30s"          # Set explicit timeout for RLS processing
-  bodyParseTimeout: "10s"        # Timeout for body parsing operations
+  maxConcurrentRequests: 5000    # Ultra-high concurrent request handling
+  requestTimeout: "5s"           # Ultra-fast timeout for RLS processing
+  bodyParseTimeout: "2s"         # Ultra-fast timeout for body parsing
   
-  # Redis connection optimization (Optimized for performance)
-  redisPoolSize: 20              # Reduced from 50 to minimize overhead
-  redisMinIdleConns: 5           # Reduced from 10 to minimize idle connections
-  redisMaxRetries: 1             # Reduced from 3 to fail fast
+  # Redis connection optimization (Ultra-optimized for performance)
+  redisPoolSize: 100             # Large pool for high throughput
+  redisMinIdleConns: 20          # More idle connections for faster response
+  redisMaxRetries: 0             # No retries for ultra-fast fail
+  redisConnectTimeout: "500ms"   # Ultra-fast connection timeout
+  redisReadTimeout: "1s"         # Ultra-fast read timeout
+  redisWriteTimeout: "1s"        # Ultra-fast write timeout
   
   # Memory optimization
   enableMemoryOptimization: true # Enable memory-efficient processing
-  maxRequestBodySize: "50MB"     # Maximum body size to process
+  maxRequestBodySize: "10MB"     # Reduced for faster processing
+  enableRequestPooling: true     # Enable request object pooling
+  enableMetricsOptimization: true # Optimize metrics collection
   
-  # Circuit breaker settings (Disabled for performance)
-  circuitBreakerEnabled: false   # Disable circuit breaker to reduce complexity
-  circuitBreakerThreshold: 5     # Number of failures before opening circuit
-  circuitBreakerTimeout: "30s"   # Time to wait before trying again
+  # Circuit breaker settings (Ultra-fast)
+  circuitBreakerEnabled: false   # Disable circuit breaker for speed
+  circuitBreakerThreshold: 1     # Single failure threshold
+  circuitBreakerTimeout: "1s"    # Ultra-fast recovery
 
 # Deployment configuration
 replicaCount: 1  # Reduced to 1 for resource constraints
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-redis-optimized"  # Redis optimized version with global series tracking
+  tag: "latest-ultra-fast"  # Ultra-fast version with aggressive performance optimizations
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# Resource configuration - Production (Reduced for cluster capacity)
+# Resource configuration - ULTRA OPTIMIZED
 resources:
   limits:
-    cpu: 1500m    # Reduced from 2000m
-    memory: 1Gi   # Reduced from 2Gi
+    cpu: 4000m    # High CPU for maximum performance
+    memory: 4Gi   # High memory for caching and processing
   requests:
-    cpu: 500m     # Reduced from 750m
-    memory: 512Mi # Reduced from 768Mi
+    cpu: 2000m    # High CPU requests for performance
+    memory: 2Gi   # High memory requests for caching
 
 # Security context
 securityContext:
@@ -99,13 +104,13 @@ securityContext:
     drop:
       - ALL
 
-# Horizontal Pod Autoscaler (Conservative scaling)
+# Horizontal Pod Autoscaler (ULTRA OPTIMIZED)
 hpa:
   enabled: true
-  minReplicas: 1    # Reduced from 2
-  maxReplicas: 3    # Reduced from 8
-  targetCPUUtilizationPercentage: 80    # Increased from 75
-  targetMemoryUtilizationPercentage: 80 # Increased from 75
+  minReplicas: 3    # Higher minimum for better performance
+  maxReplicas: 10   # Higher maximum for scaling
+  targetCPUUtilizationPercentage: 70    # Lower threshold for faster scaling
+  targetMemoryUtilizationPercentage: 70 # Lower threshold for faster scaling
 
 # Pod Disruption Budget
 pdb:
