@@ -134,9 +134,10 @@ type OverviewStats struct {
 
 // RequestInfo represents information about an incoming request
 type RequestInfo struct {
-	ObservedSamples int64
-	ObservedSeries  int64
-	ObservedLabels  int64
+	ObservedSamples    int64            `json:"observed_samples"`
+	ObservedSeries     int64            `json:"observed_series"`
+	ObservedLabels     int64            `json:"observed_labels"`
+	MetricSeriesCounts map[string]int64 `json:"metric_series_counts"` // 🔧 NEW: Per-metric series counts for Mimir-style limits
 }
 
 // Decision represents the result of an authorization check
