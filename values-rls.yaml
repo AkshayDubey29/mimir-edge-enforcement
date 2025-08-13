@@ -23,7 +23,7 @@ limits:
   defaultSamplesPerSecond: 1000      # 1000 samples/sec - Enable rate limiting
   defaultBurstPercent: 10      # 10% burst allowance
   enforceBodyParsing: true     # Production: Enable body parsing for cardinality analysis
-  defaultMaxLabelsPerSeries: 60      # per_user_series_limit - ENFORCED
+  defaultMaxLabelsPerSeries: 0       # per_user_series_limit - DISABLED (0 = no limit)
   defaultMaxLabelValueLength: 2048   # per_user_series_limit - ENFORCED
   defaultMaxSeriesPerRequest: 10000  # per_metric_series_limit - ENFORCED
 
@@ -34,7 +34,7 @@ enforcement:
   # Cardinality limits - ENFORCED
   enforceMaxSeriesPerRequest: true   # per_user_series_limit
   enforceMaxSeriesPerMetric: true    # per_metric_series_limit
-  enforceMaxLabelsPerSeries: true    # per_labels_per_series_limit
+  enforceMaxLabelsPerSeries: false   # per_labels_per_series_limit - DISABLED
   # Rate limiting - ENABLED
   enforceSamplesPerSecond: true      # Enable ingestion rate limiting
   enforceBytesPerSecond: false       # No bytes rate limiting

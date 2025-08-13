@@ -65,12 +65,12 @@ spec:
             - "--default-max-series-per-request={{ .Values.limits.defaultMaxSeriesPerRequest | default 100000 }}"
             
             # Selective enforcement configuration
-            - "--enforce-samples-per-second={{ .Values.enforcement.enforceSamplesPerSecond | default true }}"
-            - "--enforce-max-body-bytes={{ .Values.enforcement.enforceMaxBodyBytes | default true }}"
-            - "--enforce-max-labels-per-series={{ .Values.enforcement.enforceMaxLabelsPerSeries | default true }}"
-            - "--enforce-max-series-per-request={{ .Values.enforcement.enforceMaxSeriesPerRequest | default true }}"
-            - "--enforce-max-series-per-metric={{ .Values.enforcement.enforceMaxSeriesPerMetric | default true }}"
-            - "--enforce-bytes-per-second={{ .Values.enforcement.enforceBytesPerSecond | default true }}"
+            - "--enforce-samples-per-second={{ .Values.enforcement.enforceSamplesPerSecond }}"
+            - "--enforce-max-body-bytes={{ .Values.enforcement.enforceMaxBodyBytes }}"
+            - "--enforce-max-labels-per-series={{ .Values.enforcement.enforceMaxLabelsPerSeries }}"
+            - "--enforce-max-series-per-request={{ .Values.enforcement.enforceMaxSeriesPerRequest }}"
+            - "--enforce-max-series-per-metric={{ .Values.enforcement.enforceMaxSeriesPerMetric }}"
+            - "--enforce-bytes-per-second={{ .Values.enforcement.enforceBytesPerSecond }}"
             
             # Store configuration
             - "--store-backend={{ .Values.store.backend }}"
