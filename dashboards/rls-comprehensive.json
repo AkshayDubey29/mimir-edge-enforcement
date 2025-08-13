@@ -1,0 +1,305 @@
+{
+  "title": "RLS Comprehensive Dashboard",
+  "description": "Complete monitoring dashboard for Rate Limit Service (RLS) with all metrics",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "RLS Decisions Total",
+      "description": "Total authorization decisions by decision type and tenant",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_decisions_total[5m])) by (decision, tenant)",
+          "legendFormat": "{{decision}} - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Decisions per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Decisions by Reason",
+      "description": "Authorization decisions broken down by reason",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_decisions_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Decisions per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Authorization Check Duration (p95)",
+      "description": "95th percentile latency for authorization checks",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "legendFormat": "p95 - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Authorization Check Duration (p99)",
+      "description": "99th percentile latency for authorization checks",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "legendFormat": "p99 - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Body Parse Errors",
+      "description": "Rate of body parsing errors",
+      "targets": [
+        {
+          "expr": "rate(rls_body_parse_errors_total[5m])",
+          "legendFormat": "Parse Errors"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Errors per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Limits Stale Duration",
+      "description": "How long the limits have been stale",
+      "targets": [
+        {
+          "expr": "rls_limits_stale_seconds",
+          "legendFormat": "Stale Duration"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Seconds",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Tenant Bucket Tokens",
+      "description": "Available tokens in tenant buckets by type",
+      "targets": [
+        {
+          "expr": "rls_tenant_bucket_tokens",
+          "legendFormat": "{{tenant}} - {{bucket_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Available Tokens"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Traffic Flow Total",
+      "description": "Total requests processed by RLS",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_traffic_flow_total[5m])) by (tenant, decision)",
+          "legendFormat": "{{tenant}} - {{decision}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Traffic Flow Latency",
+      "description": "Latency of requests processed by RLS",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_traffic_flow_latency_seconds_bucket[5m])) by (le, tenant, decision))",
+          "legendFormat": "p95 - {{tenant}} - {{decision}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Traffic Flow Bytes",
+      "description": "Total bytes of requests processed by RLS",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_traffic_flow_bytes[5m])) by (tenant, decision)",
+          "legendFormat": "{{tenant}} - {{decision}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Bytes per second",
+          "unit": "Bps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Limit Violations Total",
+      "description": "Total number of limit violations by tenant and reason",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_limit_violations_total[5m])) by (tenant, reason)",
+          "legendFormat": "{{tenant}} - {{reason}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Violations per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Series Count Gauge",
+      "description": "Current series count for each tenant",
+      "targets": [
+        {
+          "expr": "rls_series_count_gauge",
+          "legendFormat": "{{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Series Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Labels Count Gauge",
+      "description": "Current labels count for each tenant",
+      "targets": [
+        {
+          "expr": "rls_labels_count_gauge",
+          "legendFormat": "{{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Labels Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Samples Count Gauge",
+      "description": "Current samples count for each tenant",
+      "targets": [
+        {
+          "expr": "rls_samples_count_gauge",
+          "legendFormat": "{{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Samples Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Body Size Gauge",
+      "description": "Current body size for each tenant",
+      "targets": [
+        {
+          "expr": "rls_body_size_gauge",
+          "legendFormat": "{{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Body Size (bytes)",
+          "unit": "bytes"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Metric Series Count Gauge",
+      "description": "Current metric series count for each tenant and metric",
+      "targets": [
+        {
+          "expr": "rls_metric_series_count_gauge",
+          "legendFormat": "{{tenant}} - {{metric}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Metric Series Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Global Series Count Gauge",
+      "description": "Current global series count by metric",
+      "targets": [
+        {
+          "expr": "rls_global_series_count_gauge",
+          "legendFormat": "{{metric}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Global Series Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Limit Threshold Gauge",
+      "description": "Current limit threshold for each tenant",
+      "targets": [
+        {
+          "expr": "rls_limit_threshold_gauge",
+          "legendFormat": "{{tenant}} - {{limit}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Limit Threshold"
+        }
+      ]
+    }
+  ]
+}

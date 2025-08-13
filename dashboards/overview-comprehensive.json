@@ -1,0 +1,280 @@
+{
+  "title": "Mimir Edge Enforcement Overview",
+  "description": "Complete overview of Mimir Edge Enforcement system with RLS and Envoy metrics",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "System Overview - Total Requests",
+      "description": "Total requests processed by the system",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_total[5m])) by (route)",
+          "legendFormat": "Envoy Total - {{route}}"
+        },
+        {
+          "expr": "sum(rate(rls_traffic_flow_total[5m])) by (decision)",
+          "legendFormat": "RLS {{decision}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Rate Limiting Effectiveness",
+      "description": "Rate limiting decisions and HTTP 429 responses",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_decisions_total{decision=\"deny\"}[5m])) by (tenant)",
+          "legendFormat": "RLS Deny - {{tenant}}"
+        },
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)",
+          "legendFormat": "HTTP 429 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Rate limited requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "System Performance - Latency",
+      "description": "System latency at different percentiles",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_downstream_rq_time_bucket[5m])) by (le, route))",
+          "legendFormat": "Envoy p95 - {{route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "legendFormat": "RLS p95 - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Error Rates",
+      "description": "Error rates across the system",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*|5.*\"}[5m])) by (response_code)",
+          "legendFormat": "HTTP {{response_code}}"
+        },
+        {
+          "expr": "rate(rls_body_parse_errors_total[5m])",
+          "legendFormat": "RLS Parse Errors"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Errors per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Tenant Activity",
+      "description": "Activity by tenant",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_traffic_flow_total[5m])) by (tenant, decision)",
+          "legendFormat": "{{tenant}} - {{decision}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Limit Violations by Type",
+      "description": "Limit violations broken down by reason",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_limit_violations_total[5m])) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Violations per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Token Bucket Status",
+      "description": "Available tokens in tenant buckets",
+      "targets": [
+        {
+          "expr": "rls_tenant_bucket_tokens",
+          "legendFormat": "{{tenant}} - {{bucket_type}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Available Tokens"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "System Health - Limits Sync",
+      "description": "System health indicators",
+      "targets": [
+        {
+          "expr": "rls_limits_stale_seconds",
+          "legendFormat": "Limits Stale Duration"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Seconds",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Upstream Health",
+      "description": "Upstream cluster health",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"5.*\"}[5m])) by (cluster_name)",
+          "legendFormat": "5xx - {{cluster_name}}"
+        },
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_cx_connect_fail[5m])) by (cluster_name)",
+          "legendFormat": "Connection Fail - {{cluster_name}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Failures per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Resource Usage",
+      "description": "System resource usage",
+      "targets": [
+        {
+          "expr": "envoy_server_memory_allocated",
+          "legendFormat": "Envoy Memory"
+        },
+        {
+          "expr": "envoy_cluster_upstream_cx_active",
+          "legendFormat": "Active Connections"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Resource Usage"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Filter Performance",
+      "description": "Filter performance metrics",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_ext_authz_total[5m])) by (grpc_service)",
+          "legendFormat": "Ext Authz - {{grpc_service}}"
+        },
+        {
+          "expr": "sum(rate(envoy_http_ratelimit_total[5m])) by (grpc_service)",
+          "legendFormat": "Rate Limit - {{grpc_service}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Series and Labels Monitoring",
+      "description": "Series and labels count monitoring",
+      "targets": [
+        {
+          "expr": "rls_series_count_gauge",
+          "legendFormat": "Series - {{tenant}}"
+        },
+        {
+          "expr": "rls_labels_count_gauge",
+          "legendFormat": "Labels - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Count"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Request Size Monitoring",
+      "description": "Request body size monitoring",
+      "targets": [
+        {
+          "expr": "rls_body_size_gauge",
+          "legendFormat": "Body Size - {{tenant}}"
+        },
+        {
+          "expr": "sum(rate(rls_traffic_flow_bytes[5m])) by (tenant)",
+          "legendFormat": "Bytes/sec - {{tenant}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Size (bytes)",
+          "unit": "bytes"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Circuit Breaker Status",
+      "description": "Circuit breaker status",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_circuit_breakers_default_rq_tripped[5m])) by (cluster_name)",
+          "legendFormat": "Tripped - {{cluster_name}}"
+        },
+        {
+          "expr": "envoy_overload_actions_active",
+          "legendFormat": "Overload - {{action}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Status"
+        }
+      ]
+    }
+  ]
+}

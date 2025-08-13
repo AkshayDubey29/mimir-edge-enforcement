@@ -1,0 +1,382 @@
+{
+  "title": "Envoy Comprehensive Dashboard",
+  "description": "Complete monitoring dashboard for Envoy Proxy with response codes and filter statistics",
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Envoy HTTP Response Codes (2xx)",
+      "description": "Successful HTTP responses (2xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"2.*\"}[5m])) by (response_code, route)",
+          "legendFormat": "{{response_code}} - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy HTTP Response Codes (4xx)",
+      "description": "Client error HTTP responses (4xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*\"}[5m])) by (response_code, route)",
+          "legendFormat": "{{response_code}} - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy HTTP Response Codes (5xx)",
+      "description": "Server error HTTP responses (5xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"5.*\"}[5m])) by (response_code, route)",
+          "legendFormat": "{{response_code}} - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy HTTP 429 Rate Limited",
+      "description": "Rate limited requests (HTTP 429)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)",
+          "legendFormat": "429 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Rate limited requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy HTTP 403 Forbidden",
+      "description": "Forbidden requests (HTTP 403)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"403\"}[5m])) by (route)",
+          "legendFormat": "403 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Forbidden requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy HTTP 502 Bad Gateway",
+      "description": "Bad gateway errors (HTTP 502)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"502\"}[5m])) by (route)",
+          "legendFormat": "502 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Bad gateway errors per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Total Requests",
+      "description": "Total HTTP requests processed by Envoy",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_total[5m])) by (route)",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Request Duration (p95)",
+      "description": "95th percentile request duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_downstream_rq_time_bucket[5m])) by (le, route))",
+          "legendFormat": "p95 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Request Duration (p99)",
+      "description": "99th percentile request duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(envoy_http_downstream_rq_time_bucket[5m])) by (le, route))",
+          "legendFormat": "p99 - {{route}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy External Authorization Total",
+      "description": "Total external authorization requests",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_ext_authz_total[5m])) by (grpc_service)",
+          "legendFormat": "{{grpc_service}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Auth requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy External Authorization Duration",
+      "description": "External authorization request duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_ext_authz_duration_bucket[5m])) by (le, grpc_service))",
+          "legendFormat": "p95 - {{grpc_service}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Rate Limit Total",
+      "description": "Total rate limit requests",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_ratelimit_total[5m])) by (grpc_service)",
+          "legendFormat": "{{grpc_service}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Rate limit requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Rate Limit Duration",
+      "description": "Rate limit request duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_ratelimit_duration_bucket[5m])) by (le, grpc_service))",
+          "legendFormat": "p95 - {{grpc_service}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Upstream Requests (2xx)",
+      "description": "Successful upstream requests (2xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"2.*\"}[5m])) by (cluster_name, response_code)",
+          "legendFormat": "{{cluster_name}} - {{response_code}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Upstream Requests (4xx)",
+      "description": "Client error upstream requests (4xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"4.*\"}[5m])) by (cluster_name, response_code)",
+          "legendFormat": "{{cluster_name}} - {{response_code}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Upstream Requests (5xx)",
+      "description": "Server error upstream requests (5xx)",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"5.*\"}[5m])) by (cluster_name, response_code)",
+          "legendFormat": "{{cluster_name}} - {{response_code}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Upstream Request Duration",
+      "description": "Upstream request duration",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_cluster_upstream_rq_time_bucket[5m])) by (le, cluster_name))",
+          "legendFormat": "p95 - {{cluster_name}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Duration",
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Active Connections",
+      "description": "Active connections to upstream clusters",
+      "targets": [
+        {
+          "expr": "envoy_cluster_upstream_cx_active",
+          "legendFormat": "{{cluster_name}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Active Connections"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Connection Failures",
+      "description": "Connection failures to upstream clusters",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_upstream_cx_connect_fail[5m])) by (cluster_name)",
+          "legendFormat": "{{cluster_name}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Connection failures per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Circuit Breaker Trips",
+      "description": "Circuit breaker trips",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_cluster_circuit_breakers_default_rq_tripped[5m])) by (cluster_name)",
+          "legendFormat": "{{cluster_name}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Circuit breaker trips per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Memory Usage",
+      "description": "Envoy memory usage",
+      "targets": [
+        {
+          "expr": "envoy_server_memory_allocated",
+          "legendFormat": "Allocated Memory"
+        },
+        {
+          "expr": "envoy_server_memory_heap_size",
+          "legendFormat": "Heap Size"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Memory (bytes)",
+          "unit": "bytes"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Envoy Overload Actions",
+      "description": "Overload action triggers",
+      "targets": [
+        {
+          "expr": "envoy_overload_actions_active",
+          "legendFormat": "{{action}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Active Overload Actions"
+        }
+      ]
+    }
+  ]
+}
