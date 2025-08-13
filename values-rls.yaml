@@ -56,7 +56,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-redis-client-arm64"  # Production: Use the Redis client image
+  tag: "latest-enhanced-metrics"  # Production: Use the enhanced metrics image
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
 # Resource configuration - Production

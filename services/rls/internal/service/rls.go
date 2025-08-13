@@ -163,6 +163,20 @@ type Metrics struct {
 	TrafficFlowTotal   *prometheus.CounterVec
 	TrafficFlowLatency *prometheus.HistogramVec
 	TrafficFlowBytes   *prometheus.CounterVec
+
+	// 🔧 NEW: Comprehensive limit violation metrics
+	LimitViolationsTotal *prometheus.CounterVec
+	SeriesCountGauge     *prometheus.GaugeVec
+	LabelsCountGauge     *prometheus.GaugeVec
+	SamplesCountGauge    *prometheus.GaugeVec
+	BodySizeGauge        *prometheus.GaugeVec
+
+	// 🔧 NEW: Per-metric series tracking
+	MetricSeriesCountGauge *prometheus.GaugeVec
+	GlobalSeriesCountGauge *prometheus.GaugeVec
+
+	// 🔧 NEW: Limit threshold metrics
+	LimitThresholdGauge *prometheus.GaugeVec
 }
 
 // NewRLS creates a new RLS service
@@ -300,6 +314,62 @@ func (rls *RLS) createMetrics() *Metrics {
 				Help: "Total bytes of requests processed by RLS",
 			},
 			[]string{"tenant", "decision"},
+		),
+		LimitViolationsTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "rls_limit_violations_total",
+				Help: "Total number of limit violations",
+			},
+			[]string{"tenant", "reason"},
+		),
+		SeriesCountGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_series_count_gauge",
+				Help: "Current series count for each tenant",
+			},
+			[]string{"tenant"},
+		),
+		LabelsCountGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_labels_count_gauge",
+				Help: "Current labels count for each tenant",
+			},
+			[]string{"tenant"},
+		),
+		SamplesCountGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_samples_count_gauge",
+				Help: "Current samples count for each tenant",
+			},
+			[]string{"tenant"},
+		),
+		BodySizeGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_body_size_gauge",
+				Help: "Current body size for each tenant",
+			},
+			[]string{"tenant"},
+		),
+		MetricSeriesCountGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_metric_series_count_gauge",
+				Help: "Current metric series count for each tenant",
+			},
+			[]string{"tenant", "metric"},
+		),
+		GlobalSeriesCountGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_global_series_count_gauge",
+				Help: "Current global series count",
+			},
+			[]string{"metric"},
+		),
+		LimitThresholdGauge: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "rls_limit_threshold_gauge",
+				Help: "Current limit threshold for each tenant",
+			},
+			[]string{"tenant", "limit"},
 		),
 	}
 }
@@ -1458,16 +1528,16 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 	} else {
 		// Create new tenant with NO limits until overrides-sync sets them
 		// This prevents race conditions where requests see default limits before overrides-sync updates them
-		tenant = &TenantState{
-			Info: limits.TenantInfo{
-				ID:   tenantID,
-				Name: tenantID,
+	tenant = &TenantState{
+		Info: limits.TenantInfo{
+			ID:   tenantID,
+			Name: tenantID,
 				// 🔧 FIX: Start with NO limits to prevent race conditions
-				Limits: limits.TenantLimits{
+			Limits: limits.TenantLimits{
 					SamplesPerSecond: 0, // No limit until overrides-sync sets it
 					MaxBodyBytes:     0, // No limit until overrides-sync sets it
-				},
-				Enforcement: limits.EnforcementConfig{
+			},
+			Enforcement: limits.EnforcementConfig{
 					Enabled: false, // 🔧 FIX: Disable enforcement until overrides-sync enables it
 				},
 			},
@@ -1511,7 +1581,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
 		Msg("DEBUG: Mimir-style cardinality check - global series counts")
 
-	// Check per-user series limit (global across tenant)
+		// Check per-user series limit (global across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
 		// Calculate if adding new series would exceed the global limit
 		projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
@@ -1523,6 +1593,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 				Int64("projected_total", projectedTotalSeries).
 				Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
 				Msg("DEBUG: Mimir-style cardinality check - per-user series limit exceeded")
+
+			// 🔧 NEW: Record limit violation metrics
+			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_user_series_limit_exceeded").Inc()
+			rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(projectedTotalSeries))
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
 
 			decision.Allowed = false
 			decision.Reason = "per_user_series_limit_exceeded"
@@ -1548,6 +1623,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 					Int64("max_series_per_metric", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
 					Msg("DEBUG: Mimir-style cardinality check - per-metric series limit exceeded")
 
+				// 🔧 NEW: Record limit violation metrics
+				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_metric_series_limit_exceeded").Inc()
+				rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(projectedMetricTotal))
+				rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
+
 				decision.Allowed = false
 				decision.Reason = "per_metric_series_limit_exceeded"
 				decision.Code = 429
@@ -1559,6 +1639,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	// Check other limits (existing logic)
 	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 {
 		if bodyBytes > tenant.Info.Limits.MaxBodyBytes {
+			// 🔧 NEW: Record limit violation metrics
+			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "body_size_exceeded").Inc()
+			rls.metrics.BodySizeGauge.WithLabelValues(tenant.Info.ID).Set(float64(bodyBytes))
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_body_bytes").Set(float64(tenant.Info.Limits.MaxBodyBytes))
+
 			decision.Allowed = false
 			decision.Reason = "body_size_exceeded"
 			decision.Code = 413
@@ -1568,6 +1653,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 	if tenant.Info.Enforcement.EnforceMaxLabelsPerSeries && tenant.Info.Limits.MaxLabelsPerSeries > 0 {
 		if requestInfo.ObservedLabels > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
+			// 🔧 NEW: Record limit violation metrics
+			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "labels_per_series_exceeded").Inc()
+			rls.metrics.LabelsCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedLabels))
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_labels_per_series").Set(float64(tenant.Info.Limits.MaxLabelsPerSeries))
+
 			decision.Allowed = false
 			decision.Reason = "labels_per_series_exceeded"
 			decision.Code = 413
@@ -1578,6 +1668,10 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	// Rate limiting checks (existing logic)
 	if tenant.Info.Enforcement.EnforceSamplesPerSecond && tenant.SamplesBucket != nil {
 		if !tenant.SamplesBucket.Take(float64(samples)) {
+			// 🔧 NEW: Record limit violation metrics
+			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "samples_per_second_exceeded").Inc()
+			rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(samples))
+
 			decision.Allowed = false
 			decision.Reason = "samples_per_second_exceeded"
 			decision.Code = 429
@@ -1597,6 +1691,31 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	// 🔧 UPDATE: If request is allowed, update global series counts
 	if decision.Allowed {
 		rls.updateGlobalSeriesCounts(tenant.Info.ID, requestInfo)
+
+		// 🔧 NEW: Record current values for successful requests
+		rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSeries))
+		rls.metrics.LabelsCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedLabels))
+		rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSamples))
+		rls.metrics.BodySizeGauge.WithLabelValues(tenant.Info.ID).Set(float64(bodyBytes))
+
+		// Record per-metric series counts
+		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+			rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(seriesCount))
+		}
+
+		// Record limit thresholds
+		if tenant.Info.Limits.MaxSeriesPerRequest > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
+		}
+		if tenant.Info.Limits.MaxSeriesPerMetric > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
+		}
+		if tenant.Info.Limits.MaxLabelsPerSeries > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_labels_per_series").Set(float64(tenant.Info.Limits.MaxLabelsPerSeries))
+		}
+		if tenant.Info.Limits.MaxBodyBytes > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_body_bytes").Set(float64(tenant.Info.Limits.MaxBodyBytes))
+		}
 	}
 
 	return decision
@@ -1873,17 +1992,17 @@ func (rls *RLS) SetTenantLimits(tenantID string, newLimits limits.TenantLimits) 
 	tenant.Info.Limits = newLimits
 
 	// 🔧 FIX: Always apply default enforcement configuration (for both new and existing tenants)
-	tenant.Info.Enforcement = rls.config.DefaultEnforcement
-	rls.logger.Info().
-		Str("tenant_id", tenantID).
+		tenant.Info.Enforcement = rls.config.DefaultEnforcement
+		rls.logger.Info().
+			Str("tenant_id", tenantID).
 		Bool("is_new_tenant", isNewTenant).
-		Bool("enforce_samples_per_second", tenant.Info.Enforcement.EnforceSamplesPerSecond).
-		Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
-		Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
-		Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+			Bool("enforce_samples_per_second", tenant.Info.Enforcement.EnforceSamplesPerSecond).
+			Bool("enforce_max_body_bytes", tenant.Info.Enforcement.EnforceMaxBodyBytes).
+			Bool("enforce_max_labels_per_series", tenant.Info.Enforcement.EnforceMaxLabelsPerSeries).
+			Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
 		Bool("enforce_max_series_per_metric", tenant.Info.Enforcement.EnforceMaxSeriesPerMetric).
-		Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
-		Msg("RLS: applied default enforcement configuration")
+			Bool("enforce_bytes_per_second", tenant.Info.Enforcement.EnforceBytesPerSecond).
+			Msg("RLS: applied default enforcement configuration")
 
 	// Update buckets only for non-zero limits; nil buckets mean no enforcement for that dimension
 	if newLimits.SamplesPerSecond > 0 {
