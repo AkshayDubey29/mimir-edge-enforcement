@@ -121,18 +121,18 @@ serviceMonitor:
 # Redis configuration for shared state
 redis:
   # Redis deployment mode
-  mode: "sidecar"  # Options: "sidecar" (local per pod) or "external" (shared instance)
+  mode: "external"  # Options: "sidecar" (local per pod) or "external" (shared instance)
   
   # External Redis configuration (when mode: "external")
   external:
-    enabled: false  # Set to true to use external Redis
-    address: "redis-service:6379"  # External Redis service address
+    enabled: true  # Set to true to use external Redis
+    address: "redis-shared-service.redis-shared.svc.cluster.local:6379"  # External Redis service address
     password: ""  # Redis password if required
     database: 0  # Redis database number
   
   # Sidecar Redis configuration (when mode: "sidecar")
   sidecar:
-    enabled: true  # Set to false when using external Redis
+    enabled: false  # Set to false when using external Redis
     image:
       repository: redis
       tag: "7.2-alpine"
