@@ -731,7 +731,7 @@
   "style": "dark",
   "tags": [
     "rls",
-    "redis",
+    "performance",
     "monitoring"
   ],
   "templating": {
@@ -772,7 +772,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "RLS Performance Monitoring Dashboard",
-  "uid": "rls-redis-monitoring",
+  "uid": "rls-performance-monitoring",
   "version": 1,
   "weekStart": ""
 }
