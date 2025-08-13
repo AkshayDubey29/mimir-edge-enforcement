@@ -1,25 +1,108 @@
 {
-  "title": "RLS Latency & Errors",
+  "title": "RLS Latency & Errors - Enhanced",
+  "description": "Enhanced RLS performance and error monitoring dashboard",
   "panels": [
     {
       "type": "graph",
       "title": "AuthZ Check Duration (p95)",
+      "description": "95th percentile latency for authorization checks",
       "targets": [
-        { "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le))" }
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "legendFormat": "p95 - {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "AuthZ Check Duration (p99)",
+      "description": "99th percentile latency for authorization checks",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "legendFormat": "p99 - {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Traffic Flow Latency",
+      "description": "Latency of requests processed by RLS",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_traffic_flow_latency_seconds_bucket[5m])) by (le, tenant, decision))",
+          "legendFormat": "p95 - {{tenant}} - {{decision}}"
+        }
       ]
     },
     {
       "type": "graph",
       "title": "Body Parse Errors",
+      "description": "Rate of body parsing errors",
       "targets": [
-        { "expr": "rate(rls_body_parse_errors_total[5m])" }
+        {
+          "expr": "rate(rls_body_parse_errors_total[5m])",
+          "legendFormat": "Parse Errors"
+        }
       ]
     },
     {
       "type": "graph",
       "title": "Limits Stale Seconds",
+      "description": "How long the limits have been stale",
       "targets": [
-        { "expr": "rls_limits_stale_seconds" }
+        {
+          "expr": "rls_limits_stale_seconds",
+          "legendFormat": "Stale Duration"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Decision Errors by Reason",
+      "description": "Authorization decision errors by reason",
+      "targets": [
+        {
+          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Traffic Flow Errors",
+      "description": "Traffic flow errors by tenant and decision",
+      "targets": [
+        {
+          "expr": "rate(rls_traffic_flow_total{decision=\"deny\"}[5m]) by (tenant)",
+          "legendFormat": "Deny - {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Limit Violations",
+      "description": "Limit violations by reason",
+      "targets": [
+        {
+          "expr": "rate(rls_limit_violations_total[5m]) by (reason)",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "System Health Indicators",
+      "description": "System health and performance indicators",
+      "targets": [
+        {
+          "expr": "rls_limits_stale_seconds",
+          "legendFormat": "Limits Stale"
+        },
+        {
+          "expr": "rate(rls_body_parse_errors_total[5m])",
+          "legendFormat": "Parse Errors"
+        }
       ]
     }
   ]

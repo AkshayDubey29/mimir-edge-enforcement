@@ -1,8 +1,82 @@
 {
-  "title": "Envoy vs Mimir",
+  "title": "Envoy vs Mimir - Enhanced",
+  "description": "Enhanced comparison dashboard for Envoy and Mimir with comprehensive metrics",
   "panels": [
-    { "type": "graph", "title": "Envoy HTTP 429", "targets": [ { "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)" } ] },
-    { "type": "graph", "title": "RLS Decisions", "targets": [ { "expr": "sum(rate(rls_decisions_total[5m])) by (decision)" } ] }
+    {
+      "type": "graph",
+      "title": "Envoy HTTP Response Codes",
+      "description": "All HTTP response codes from Envoy",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"2.*\"}[5m])) by (response_code)",
+          "legendFormat": "2xx - {{response_code}}"
+        },
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*\"}[5m])) by (response_code)",
+          "legendFormat": "4xx - {{response_code}}"
+        },
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"5.*\"}[5m])) by (response_code)",
+          "legendFormat": "5xx - {{response_code}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Decisions by Type",
+      "description": "RLS authorization decisions",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_decisions_total[5m])) by (decision, tenant)",
+          "legendFormat": "{{decision}} - {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Rate Limiting Effectiveness",
+      "description": "Rate limiting decisions vs HTTP 429 responses",
+      "targets": [
+        {
+          "expr": "sum(rate(rls_decisions_total{decision=\"deny\"}[5m])) by (tenant)",
+          "legendFormat": "RLS Deny - {{tenant}}"
+        },
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)",
+          "legendFormat": "HTTP 429 - {{route}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "System Performance",
+      "description": "System performance metrics",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_downstream_rq_time_bucket[5m])) by (le))",
+          "legendFormat": "Envoy p95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "RLS p95"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Error Rates",
+      "description": "Error rates across the system",
+      "targets": [
+        {
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*|5.*\"}[5m])) by (response_code)",
+          "legendFormat": "HTTP {{response_code}}"
+        },
+        {
+          "expr": "rate(rls_body_parse_errors_total[5m])",
+          "legendFormat": "RLS Parse Errors"
+        }
+      ]
+    }
   ]
 }
 

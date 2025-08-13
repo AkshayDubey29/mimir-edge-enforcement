@@ -1,11 +1,79 @@
 {
-  "title": "Tenant Deny Spikes",
+  "title": "Tenant Deny Spikes - Enhanced",
+  "description": "Enhanced tenant monitoring with comprehensive deny and violation metrics",
   "panels": [
     {
       "type": "graph",
       "title": "Denies by Tenant (5m)",
+      "description": "Rate of denied requests by tenant",
       "targets": [
-        { "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (tenant)" }
+        {
+          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (tenant)",
+          "legendFormat": "{{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Limit Violations by Tenant",
+      "description": "Limit violations by tenant and reason",
+      "targets": [
+        {
+          "expr": "rate(rls_limit_violations_total[5m]) by (tenant, reason)",
+          "legendFormat": "{{tenant}} - {{reason}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Tenant Activity Overview",
+      "description": "Total activity by tenant (allow vs deny)",
+      "targets": [
+        {
+          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant, decision)",
+          "legendFormat": "{{tenant}} - {{decision}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Tenant Token Bucket Status",
+      "description": "Available tokens in tenant buckets",
+      "targets": [
+        {
+          "expr": "rls_tenant_bucket_tokens",
+          "legendFormat": "{{tenant}} - {{bucket_type}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Tenant Series and Labels",
+      "description": "Series and labels count by tenant",
+      "targets": [
+        {
+          "expr": "rls_series_count_gauge",
+          "legendFormat": "Series - {{tenant}}"
+        },
+        {
+          "expr": "rls_labels_count_gauge",
+          "legendFormat": "Labels - {{tenant}}"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "Tenant Request Size",
+      "description": "Request body size by tenant",
+      "targets": [
+        {
+          "expr": "rls_body_size_gauge",
+          "legendFormat": "Body Size - {{tenant}}"
+        },
+        {
+          "expr": "rate(rls_traffic_flow_bytes[5m]) by (tenant)",
+          "legendFormat": "Bytes/sec - {{tenant}}"
+        }
       ]
     }
   ]
