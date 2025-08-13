@@ -82,7 +82,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_traffic_flow_total[5m])"
+          "expr": "rate(rls_traffic_flow_total[5m])",
           "refId": "A"
         }
       ],
@@ -149,7 +149,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "histogram_quantile(0.95, rate(rls_authz_check_duration_seconds_bucket[5m])) * 1000"
+          "expr": "histogram_quantile(0.95, rate(rls_authz_check_duration_seconds_bucket[5m])) * 1000",
           "refId": "A"
         }
       ],
@@ -236,7 +236,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant)"
+          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant)",
           "refId": "A"
         }
       ],
@@ -303,7 +303,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_body_parse_errors_total[5m]) / rate(rls_traffic_flow_total[5m])"
+          "expr": "rate(rls_body_parse_errors_total[5m]) / rate(rls_traffic_flow_total[5m])",
           "refId": "A"
         }
       ],
@@ -370,7 +370,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_limits_stale_seconds"
+          "expr": "rls_limits_stale_seconds",
           "refId": "A"
         }
       ],
@@ -457,7 +457,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_labels_count_gauge"
+          "expr": "rls_labels_count_gauge",
           "refId": "A"
         }
       ],
@@ -544,7 +544,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_limit_threshold_gauge"
+          "expr": "rls_limit_threshold_gauge",
           "refId": "A"
         }
       ],
@@ -631,7 +631,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_limit_violations_total"
+          "expr": "rls_limit_violations_total",
           "refId": "A"
         }
       ],
@@ -718,7 +718,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_decisions_total"
+          "expr": "rls_decisions_total",
           "refId": "A"
         }
       ],
