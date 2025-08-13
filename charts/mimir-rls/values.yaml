@@ -84,6 +84,11 @@ redis:
 log:
   level: "info"
 
+# Mimir configuration for direct integration
+mimir:
+  host: "mock-mimir-distributor.mimir.svc.cluster.local"
+  port: "8080"
+
 # Deployment configuration
 replicaCount: 1
 
