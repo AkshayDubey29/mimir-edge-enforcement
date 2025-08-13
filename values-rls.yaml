@@ -85,17 +85,17 @@ replicaCount: 3  # Production: Multiple replicas for high availability
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-ultra-fast"  # Ultra-fast version for CI/CD compatibility
+  tag: "latest-scientific"  # Latest version with scientific notation support
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# Resource configuration - PRODUCTION OPTIMIZED
+# Resource configuration - TEMPORARILY REDUCED FOR TESTING
 resources:
   limits:
-    cpu: 2000m    # Reasonable CPU for production
-    memory: 2Gi   # Reasonable memory for production
+    cpu: 1000m    # Reduced for testing
+    memory: 1Gi   # Reduced for testing
   requests:
-    cpu: 500m     # Reasonable CPU requests
-    memory: 1Gi   # Reasonable memory requests
+    cpu: 250m     # Reduced for testing
+    memory: 512Mi # Reduced for testing
 
 # Security context
 securityContext:
@@ -153,7 +153,7 @@ affinity:
 
 # Service Monitor for Prometheus - Production
 serviceMonitor:
-  enabled: true  # Enable ServiceMonitor for production monitoring
+  enabled: false  # Disable ServiceMonitor to avoid CRD issues
   scrapeTimeout: 10s
   labels: {}
   annotations: {}
