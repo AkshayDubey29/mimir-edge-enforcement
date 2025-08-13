@@ -82,6 +82,10 @@ spec:
             {{- end }}
             {{- end }}
             
+            # Mimir configuration for direct integration
+            - "--mimir-host={{ .Values.mimir.host }}"
+            - "--mimir-port={{ .Values.mimir.port }}"
+            
             # Logging
             - "--log-level={{ .Values.log.level }}"
           livenessProbe:

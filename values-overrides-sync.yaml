@@ -1,8 +1,8 @@
-# Overrides-Sync Values with Real-Time Synchronization
-# Use this file for deploying Overrides-Sync with real-time updates
+# Overrides-Sync Values - Production Configuration
+# Use this file for deploying Overrides-Sync with production-ready settings
 
 # Deployment configuration
-replicaCount: 1
+replicaCount: 2  # Production: Multiple replicas for high availability
 
 nameOverride: ""
 fullnameOverride: ""
@@ -16,17 +16,17 @@ image:
 # Service configuration
 service:
   type: ClusterIP
-  port: 9090  # 🔧 FIX: Match the default metrics port in the application
+  port: 9090  # Metrics port
   annotations: {}
 
-# 🔧 OPTIMIZED: Enhanced resource configuration for real-time sync
+# Resource configuration - Production
 resources:
   limits:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 1000m
+    memory: 1Gi
   requests:
-    cpu: 100m
-    memory: 128Mi
+    cpu: 200m
+    memory: 256Mi
 
 # Security context
 securityContext:
@@ -44,12 +44,11 @@ podSecurityContext:
   runAsUser: 65532
   fsGroup: 65532
 
-# 🔧 OPTIMIZED: Pod annotations for real-time sync
+# Pod annotations - Production
 podAnnotations:
-  debug: "true"
-  logging: "debug"
-  sync_debug: "true"
-  real_time_sync: "true"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
 
 # Node selector
 nodeSelector: {}
@@ -57,8 +56,19 @@ nodeSelector: {}
 # Tolerations
 tolerations: []
 
-# Affinity
-affinity: {}
+# Affinity - Production ready
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - overrides-sync
+        topologyKey: kubernetes.io/hostname
 
 # Service Account
 serviceAccount:
@@ -76,9 +86,9 @@ rbac:
       resources: ["events"]
       verbs: ["create", "patch"]
 
-# 🔧 OPTIMIZED: Enhanced logging configuration for real-time sync
+# Logging configuration - Production
 log:
-  level: "debug"  # Set to debug for troubleshooting
+  level: "info"  # Production logging level
   format: "json"
 
 # Controller configuration
@@ -90,37 +100,33 @@ rls:
   host: "mimir-rls.mimir-edge-enforcement.svc.cluster.local"
   adminPort: "8082"
 
-# 🔧 OPTIMIZED: Real-time polling configuration for immediate updates
-pollFallbackSeconds: 2  # 🔧 FIX: Reduced to 2s for near real-time updates
+# Polling configuration - Production optimized
+pollFallbackSeconds: 5  # Production: 5s polling interval
 
-# 🔧 OPTIMIZED: Additional environment variables for real-time sync
+# Environment variables - Production
 env:
-  - name: DEBUG
-    value: "true"
   - name: LOG_LEVEL
-    value: "debug"
-  - name: SYNC_DEBUG
-    value: "true"
-  - name: REAL_TIME_SYNC
+    value: "info"
+  - name: METRICS_ENABLED
     value: "true"
 
-# 🔧 OPTIMIZED: Enhanced liveness and readiness probes for real-time sync
+# Liveness and readiness probes - Production
 livenessProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 10  # 🔧 OPTIMIZED: Reduced from 30s to 10s
-  periodSeconds: 10        # 🔧 OPTIMIZED: Reduced from 30s to 10s
-  timeoutSeconds: 5        # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
   failureThreshold: 3
 
 readinessProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 5   # 🔧 OPTIMIZED: Reduced from 10s to 5s
-  periodSeconds: 5         # 🔧 OPTIMIZED: Reduced from 10s to 5s
-  timeoutSeconds: 3        # 🔧 OPTIMIZED: Reduced from 5s to 3s
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
   failureThreshold: 3
 
 # Startup probe
@@ -128,18 +134,18 @@ startupProbe:
   httpGet:
     path: /healthz
     port: metrics
-  initialDelaySeconds: 5   # 🔧 OPTIMIZED: Reduced from 10s to 5s
-  periodSeconds: 5         # 🔧 OPTIMIZED: Reduced from 10s to 5s
-  timeoutSeconds: 3        # 🔧 OPTIMIZED: Reduced from 5s to 3s
-  failureThreshold: 10     # 🔧 OPTIMIZED: Reduced from 30 to 10
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
 
 # Horizontal Pod Autoscaler
 hpa:
-  enabled: false
-  minReplicas: 1
+  enabled: true
+  minReplicas: 2
   maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
 
 # Pod Disruption Budget
 pdb:
@@ -148,16 +154,16 @@ pdb:
 
 # Service Monitor for Prometheus
 serviceMonitor:
-  enabled: false
-  interval: 10s            # 🔧 OPTIMIZED: Reduced from 30s to 10s
-  scrapeTimeout: 5s        # 🔧 OPTIMIZED: Reduced from 10s to 5s
+  enabled: true  # Enable ServiceMonitor for production monitoring
+  interval: 30s
+  scrapeTimeout: 10s
   labels: {}
   annotations: {}
 
 # Image pull secrets
 imagePullSecrets: []
 
-# 🔧 OPTIMIZED: Network Policy for real-time sync access
+# Network Policy - Production
 networkPolicy:
   enabled: true
   ingress:
@@ -167,7 +173,7 @@ networkPolicy:
             name: monitoring
       ports:
       - protocol: TCP
-        port: 8080
+        port: 9090
   egress:
     - to:
       - namespaceSelector:
@@ -188,24 +194,24 @@ networkPolicy:
       - protocol: UDP
         port: 53
 
-# 🔧 OPTIMIZED: Additional configuration for real-time sync
+# Configuration - Production
 config:
   # Real-time mode
   realTimeSync: true
   
-  # Enhanced error reporting
+  # Error reporting
   errorReporting: true
   
-  # Detailed logging
-  detailedLogging: true
+  # Logging
+  detailedLogging: false  # Disable detailed logging for performance
   
-  # Connection pooling (already configured in controller)
+  # Connection pooling
   connectionPooling: true
   
-  # 🔧 OPTIMIZED: Real-time sync settings
+  # Sync settings - Production optimized
   sync:
-    watchTimeout: "5s"           # 🔧 OPTIMIZED: Reduced from 30s to 5s
-    retryDelay: "1s"             # 🔧 OPTIMIZED: Reduced from 5s to 1s
-    maxRetries: 3                # 🔧 OPTIMIZED: Reduced from 5 to 3
-    batchSize: 10                # 🔧 OPTIMIZED: Process tenants in batches
-    parallelSync: true           # 🔧 OPTIMIZED: Enable parallel tenant sync
+    watchTimeout: "30s"          # Production timeout
+    retryDelay: "5s"             # Production retry delay
+    maxRetries: 5                # Production retry count
+    batchSize: 50                # Production batch size
+    parallelSync: true           # Enable parallel tenant sync

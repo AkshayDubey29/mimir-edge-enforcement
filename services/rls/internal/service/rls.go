@@ -36,6 +36,8 @@ type RLSConfig struct {
 	FailureModeAllow   bool
 	StoreBackend       string
 	RedisAddress       string
+	MimirHost          string
+	MimirPort          string
 }
 
 // RLS represents the Rate Limit Service
@@ -1657,6 +1659,89 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	}
 
 	return decision
+}
+
+// 🔧 NEW: CheckRemoteWriteLimits checks limits for remote write requests
+func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEncoding string) limits.Decision {
+	start := time.Now()
+	defer func() {
+		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
+	}()
+
+	// Get tenant state
+	tenant := rls.getTenant(tenantID)
+
+	// Check if enforcement is enabled
+	if !tenant.Info.Enforcement.Enabled {
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "enforcement_disabled").Inc()
+		return limits.Decision{Allowed: true, Reason: "enforcement_disabled", Code: 200}
+	}
+
+	// Quick body size check
+	bodyBytes := int64(len(body))
+	if bodyBytes < 100 {
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "small_request").Inc()
+		return limits.Decision{Allowed: true, Reason: "small_request", Code: 200}
+	}
+
+	// Skip parsing for very large requests
+	if bodyBytes > 10*1024*1024 { // 10MB limit
+		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
+		return limits.Decision{Allowed: false, Reason: "request body too large", Code: 413}
+	}
+
+	// Parse request for limits checking
+	result, err := parser.ParseRemoteWriteRequest(body, contentEncoding)
+	if err != nil {
+		rls.metrics.BodyParseErrors.Inc()
+
+		// Use fallback for parsing failures
+		fallbackSamples := rls.calculateFallbackSamples(body, contentEncoding)
+		fallbackRequestInfo := &limits.RequestInfo{
+			ObservedSamples:    fallbackSamples,
+			ObservedSeries:     1,
+			ObservedLabels:     10,
+			MetricSeriesCounts: make(map[string]int64),
+		}
+
+		decision := rls.checkLimits(tenant, fallbackSamples, bodyBytes, fallbackRequestInfo)
+		if !decision.Allowed {
+			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_parse_failed_limit_exceeded").Inc()
+			return decision
+		}
+
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "body_parse_failed_allow").Inc()
+		return limits.Decision{Allowed: true, Reason: "body_parse_failed_allow", Code: 200}
+	}
+
+	// Extract request info
+	requestInfo := &limits.RequestInfo{
+		ObservedSamples:    result.SamplesCount,
+		ObservedSeries:     result.SeriesCount,
+		ObservedLabels:     result.LabelsCount,
+		MetricSeriesCounts: result.MetricSeriesCounts,
+	}
+
+	// Check limits
+	decision := rls.checkLimits(tenant, result.SamplesCount, bodyBytes, requestInfo)
+
+	if decision.Allowed {
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "allowed").Inc()
+	} else {
+		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, decision.Reason).Inc()
+	}
+
+	return decision
+}
+
+// 🔧 NEW: GetMimirHost returns the Mimir host from config
+func (rls *RLS) GetMimirHost() string {
+	return rls.config.MimirHost
+}
+
+// 🔧 NEW: GetMimirPort returns the Mimir port from config
+func (rls *RLS) GetMimirPort() string {
+	return rls.config.MimirPort
 }
 
 // getTenantGlobalSeriesCount returns the current global series count for a tenant
