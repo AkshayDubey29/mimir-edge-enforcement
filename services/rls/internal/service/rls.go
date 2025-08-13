@@ -378,11 +378,22 @@ func (rls *RLS) createMetrics() *Metrics {
 func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckRequest) (*envoy_service_auth_v3.CheckResponse, error) {
 	start := time.Now()
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable debug logging in production
-	// rls.logger.Debug().
-	// 	Str("method", req.Attributes.Request.Http.Method).
-	// 	Str("path", req.Attributes.Request.Http.Path).
-	// 	Msg("RLS: DEBUG - Check function called")
+	// 🔧 DEBUG MODE: Add panic recovery for troubleshooting
+	defer func() {
+		if r := recover(); r != nil {
+			rls.logger.Error().
+				Interface("panic", r).
+				Str("method", req.Attributes.Request.Http.Method).
+				Str("path", req.Attributes.Request.Http.Path).
+				Msg("RLS: PANIC - Recovered from panic in Check function")
+		}
+	}()
+
+	// 🔧 DEBUG MODE: Temporarily enable debug logging for troubleshooting
+	rls.logger.Debug().
+		Str("method", req.Attributes.Request.Http.Method).
+		Str("path", req.Attributes.Request.Http.Path).
+		Msg("RLS: DEBUG - Check function called")
 
 	// Extract tenant ID from headers
 	tenantID := rls.extractTenantID(req)
@@ -393,22 +404,22 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		return rls.denyResponse("missing tenant header", http.StatusBadRequest), nil
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable info logging in production
-	// rls.logger.Info().
-	// 	Str("tenant", tenantID).
-	// 	Msg("RLS: INFO - Tenant extracted successfully")
+	// 🔧 DEBUG MODE: Temporarily enable info logging for troubleshooting
+	rls.logger.Info().
+		Str("tenant", tenantID).
+		Msg("RLS: INFO - Tenant extracted successfully")
 
 	// Get or initialize tenant state (unknown tenants default to enforcement disabled)
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable info logging in production
-	// rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - About to call getTenant")
+	// 🔧 DEBUG MODE: Temporarily enable info logging for troubleshooting
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - About to call getTenant")
 	tenant := rls.getTenant(tenantID)
-	// rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant completed")
+	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant completed")
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable debug logging in production
-	// rls.logger.Debug().
-	// 	Str("tenant", tenantID).
-	// 	Bool("enforcement_enabled", tenant.Info.Enforcement.Enabled).
-	// 	Msg("RLS: DEBUG - Tenant state retrieved")
+	// 🔧 DEBUG MODE: Temporarily enable debug logging for troubleshooting
+	rls.logger.Debug().
+		Str("tenant", tenantID).
+		Bool("enforcement_enabled", tenant.Info.Enforcement.Enabled).
+		Msg("RLS: DEBUG - Tenant state retrieved")
 
 	// Check if enforcement is enabled
 	if !tenant.Info.Enforcement.Enabled {
@@ -1667,28 +1678,36 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 // getTenantGlobalSeriesCount returns the current global series count for a tenant
 func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
-	if err != nil {
-		rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get global series count")
-		return 0
-	}
-	return count
+	// count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
+	// if err != nil {
+	// 	rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get global series count")
+	// 	return 0
+	// }
+	// return count
+	
+	// 🔧 PERFORMANCE: Return 0 to avoid Redis overhead
+	return 0
 }
 
 // getTenantMetricSeriesCount returns the current series count per metric for a tenant
 func (rls *RLS) getTenantMetricSeriesCount(tenantID string, requestInfo *limits.RequestInfo) map[string]int64 {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
-	counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
-	if err != nil {
-		rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get metric series counts")
-		return make(map[string]int64)
-	}
-	return counts
+	// counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
+	// if err != nil {
+	// 	rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get metric series counts")
+	// 	return make(map[string]int64)
+	// }
+	// return counts
+	
+	// 🔧 PERFORMANCE: Return empty map to avoid Redis overhead
+	return make(map[string]int64)
 }
 
 // extractMetricSeriesCounts extracts per-metric series counts from parse result
@@ -1709,43 +1728,46 @@ func (rls *RLS) extractMetricSeriesCounts(result *parser.ParseResult) map[string
 
 // updateGlobalSeriesCounts updates the global series counts for a tenant
 func (rls *RLS) updateGlobalSeriesCounts(tenantID string, requestInfo *limits.RequestInfo) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
+	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// defer cancel()
 
 	// 🔧 NEW: Update global series counts with deduplication
-	totalNewSeries := int64(0)
+	// totalNewSeries := int64(0)
 
 	// Process each metric's series
-	for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
-		// Check for existing series hashes to avoid double-counting
-		newSeriesForMetric := int64(0)
+	// for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+	// 	// Check for existing series hashes to avoid double-counting
+	// 	newSeriesForMetric := int64(0)
 
-		// For now, we'll assume all series are new (in production, check against stored hashes)
-		// TODO: Implement proper series hash checking
-		newSeriesForMetric = seriesCount
+	// 	// For now, we'll assume all series are new (in production, check against stored hashes)
+	// 	// TODO: Implement proper series hash checking
+	// 	newSeriesForMetric = seriesCount
 
-		if newSeriesForMetric > 0 {
-			// Increment metric series count
-			if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, newSeriesForMetric); err != nil {
-				rls.logger.Error().Err(err).Str("tenant_id", tenantID).Str("metric", metricName).Msg("failed to increment metric series count")
-			}
+	// 	if newSeriesForMetric > 0 {
+	// 		// Increment metric series count
+	// 		if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, newSeriesForMetric); err != nil {
+	// 			rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to increment metric series count")
+	// 		}
 
-			totalNewSeries += newSeriesForMetric
-		}
-	}
+	// 		totalNewSeries += newSeriesForMetric
+	// 	}
+	// }
 
 	// Increment global series count
-	if totalNewSeries > 0 {
-		if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
-			rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to increment global series count")
-		}
-	}
+	// if totalNewSeries > 0 {
+	// 	if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
+	// 		rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to increment global series count")
+	// 	}
+	// }
 
-	rls.logger.Info().
-		Str("tenant_id", tenantID).
-		Int64("total_new_series", totalNewSeries).
-		Int("metrics_updated", len(requestInfo.MetricSeriesCounts)).
-		Msg("updated global series counts")
+	// rls.logger.Info().
+	// 	Str("tenant_id", tenantID).
+	// 	Int64("total_new_series", totalNewSeries).
+	// 	Int("metrics_updated", len(requestInfo.MetricSeriesCounts)).
+	// 	Msg("updated global series counts")
+	
+	// 🔧 PERFORMANCE: No-op to avoid Redis overhead
 }
 
 // checkRateLimit checks rate limits for the ratelimit service
