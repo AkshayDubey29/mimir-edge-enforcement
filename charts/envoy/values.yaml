@@ -1,8 +1,8 @@
-# Default values for mimir-envoy
+# Default values for mimir-envoy - Production Configuration
 # This is a YAML-formatted file.
 
 # Deployment configuration
-replicaCount: 1
+replicaCount: 3  # Production: Multiple replicas for high availability
 
 nameOverride: ""
 fullnameOverride: ""
@@ -36,42 +36,39 @@ rls:
 
 # External authorization configuration
 extAuthz:
-  maxRequestBytes: 4194304  # 4 MiB (this provides buffer management for requests)
-  failureModeAllow: false   # 🔧 FIX: Set to false to properly enforce authorization
-  # 🔧 FIX: Timeout settings to prevent hanging requests
-  timeout: "5s"             # gRPC service timeout
+  maxRequestBytes: 10485760  # 10 MiB - Increased for large payloads
+  failureModeAllow: true     # Production: Allow requests when authorization fails
+  timeout: "10s"             # gRPC service timeout
 
 # Rate limiting configuration
 rateLimit:
   failureModeDeny: true
   domain: "mimir_remote_write"
-  # 🔧 FIX: gRPC timeout for rate limit service
-  grpcTimeout: "2s"         # gRPC call timeout
+  grpcTimeout: "5s"          # gRPC call timeout
 
 # Proxy configuration
 proxy:
   upstreamTimeout: "30s"
-  # HTTP protocol settings (fixes 426 Upgrade Required errors)
+  # HTTP protocol settings
   httpProtocol:
-    # Accept HTTP/1.0 and HTTP/1.1 from downstream (NGINX)
+    # Accept HTTP/1.0 and HTTP/1.1 from downstream
     acceptHttp10: true
-    # Use remote address from NGINX proxy
+    # Use remote address from proxy
     useRemoteAddress: true
     # Number of trusted hops for X-Forwarded-For
     xffNumTrustedHops: 1
 
-# 🔧 DEBUG: Enhanced logging configuration for troubleshooting
+# Logging configuration - Production
 logging:
-  level: "trace"                # 🔧 DEBUG: Set to trace for maximum debugging
-  enableAccessLogs: true        # Enable HTTP access logs
-  enableDebugLogs: true         # 🔧 DEBUG: Enable debug logging for filters
-  enableDetailedLogs: true      # 🔧 DEBUG: Enable detailed filter logs
+  level: "info"                # Production logging level
+  enableAccessLogs: true       # Enable HTTP access logs
+  enableDebugLogs: false       # Disable debug logging for performance
+  enableDetailedLogs: false    # Disable detailed filter logs for performance
 
 # Resource limits and overload management
 resourceLimits:
-  # 🔧 FIX: Maximum heap size (should be ~75% of container memory limit)
-  # For 512Mi container limit: ~384MB (75% of 512Mi = 384MB)
-  maxHeapSizeBytes: 402653184  # 384 MiB (75% of 512Mi container limit)
+  # Maximum heap size (should be ~75% of container memory limit)
+  maxHeapSizeBytes: 1536MB     # 1.5 GiB (75% of 2Gi container limit)
   
   # Heap-based overload thresholds (0.0 - 1.0)
   shrinkHeapThreshold: 0.8           # Start shrinking heap at 80%
@@ -89,11 +86,11 @@ serviceAccount:
   annotations: {}
   name: ""
 
-# 🔧 DEBUG: Pod annotations for debugging
+# Pod annotations - Production
 podAnnotations:
-  debug: "true"
-  logging: "debug"
-  ext_authz_debug: "true"
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9901"
+  prometheus.io/path: "/stats"
 
 podSecurityContext:
   runAsNonRoot: true
@@ -109,33 +106,45 @@ securityContext:
     drop:
       - ALL
 
-# 🔧 DEBUG: Enhanced resource configuration for debugging
+# Resource configuration - Production
 resources:
   limits:
-    cpu: 1000m
-    memory: 512Mi
+    cpu: 2000m
+    memory: 2Gi
   requests:
-    cpu: 200m
-    memory: 256Mi
+    cpu: 500m
+    memory: 1Gi
 
 nodeSelector: {}
 
 tolerations: []
 
-affinity: {}
+# Affinity - Production ready
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - mimir-envoy
+        topologyKey: kubernetes.io/hostname
 
 # Horizontal Pod Autoscaler
 hpa:
   enabled: true
-  minReplicas: 1
+  minReplicas: 3
   maxReplicas: 10
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 70
 
 # Pod Disruption Budget
 pdb:
   enabled: true
-  minAvailable: 1
+  minAvailable: 2  # Ensure at least 2 pods are always available
 
 # Network Policy
 networkPolicy:
@@ -143,7 +152,7 @@ networkPolicy:
 
 # Service Monitor for Prometheus
 serviceMonitor:
-  enabled: false  # 🔧 DEBUG: Disabled for testing without Prometheus Operator
+  enabled: true  # Enable ServiceMonitor for production monitoring
   interval: 30s
   scrapeTimeout: 10s
 
@@ -171,4 +180,33 @@ env: []
 volumeMounts: []
 
 # Additional volumes
-volumes: [] 
+volumes: []
+
+# Liveness and readiness probes - Production
+livenessProbe:
+  httpGet:
+    path: /ready
+    port: admin
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: admin
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /ready
+    port: admin
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30 

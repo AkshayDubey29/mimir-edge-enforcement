@@ -26,6 +26,9 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
+	"bytes"
+	"io"
+
 	envoy_service_auth_v3 "github.com/envoyproxy/go-control-plane/envoy/service/auth/v3"
 	envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
 )
@@ -63,6 +66,10 @@ var (
 	storeBackend = flag.String("store-backend", "memory", "Store backend (memory or redis)")
 	redisAddress = flag.String("redis-address", "localhost:6379", "Redis server address")
 
+	// Mimir configuration for direct integration
+	mimirHost = flag.String("mimir-host", "mock-mimir-distributor.mimir.svc.cluster.local", "Mimir distributor host")
+	mimirPort = flag.String("mimir-port", "8080", "Mimir distributor port")
+
 	// Logging
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
@@ -86,6 +93,8 @@ func main() {
 		FailureModeAllow:   *failureModeAllow,
 		StoreBackend:       *storeBackend,
 		RedisAddress:       *redisAddress,
+		MimirHost:          *mimirHost,
+		MimirPort:          *mimirPort,
 		DefaultLimits: limits.TenantLimits{
 			SamplesPerSecond:    *defaultSamplesPerSecond,
 			BurstPercent:        *defaultBurstPercent,
@@ -373,6 +382,9 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 	router.HandleFunc("/api/test", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"message": "test route works"})
 	}).Methods("GET")
+
+	// 🔧 NEW: Remote write endpoint for direct integration
+	router.HandleFunc("/api/v1/push", handleRemoteWrite(rls)).Methods("POST")
 
 	// 🔧 PERFORMANCE FIX: Remove expensive route walking on startup
 	// Routes are now only logged at debug level if needed
@@ -1176,5 +1188,73 @@ func handleFlowTimeline(rls *service.RLS) http.HandlerFunc {
 		}
 
 		writeJSON(w, http.StatusOK, response)
+	}
+}
+
+// 🔧 NEW: Remote write handler for direct integration
+func handleRemoteWrite(rls *service.RLS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Extract tenant ID from header
+		tenantID := r.Header.Get("X-Scope-OrgID")
+		if tenantID == "" {
+			http.Error(w, "missing X-Scope-OrgID header", http.StatusBadRequest)
+			return
+		}
+
+		// Read request body
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		defer r.Body.Close()
+
+		// Check limits using RLS logic
+		decision := rls.CheckRemoteWriteLimits(tenantID, body, r.Header.Get("Content-Encoding"))
+
+		if !decision.Allowed {
+			// Return appropriate error based on decision
+			http.Error(w, decision.Reason, int(decision.Code))
+			return
+		}
+
+		// Forward to Mimir if limits are not exceeded
+		mimirURL := fmt.Sprintf("http://%s:%s/api/v1/push", rls.GetMimirHost(), rls.GetMimirPort())
+
+		// Create request to Mimir
+		mimirReq, err := http.NewRequest("POST", mimirURL, bytes.NewReader(body))
+		if err != nil {
+			http.Error(w, "failed to create request to Mimir", http.StatusInternalServerError)
+			return
+		}
+
+		// Copy headers
+		for key, values := range r.Header {
+			for _, value := range values {
+				mimirReq.Header.Add(key, value)
+			}
+		}
+
+		// Forward to Mimir
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Do(mimirReq)
+		if err != nil {
+			http.Error(w, "failed to forward request to Mimir", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		// Copy response
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+
+		// Log successful forwarding
+		log.Info().
+			Str("tenant", tenantID).
+			Dur("duration", time.Since(start)).
+			Int("status", resp.StatusCode).
+			Msg("successfully forwarded request to Mimir")
 	}
 }

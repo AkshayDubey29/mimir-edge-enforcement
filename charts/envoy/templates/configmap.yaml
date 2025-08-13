@@ -92,26 +92,10 @@ data:
                       downstream_local_address="%DOWNSTREAM_LOCAL_ADDRESS%"
                       downstream_remote_address="%DOWNSTREAM_REMOTE_ADDRESS%"
               http_filters:
-              # 🔧 FIX: Re-enabled ext_authz filter with improved gRPC configuration
-              - name: envoy.filters.http.ext_authz
-                typed_config:
-                  "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
-                  transport_api_version: V3
-                  {{- if not .Values.extAuthz.disableBodyParsing }}
-                  with_request_body:
-                    max_request_bytes: {{ .Values.extAuthz.maxRequestBytes | int }}
-                    allow_partial_message: false
-                  {{- end }}
-                  failure_mode_allow: {{ .Values.extAuthz.failureModeAllow }}
-                  include_peer_certificate: {{ .Values.extAuthz.includePeerCertificate | default true }}
-                  metadata_context_namespaces:
-                  - "envoy.filters.http.ext_authz"
-                  status_on_error:
-                    code: 500
-                  grpc_service:
-                    envoy_grpc:
-                      cluster_name: rls_ext_authz
-                    timeout: {{ .Values.extAuthz.timeout | default "5s" }}
+              # 🔧 REMOVED: ext_authz filter for direct integration
+              # Ext authz adds complexity and latency for internal applications
+              # Direct integration with RLS will be implemented instead
+              
               # 🔧 FIX: Re-enabled rate limit filter with improved gRPC configuration
               - name: envoy.filters.http.ratelimit
                 typed_config:
@@ -134,11 +118,11 @@ data:
                 - name: local_service
                   domains: ["*"]
                   routes:
-                  # 🔧 FIX: Remote write endpoint (metrics ingestion)
+                  # 🔧 FIX: Remote write endpoint (metrics ingestion) - Direct to RLS
                   - match:
                       prefix: "{{ .Values.remoteWrite.path }}"
                     route:
-                      cluster: mimir_distributor
+                      cluster: rls_remote_write
                       timeout: {{ .Values.proxy.upstreamTimeout }}
 
                   
@@ -414,14 +398,6 @@ data:
           healthy_threshold: 2
           grpc_health_check:
             service_name: "envoy.service.ratelimit.v3.RateLimitService"
-        # 🔧 FIX: Configure connection pool for better reliability
-        circuit_breakers:
-          thresholds:
-          - priority: DEFAULT
-            max_connections: 50
-            max_pending_requests: 25
-            max_requests: 100
-            max_retries: 3
         load_assignment:
           cluster_name: rls_ratelimit
           endpoints:
@@ -431,4 +407,52 @@ data:
                   socket_address:
                     address: {{ .Values.rls.host }}
                     port_value: {{ .Values.rls.rateLimitPort | int }}
+
+      # 🔧 NEW: RLS Remote Write cluster for direct integration
+      - name: rls_remote_write
+        connect_timeout: 5s
+        type: STRICT_DNS
+        lb_policy: ROUND_ROBIN
+        # 🔧 FIX: Use HTTP/1.1 for RLS remote write (RLS uses HTTP/1.1)
+        typed_extension_protocol_options:
+          envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+            "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+            explicit_http_config:
+              http_protocol_options: {}  # HTTP/1.1
+        # 🔧 FIX: Add health checks for RLS remote write service
+        health_checks:
+        - timeout: 5s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/readyz"
+            expected_statuses:
+            - start: 200
+              end: 299
+        # 🔧 FIX: Configure connection pool for reliability
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 100
+            max_pending_requests: 50
+            max_requests: 200
+            max_retries: 3
+        load_assignment:
+          cluster_name: rls_remote_write
+          endpoints:
+          - lb_endpoints:
+            - endpoint:
+                address:
+                  socket_address:
+                    address: {{ .Values.rls.host }}
+                    port_value: 8082  # RLS admin port (HTTP)
+        # 🔧 FIX: Configure connection pool for better reliability
+        circuit_breakers:
+          thresholds:
+          - priority: DEFAULT
+            max_connections: 50
+            max_pending_requests: 25
+            max_requests: 100
+            max_retries: 3
 {{- end }} 
