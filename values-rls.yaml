@@ -43,7 +43,7 @@ enforcement:
 
 # Store configuration
 store:
-  backend: "memory"  # Temporarily switch to memory for performance testing
+  backend: "redis"  # Required for multi-pod deployment with shared state
 
 # Logging configuration - DEBUG MODE (Temporarily enabled for troubleshooting)
 log:
@@ -77,7 +77,7 @@ replicaCount: 1  # Reduced to 1 for resource constraints
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-performance-optimized"  # Performance optimized version
+  tag: "latest-redis-optimized"  # Redis optimized version with global series tracking
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
 # Resource configuration - Production (Reduced for cluster capacity)
