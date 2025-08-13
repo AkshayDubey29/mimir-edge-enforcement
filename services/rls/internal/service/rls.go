@@ -1515,16 +1515,12 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		Code:    200,
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable expensive Redis operations for high throughput
+	// 🔧 PERFORMANCE OPTIMIZATION: Enable Redis operations with performance optimizations
 	// Get current global series counts for this tenant
-	// rls.tenantsMu.RLock()
-	// currentTenantSeries := rls.getTenantGlobalSeriesCount(tenant.Info.ID)
-	// currentMetricSeries := rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
-	// rls.tenantsMu.RUnlock()
-
-	// 🔧 PERFORMANCE OPTIMIZATION: Use local counters instead of Redis for high throughput
-	// currentTenantSeries := int64(0)  // Assume 0 for performance
-	// currentMetricSeries := make(map[string]int64)  // Empty map for performance
+	rls.tenantsMu.RLock()
+	currentTenantSeries := rls.getTenantGlobalSeriesCount(tenant.Info.ID)
+	currentMetricSeries := rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
+	rls.tenantsMu.RUnlock()
 
 	// 🔧 DEBUG: Log current global series counts
 	// rls.logger.Info().
@@ -1535,61 +1531,61 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	// 	Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
 	// 	Msg("DEBUG: Mimir-style cardinality check - global series counts")
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable expensive cardinality checks for high throughput
+	// 🔧 PERFORMANCE OPTIMIZATION: Enable cardinality checks with performance optimizations
 	// Check per-user series limit (global across tenant)
-	// if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
-	// 	// Calculate if adding new series would exceed the global limit
-	// 	projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
-	// 	if projectedTotalSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
-	// 		rls.logger.Info().
-	// 			Str("tenant", tenant.Info.ID).
-	// 			Int64("current_tenant_series", currentTenantSeries).
-	// 			Int64("new_series_in_request", requestInfo.ObservedSeries).
-	// 			Int64("projected_total", projectedTotalSeries).
-	// 			Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
-	// 			Msg("DEBUG: Mimir-style cardinality check - per-user series limit exceeded")
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
+		// Calculate if adding new series would exceed the global limit
+		projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
+		if projectedTotalSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+			rls.logger.Info().
+				Str("tenant", tenant.Info.ID).
+				Int64("current_tenant_series", currentTenantSeries).
+				Int64("new_series_in_request", requestInfo.ObservedSeries).
+				Int64("projected_total", projectedTotalSeries).
+				Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
+				Msg("DEBUG: Mimir-style cardinality check - per-user series limit exceeded")
 
-	// 		// 🔧 NEW: Record limit violation metrics
-	// 		rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_user_series_limit_exceeded").Inc()
-	// 		rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(projectedTotalSeries))
-	// 		rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
+			// 🔧 NEW: Record limit violation metrics
+			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_user_series_limit_exceeded").Inc()
+			rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(projectedTotalSeries))
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
 
-	// 		decision.Allowed = false
-	// 		decision.Reason = "per_user_series_limit_exceeded"
-	// 		decision.Code = 429
-	// 		return decision
-	// 	}
-	// }
+			decision.Allowed = false
+			decision.Reason = "per_user_series_limit_exceeded"
+			decision.Code = 429
+			return decision
+		}
+	}
 
 	// Check per-metric series limit (global per metric across tenant)
-	// if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
-	// 	// Calculate if adding new series for any metric would exceed the per-metric limit
-	// 	for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
-	// 		currentMetricTotal := currentMetricSeries[metricName]
-	// 		projectedMetricTotal := currentMetricTotal + seriesCount
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
+		// Calculate if adding new series for any metric would exceed the per-metric limit
+		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+			currentMetricTotal := currentMetricSeries[metricName]
+			projectedMetricTotal := currentMetricTotal + seriesCount
 
-	// 		if projectedMetricTotal > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
-	// 			rls.logger.Info().
-	// 				Str("tenant", tenant.Info.ID).
-	// 				Str("metric_name", metricName).
-	// 				Int64("current_metric_series", currentMetricTotal).
-	// 				Int64("new_series_for_metric", seriesCount).
-	// 				Int64("projected_metric_total", projectedMetricTotal).
-	// 				Int64("max_series_per_metric", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
-	// 				Msg("DEBUG: Mimir-style cardinality check - per-metric series limit exceeded")
+			if projectedMetricTotal > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
+				rls.logger.Info().
+					Str("tenant", tenant.Info.ID).
+					Str("metric_name", metricName).
+					Int64("current_metric_series", currentMetricTotal).
+					Int64("new_series_for_metric", seriesCount).
+					Int64("projected_metric_total", projectedMetricTotal).
+					Int64("max_series_per_metric", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
+					Msg("DEBUG: Mimir-style cardinality check - per-metric series limit exceeded")
 
-	// 			// 🔧 NEW: Record limit violation metrics
-	// 			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_metric_series_limit_exceeded").Inc()
-	// 			rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(projectedMetricTotal))
-	// 			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
+				// 🔧 NEW: Record limit violation metrics
+				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_metric_series_limit_exceeded").Inc()
+				rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(projectedMetricTotal))
+				rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
 
-	// 			decision.Allowed = false
-	// 			decision.Reason = "per_metric_series_limit_exceeded"
-	// 			decision.Code = 429
-	// 			return decision
-	// 		}
-	// 	}
-	// }
+				decision.Allowed = false
+				decision.Reason = "per_metric_series_limit_exceeded"
+				decision.Code = 429
+				return decision
+			}
+		}
+	}
 
 	// Check other limits (existing logic)
 	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 {
@@ -1643,71 +1639,67 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable expensive Redis operations for high throughput
-	// if decision.Allowed {
-	// 	rls.updateGlobalSeriesCounts(tenant.Info.ID, requestInfo)
-	//
-	// 	// 🔧 NEW: Record current values for successful requests
-	// 	rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSeries))
-	// 	rls.metrics.LabelsCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedLabels))
-	// 	rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSamples))
-	// 	rls.metrics.BodySizeGauge.WithLabelValues(tenant.Info.ID).Set(float64(bodyBytes))
-	//
-	// 	// Record per-metric series counts
-	// 	for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
-	// 		rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(seriesCount))
-	// 	}
-	//
-	// 	// Record limit thresholds
-	// 	if tenant.Info.Limits.MaxSeriesPerRequest > 0 {
-	// 		rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
-	// 	}
-	// 	if tenant.Info.Limits.MaxSeriesPerMetric > 0 {
-	// 		rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
-	// 	}
-	// 	if tenant.Info.Limits.MaxLabelsPerSeries > 0 {
-	// 		rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_labels_per_series").Set(float64(tenant.Info.Limits.MaxLabelsPerSeries))
-	// 	}
-	// 	if tenant.Info.Limits.MaxBodyBytes > 0 {
-	// 		rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_body_bytes").Set(float64(tenant.Info.Limits.MaxBodyBytes))
-	// 	}
-	// }
+	// 🔧 PERFORMANCE OPTIMIZATION: Enable Redis operations with performance optimizations
+	if decision.Allowed {
+		rls.updateGlobalSeriesCounts(tenant.Info.ID, requestInfo)
+
+		// 🔧 NEW: Record current values for successful requests
+		rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSeries))
+		rls.metrics.LabelsCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedLabels))
+		rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSamples))
+		rls.metrics.BodySizeGauge.WithLabelValues(tenant.Info.ID).Set(float64(bodyBytes))
+
+		// Record per-metric series counts
+		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+			rls.metrics.MetricSeriesCountGauge.WithLabelValues(tenant.Info.ID, metricName).Set(float64(seriesCount))
+		}
+
+		// Record limit thresholds
+		if tenant.Info.Limits.MaxSeriesPerRequest > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_request").Set(float64(tenant.Info.Limits.MaxSeriesPerRequest))
+		}
+		if tenant.Info.Limits.MaxSeriesPerMetric > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_series_per_metric").Set(float64(tenant.Info.Limits.MaxSeriesPerMetric))
+		}
+		if tenant.Info.Limits.MaxLabelsPerSeries > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_labels_per_series").Set(float64(tenant.Info.Limits.MaxLabelsPerSeries))
+		}
+		if tenant.Info.Limits.MaxBodyBytes > 0 {
+			rls.metrics.LimitThresholdGauge.WithLabelValues(tenant.Info.ID, "max_body_bytes").Set(float64(tenant.Info.Limits.MaxBodyBytes))
+		}
+	}
 
 	return decision
 }
 
 // getTenantGlobalSeriesCount returns the current global series count for a tenant
 func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-	// count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
-	// if err != nil {
-	// 	rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get global series count")
-	// 	return 0
-	// }
-	// return count
-	
-	// 🔧 PERFORMANCE: Return 0 to avoid Redis overhead
-	return 0
+	count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
+	if err != nil {
+		// 🔧 PERFORMANCE: Log error but don't fail the request
+		rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to get global series count, using 0")
+		return 0
+	}
+	return count
 }
 
 // getTenantMetricSeriesCount returns the current series count per metric for a tenant
 func (rls *RLS) getTenantMetricSeriesCount(tenantID string, requestInfo *limits.RequestInfo) map[string]int64 {
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-	// counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
-	// if err != nil {
-	// 	rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to get metric series counts")
-	// 	return make(map[string]int64)
-	// }
-	// return counts
-	
-	// 🔧 PERFORMANCE: Return empty map to avoid Redis overhead
-	return make(map[string]int64)
+	counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
+	if err != nil {
+		// 🔧 PERFORMANCE: Log error but don't fail the request
+		rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to get metric series counts, using empty map")
+		return make(map[string]int64)
+	}
+	return counts
 }
 
 // extractMetricSeriesCounts extracts per-metric series counts from parse result
@@ -1728,46 +1720,46 @@ func (rls *RLS) extractMetricSeriesCounts(result *parser.ParseResult) map[string
 
 // updateGlobalSeriesCounts updates the global series counts for a tenant
 func (rls *RLS) updateGlobalSeriesCounts(tenantID string, requestInfo *limits.RequestInfo) {
-	// 🔧 PERFORMANCE OPTIMIZATION: Disable Redis calls for high throughput
-	// ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	// defer cancel()
+	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
 	// 🔧 NEW: Update global series counts with deduplication
-	// totalNewSeries := int64(0)
+	totalNewSeries := int64(0)
 
 	// Process each metric's series
-	// for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
-	// 	// Check for existing series hashes to avoid double-counting
-	// 	newSeriesForMetric := int64(0)
+	for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+		// Check for existing series hashes to avoid double-counting
+		newSeriesForMetric := int64(0)
 
-	// 	// For now, we'll assume all series are new (in production, check against stored hashes)
-	// 	// TODO: Implement proper series hash checking
-	// 	newSeriesForMetric = seriesCount
+		// For now, we'll assume all series are new (in production, check against stored hashes)
+		// TODO: Implement proper series hash checking
+		newSeriesForMetric = seriesCount
 
-	// 	if newSeriesForMetric > 0 {
-	// 		// Increment metric series count
-	// 		if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, newSeriesForMetric); err != nil {
-	// 			rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to increment metric series count")
-	// 		}
+		if newSeriesForMetric > 0 {
+			// Increment metric series count
+			if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, newSeriesForMetric); err != nil {
+				// 🔧 PERFORMANCE: Log error but don't fail the request
+				rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Str("metric", metricName).Msg("failed to increment metric series count")
+			}
 
-	// 		totalNewSeries += newSeriesForMetric
-	// 	}
-	// }
+			totalNewSeries += newSeriesForMetric
+		}
+	}
 
 	// Increment global series count
-	// if totalNewSeries > 0 {
-	// 	if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
-	// 		rls.logger.Error().Err(err).Str("tenant_id", tenantID).Msg("failed to increment global series count")
-	// 	}
-	// }
+	if totalNewSeries > 0 {
+		if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
+			// 🔧 PERFORMANCE: Log error but don't fail the request
+			rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to increment global series count")
+		}
+	}
 
-	// rls.logger.Info().
-	// 	Str("tenant_id", tenantID).
-	// 	Int64("total_new_series", totalNewSeries).
-	// 	Int("metrics_updated", len(requestInfo.MetricSeriesCounts)).
-	// 	Msg("updated global series counts")
-	
-	// 🔧 PERFORMANCE: No-op to avoid Redis overhead
+	rls.logger.Debug().
+		Str("tenant_id", tenantID).
+		Int64("total_new_series", totalNewSeries).
+		Int("metrics_updated", len(requestInfo.MetricSeriesCounts)).
+		Msg("updated global series counts")
 }
 
 // checkRateLimit checks rate limits for the ratelimit service
