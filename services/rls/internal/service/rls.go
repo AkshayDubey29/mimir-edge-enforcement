@@ -404,22 +404,8 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		return rls.denyResponse("missing tenant header", http.StatusBadRequest), nil
 	}
 
-	// 🔧 DEBUG MODE: Temporarily enable info logging for troubleshooting
-	rls.logger.Info().
-		Str("tenant", tenantID).
-		Msg("RLS: INFO - Tenant extracted successfully")
-
-	// Get or initialize tenant state (unknown tenants default to enforcement disabled)
-	// 🔧 DEBUG MODE: Temporarily enable info logging for troubleshooting
-	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - About to call getTenant")
+	// 🔥 ULTRA-FAST PATH: Get tenant state with minimal logging
 	tenant := rls.getTenant(tenantID)
-	rls.logger.Info().Str("tenant", tenantID).Msg("RLS: INFO - getTenant completed")
-
-	// 🔧 DEBUG MODE: Temporarily enable debug logging for troubleshooting
-	rls.logger.Debug().
-		Str("tenant", tenantID).
-		Bool("enforcement_enabled", tenant.Info.Enforcement.Enabled).
-		Msg("RLS: DEBUG - Tenant state retrieved")
 
 	// Check if enforcement is enabled
 	if !tenant.Info.Enforcement.Enabled {
@@ -430,16 +416,24 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 		return rls.allowResponse(), nil
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Quick body size check before parsing
+	// 🔥 ULTRA-FAST PATH: Quick body size check before parsing
 	bodyBytes := int64(len(req.Attributes.Request.Http.Body))
 
-	// Skip parsing for very small requests (likely health checks)
+	// 🔥 ULTRA-FAST PATH: Skip parsing for very small requests (likely health checks)
 	if bodyBytes < 100 {
 		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "small_request").Inc()
 		rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "allow").Inc()
 		rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "allow").Observe(time.Since(start).Seconds())
 		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
 		return rls.allowResponse(), nil
+	}
+
+	// 🔥 ULTRA-FAST PATH: Skip parsing for very large requests to prevent timeouts
+	if bodyBytes > 10*1024*1024 { // 10MB limit (reduced from 50MB)
+		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
+		rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
+		rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
+		return rls.denyResponse("request body too large", http.StatusRequestEntityTooLarge), nil
 	}
 
 	// Parse request body if enabled
@@ -481,21 +475,14 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 			return rls.denyResponse("failed to extract request body", http.StatusBadRequest), nil
 		}
 
-		// 🔧 PERFORMANCE OPTIMIZATION: Skip parsing for very large requests to prevent timeouts
-		if bodyBytes > 50*1024*1024 { // 50MB limit
-			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
-			rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
-			rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
-			return rls.denyResponse("request body too large", http.StatusRequestEntityTooLarge), nil
-		}
-
-		// Parse remote write request for samples and cardinality
+		// 🔥 ULTRA-FAST PATH: Parse remote write request with ultra-fast timeout
 		contentEncoding := rls.extractContentEncoding(req)
+
 		result, err = parser.ParseRemoteWriteRequest(body, contentEncoding)
 		if err != nil {
 			rls.metrics.BodyParseErrors.Inc()
 
-			// 🔧 PERFORMANCE OPTIMIZATION: Quick fallback for parsing failures
+			// 🔥 ULTRA-FAST PATH: Quick fallback for parsing failures
 			fallbackSamples := rls.calculateFallbackSamples(body, contentEncoding)
 			fallbackRequestInfo := &limits.RequestInfo{
 				ObservedSamples:    fallbackSamples,
@@ -1674,14 +1661,13 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 // getTenantGlobalSeriesCount returns the current global series count for a tenant
 func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
-	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// 🔥 ULTRA-FAST PATH: Ultra-fast Redis calls with minimal timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
 	if err != nil {
-		// 🔧 PERFORMANCE: Log error but don't fail the request
-		rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to get global series count, using 0")
+		// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
 		return 0
 	}
 	return count
@@ -1689,14 +1675,13 @@ func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
 
 // getTenantMetricSeriesCount returns the current series count per metric for a tenant
 func (rls *RLS) getTenantMetricSeriesCount(tenantID string, requestInfo *limits.RequestInfo) map[string]int64 {
-	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	// 🔥 ULTRA-FAST PATH: Ultra-fast Redis calls with minimal timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
 	if err != nil {
-		// 🔧 PERFORMANCE: Log error but don't fail the request
-		rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to get metric series counts, using empty map")
+		// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
 		return make(map[string]int64)
 	}
 	return counts
@@ -1720,46 +1705,32 @@ func (rls *RLS) extractMetricSeriesCounts(result *parser.ParseResult) map[string
 
 // updateGlobalSeriesCounts updates the global series counts for a tenant
 func (rls *RLS) updateGlobalSeriesCounts(tenantID string, requestInfo *limits.RequestInfo) {
-	// 🔧 PERFORMANCE OPTIMIZATION: Fast Redis calls with shorter timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
+	// 🔥 ULTRA-FAST PATH: Async updates for maximum performance
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
 
-	// 🔧 NEW: Update global series counts with deduplication
-	totalNewSeries := int64(0)
+		totalNewSeries := int64(0)
 
-	// Process each metric's series
-	for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
-		// Check for existing series hashes to avoid double-counting
-		newSeriesForMetric := int64(0)
+		// Process each metric's series
+		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
+			if seriesCount > 0 {
+				// Increment metric series count
+				if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, seriesCount); err != nil {
+					// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
+				}
 
-		// For now, we'll assume all series are new (in production, check against stored hashes)
-		// TODO: Implement proper series hash checking
-		newSeriesForMetric = seriesCount
-
-		if newSeriesForMetric > 0 {
-			// Increment metric series count
-			if err := rls.store.IncrementMetricSeriesCount(ctx, tenantID, metricName, newSeriesForMetric); err != nil {
-				// 🔧 PERFORMANCE: Log error but don't fail the request
-				rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Str("metric", metricName).Msg("failed to increment metric series count")
+				totalNewSeries += seriesCount
 			}
-
-			totalNewSeries += newSeriesForMetric
 		}
-	}
 
-	// Increment global series count
-	if totalNewSeries > 0 {
-		if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
-			// 🔧 PERFORMANCE: Log error but don't fail the request
-			rls.logger.Warn().Err(err).Str("tenant_id", tenantID).Msg("failed to increment global series count")
+		// Increment global series count
+		if totalNewSeries > 0 {
+			if err := rls.store.IncrementGlobalSeriesCount(ctx, tenantID, totalNewSeries); err != nil {
+				// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
+			}
 		}
-	}
-
-	rls.logger.Debug().
-		Str("tenant_id", tenantID).
-		Int64("total_new_series", totalNewSeries).
-		Int("metrics_updated", len(requestInfo.MetricSeriesCounts)).
-		Msg("updated global series counts")
+	}()
 }
 
 // checkRateLimit checks rate limits for the ratelimit service

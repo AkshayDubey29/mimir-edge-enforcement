@@ -166,6 +166,15 @@ func NewRedisStore(addr string, logger zerolog.Logger) *RedisStore {
 		Addr:     addr,
 		Password: "", // no password set
 		DB:       0,  // use default DB
+
+		// 🔥 ULTRA-FAST PATH: Redis connection optimization
+		PoolSize:     100,                    // Large pool for high throughput
+		MinIdleConns: 20,                     // More idle connections for faster response
+		MaxRetries:   0,                      // No retries for ultra-fast fail
+		DialTimeout:  500 * time.Millisecond, // Ultra-fast connection timeout
+		ReadTimeout:  1 * time.Second,        // Ultra-fast read timeout
+		WriteTimeout: 1 * time.Second,        // Ultra-fast write timeout
+		PoolTimeout:  500 * time.Millisecond, // Ultra-fast pool timeout
 	})
 
 	return &RedisStore{
