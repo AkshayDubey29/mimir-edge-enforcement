@@ -194,36 +194,3 @@ redis:
 
 # Image pull secrets
 imagePullSecrets: []
-
-# Envoy integration optimization
-envoy:
-  # ext_authz filter configuration
-  extAuthz:
-    timeout: "5s"                    # Increase timeout from default to 5s
-    failureModeAllow: true           # Allow requests when RLS is unavailable
-    includePeerCertificate: false    # Disable for performance
-    includeTlsSession: false         # Disable for performance
-    
-    # Buffer settings for large requests
-    bufferMaxBytes: "52428800"       # 50MB buffer for large requests
-    bufferTimeout: "10s"             # Buffer timeout
-    
-    # Retry configuration
-    retryOn: "connect-failure,refused-stream,unavailable,cancelled,retriable-status-codes"
-    numRetries: 2                    # Number of retries
-    retryBackoffBaseInterval: "100ms" # Base retry interval
-    
-  # Rate limiting configuration
-  rateLimit:
-    timeout: "2s"                    # Rate limit timeout
-    failureModeDeny: false           # Allow when rate limiter fails
-    
-  # Load balancing configuration
-  loadBalancer:
-    policy: "round_robin"            # Round-robin load balancing
-    healthCheck:
-      enabled: true
-      interval: "10s"
-      timeout: "2s"
-      unhealthyThreshold: 3
-      healthyThreshold: 2

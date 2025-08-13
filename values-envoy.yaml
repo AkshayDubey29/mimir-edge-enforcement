@@ -38,12 +38,26 @@ extAuthz:
   failureModeAllow: false    # Production: Deny requests when gRPC fails (SECURITY)
   timeout: "5s"              # Production: Optimized timeout
   disableBodyParsing: false  # Production: Enable body parsing for cardinality analysis
+  
+  # Buffer settings for large requests
+  bufferMaxBytes: "52428800"       # 50MB buffer for large requests
+  bufferTimeout: "10s"             # Buffer timeout
+  
+  # Retry configuration
+  retryOn: "connect-failure,refused-stream,unavailable,cancelled,retriable-status-codes"
+  numRetries: 2                    # Number of retries
+  retryBackoffBaseInterval: "100ms" # Base retry interval
+  
+  # Performance optimizations
+  includePeerCertificate: false    # Disable for performance
+  includeTlsSession: false         # Disable for performance
 
 # Rate limiting configuration - Production
 rateLimit:
   failureModeDeny: false    # Production: Allow requests when rate limit service fails
   domain: "mimir_remote_write"
   grpcTimeout: "3s"         # Production: Optimized timeout
+  timeout: "2s"             # Rate limit timeout
 
 # Proxy configuration - Production
 proxy:
@@ -52,6 +66,16 @@ proxy:
     acceptHttp10: true
     useRemoteAddress: true
     xffNumTrustedHops: 1
+
+# Load balancing configuration - Production
+loadBalancer:
+  policy: "round_robin"            # Round-robin load balancing
+  healthCheck:
+    enabled: true
+    interval: "10s"
+    timeout: "2s"
+    unhealthyThreshold: 3
+    healthyThreshold: 2
 
 # Logging configuration - Production
 logging:
