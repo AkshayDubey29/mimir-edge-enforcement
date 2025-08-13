@@ -14,85 +14,88 @@ service:
 # Tenant identification
 tenantHeader: "X-Scope-OrgID"
 
-# Limits configuration - Production
-# SELECTIVE ENFORCEMENT: Only enforce cardinality limits (per_metric_series_limit and per_user_series_limit)
+# Limits configuration - Production Optimized
 limits:
-  maxRequestBytes: "10485760"  # 10 MiB - Increased for large Alloy payloads
-  maxBodyBytes: 0              # 0 = Disabled - No body size enforcement
-  failureModeAllow: true       # Production: Allow requests when parsing fails (with intelligent fallback)
+  maxRequestBytes: "10485760"  # 10 MiB - Increased for large payloads
+  maxBodyBytes: 1048576        # 1 MiB - Reasonable body size limit
+  failureModeAllow: true       # Production: Allow requests when parsing fails
   defaultSamplesPerSecond: 1000      # 1000 samples/sec - Enable rate limiting
-  defaultBurstPercent: 10      # 10% burst allowance
+  defaultBurstPercent: 20      # 20% burst allowance
   enforceBodyParsing: true     # Production: Enable body parsing for cardinality analysis
-  defaultMaxLabelsPerSeries: 0       # per_user_series_limit - DISABLED (0 = no limit)
-  defaultMaxLabelValueLength: 2048   # per_user_series_limit - ENFORCED
-  defaultMaxSeriesPerRequest: 10000  # per_metric_series_limit - ENFORCED
+  defaultMaxLabelsPerSeries: 10      # Reasonable label limit
+  defaultMaxLabelValueLength: 2048   # Reasonable label value length
+  defaultMaxSeriesPerRequest: 10000  # Reasonable series per request limit
 
-# Selective Enforcement Configuration
-# Enable cardinality limits AND ingestion rate limiting
+# Enforcement Configuration - Production Ready
 enforcement:
   enabled: true
-  # Cardinality limits - ENFORCED
+  # Cardinality limits - ENABLED
   enforceMaxSeriesPerRequest: true   # per_user_series_limit
   enforceMaxSeriesPerMetric: true    # per_metric_series_limit
-  enforceMaxLabelsPerSeries: false   # per_labels_per_series_limit - DISABLED
+  enforceMaxLabelsPerSeries: true    # per_labels_per_series_limit
   # Rate limiting - ENABLED
   enforceSamplesPerSecond: true      # Enable ingestion rate limiting
-  enforceBytesPerSecond: false       # No bytes rate limiting
-  # Body size - DISABLED
-  enforceMaxBodyBytes: false         # No body size enforcement
+  enforceBytesPerSecond: false       # No bytes rate limiting (focus on samples)
+  # Body size - ENABLED
+  enforceMaxBodyBytes: true          # Enable body size enforcement
 
 # Store configuration
 store:
   backend: "redis"  # Required for multi-pod deployment with shared state
 
+# Mimir configuration for direct integration
+mimir:
+  host: "mock-mimir-distributor.mimir.svc.cluster.local"
+  port: "8080"
+
 # Logging configuration - PRODUCTION OPTIMIZED
 log:
-  level: "warn"  # Minimal logging for maximum performance
+  level: "info"  # Production logging level
   enableGRPCLogs: false  # Disable gRPC logs for performance
   enableDetailedLogs: false  # Disable detailed logs for performance
 
-# Performance tuning - ULTRA OPTIMIZED
+# Performance tuning - PRODUCTION OPTIMIZED
 performance:
   # Request processing optimization
-  maxConcurrentRequests: 5000    # Ultra-high concurrent request handling
-  requestTimeout: "5s"           # Ultra-fast timeout for RLS processing
-  bodyParseTimeout: "2s"         # Ultra-fast timeout for body parsing
+  maxConcurrentRequests: 2000    # High concurrent request handling
+  requestTimeout: "10s"          # Reasonable timeout for RLS processing
+  bodyParseTimeout: "5s"         # Reasonable timeout for body parsing
   
-  # Redis connection optimization (Ultra-optimized for performance)
-  redisPoolSize: 100             # Large pool for high throughput
-  redisMinIdleConns: 20          # More idle connections for faster response
-  redisMaxRetries: 0             # No retries for ultra-fast fail
-  redisConnectTimeout: "500ms"   # Ultra-fast connection timeout
-  redisReadTimeout: "1s"         # Ultra-fast read timeout
-  redisWriteTimeout: "1s"        # Ultra-fast write timeout
+  # Redis connection optimization (Production optimized)
+  redisPoolSize: 50              # Reasonable pool size for production
+  redisMinIdleConns: 10          # Idle connections for faster response
+  redisMaxRetries: 3             # Retries for reliability
+  redisConnectTimeout: "1s"      # Connection timeout
+  redisReadTimeout: "2s"         # Read timeout
+  redisWriteTimeout: "2s"        # Write timeout
   
   # Memory optimization
   enableMemoryOptimization: true # Enable memory-efficient processing
-  maxRequestBodySize: "10MB"     # Reduced for faster processing
+  maxRequestBodySize: "10MB"     # Maximum request body size
   enableRequestPooling: true     # Enable request object pooling
   enableMetricsOptimization: true # Optimize metrics collection
   
-  # Circuit breaker settings (Ultra-fast)
-  circuitBreakerEnabled: false   # Disable circuit breaker for speed
-  circuitBreakerThreshold: 1     # Single failure threshold
-  circuitBreakerTimeout: "1s"    # Ultra-fast recovery
+  # Circuit breaker settings (Production)
+  circuitBreakerEnabled: true    # Enable circuit breaker for reliability
+  circuitBreakerThreshold: 5     # Failure threshold
+  circuitBreakerTimeout: "30s"   # Recovery timeout
 
 # Deployment configuration
-replicaCount: 1  # Reduced to 1 for resource constraints
+replicaCount: 3  # Production: Multiple replicas for high availability
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-ultra-fast"  # Ultra-fast version with aggressive performance optimizations
+  tag: "latest-ultra-fast"  # Ultra-fast version for CI/CD compatibility
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# Resource configuration - ULTRA OPTIMIZED
+# Resource configuration - PRODUCTION OPTIMIZED
 resources:
   limits:
-    cpu: 4000m    # High CPU for maximum performance
-    memory: 4Gi   # High memory for caching and processing
+    cpu: 2000m    # Reasonable CPU for production
+    memory: 2Gi   # Reasonable memory for production
   requests:
-    cpu: 2000m    # High CPU requests for performance
-    memory: 2Gi   # High memory requests for caching
+    cpu: 500m     # Reasonable CPU requests
+    memory: 1Gi   # Reasonable memory requests
 
 # Security context
 securityContext:
@@ -104,18 +107,18 @@ securityContext:
     drop:
       - ALL
 
-# Horizontal Pod Autoscaler (ULTRA OPTIMIZED)
+# Horizontal Pod Autoscaler (PRODUCTION OPTIMIZED)
 hpa:
   enabled: true
-  minReplicas: 3    # Higher minimum for better performance
-  maxReplicas: 10   # Higher maximum for scaling
-  targetCPUUtilizationPercentage: 70    # Lower threshold for faster scaling
-  targetMemoryUtilizationPercentage: 70 # Lower threshold for faster scaling
+  minReplicas: 3    # Minimum replicas for high availability
+  maxReplicas: 10   # Maximum replicas for scaling
+  targetCPUUtilizationPercentage: 70    # CPU threshold for scaling
+  targetMemoryUtilizationPercentage: 70 # Memory threshold for scaling
 
 # Pod Disruption Budget
 pdb:
   enabled: true
-  minAvailable: 1
+  minAvailable: 2  # Ensure at least 2 pods are always available
 
 # Service Account
 serviceAccount:
@@ -134,12 +137,23 @@ nodeSelector: {}
 # Tolerations
 tolerations: []
 
-# Affinity
-affinity: {}
+# Affinity - Production ready
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - mimir-rls
+        topologyKey: kubernetes.io/hostname
 
 # Service Monitor for Prometheus - Production
 serviceMonitor:
-  enabled: false  # Disable ServiceMonitor for local testing
+  enabled: true  # Enable ServiceMonitor for production monitoring
   scrapeTimeout: 10s
   labels: {}
   annotations: {}
@@ -147,18 +161,18 @@ serviceMonitor:
 # Redis configuration for shared state
 redis:
   # Redis deployment mode
-  mode: "external"  # Options: "sidecar" (local per pod) or "external" (shared instance)
+  mode: "external"  # Use external Redis for production
   
   # External Redis configuration (when mode: "external")
   external:
-    enabled: true  # Set to true to use external Redis
-    address: "redis-shared-service.redis-shared.svc.cluster.local:6379"  # External Redis service address
+    enabled: true  # Use external Redis
+    address: "redis-shared-service.redis-shared.svc.cluster.local:6379"  # External Redis service
     password: ""  # Redis password if required
     database: 0  # Redis database number
   
   # Sidecar Redis configuration (when mode: "sidecar")
   sidecar:
-    enabled: false  # Set to false when using external Redis
+    enabled: false  # Disabled when using external Redis
     image:
       repository: redis
       tag: "7.2-alpine"
@@ -173,12 +187,7 @@ redis:
     persistence:
       enabled: true  # Production: Enable persistence for data durability
       size: 10Gi
-      storageClass: "standard"  # Production: Use standard storage class (rancher.io/local-path)
-      # Alternative storage classes:
-      # storageClass: "gp3"  # For AWS
-      # storageClass: "fast-ssd"  # For GCP
-      # storageClass: "managed-premium"  # For Azure
-      # storageClass: ""  # Use default storage class if not specified
+      storageClass: "standard"  # Production: Use standard storage class
     securityContext:
       runAsNonRoot: true
       runAsUser: 999
@@ -199,3 +208,32 @@ redis:
 
 # Image pull secrets
 imagePullSecrets: []
+
+# Liveness and readiness probes - Production
+livenessProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30
