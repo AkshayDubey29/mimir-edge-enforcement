@@ -43,13 +43,13 @@ enforcement:
 
 # Store configuration
 store:
-  backend: "redis"  # memory or redis - Use redis for shared state in production
+  backend: "memory"  # Temporarily switch to memory for performance testing
 
-# Logging configuration - Production (Optimized for performance)
+# Logging configuration - DEBUG MODE (Temporarily enabled for troubleshooting)
 log:
-  level: "warn"  # Reduced from "info" to "warn" to reduce log overhead
-  enableGRPCLogs: false  # Production: Disable gRPC logs for performance
-  enableDetailedLogs: false  # Production: Disable detailed logs for performance
+  level: "debug"  # Temporarily set to debug to see detailed logs
+  enableGRPCLogs: true  # Temporarily enable gRPC logs for debugging
+  enableDetailedLogs: true  # Temporarily enable detailed logs for debugging
 
 # Performance tuning - Production
 performance:
@@ -58,17 +58,17 @@ performance:
   requestTimeout: "30s"          # Set explicit timeout for RLS processing
   bodyParseTimeout: "10s"        # Timeout for body parsing operations
   
-  # Redis connection optimization
-  redisPoolSize: 50              # Increase Redis connection pool
-  redisMinIdleConns: 10          # Minimum idle connections
-  redisMaxRetries: 3             # Redis retry attempts
+  # Redis connection optimization (Optimized for performance)
+  redisPoolSize: 20              # Reduced from 50 to minimize overhead
+  redisMinIdleConns: 5           # Reduced from 10 to minimize idle connections
+  redisMaxRetries: 1             # Reduced from 3 to fail fast
   
   # Memory optimization
   enableMemoryOptimization: true # Enable memory-efficient processing
   maxRequestBodySize: "50MB"     # Maximum body size to process
   
-  # Circuit breaker settings
-  circuitBreakerEnabled: true    # Enable circuit breaker for Redis
+  # Circuit breaker settings (Disabled for performance)
+  circuitBreakerEnabled: false   # Disable circuit breaker to reduce complexity
   circuitBreakerThreshold: 5     # Number of failures before opening circuit
   circuitBreakerTimeout: "30s"   # Time to wait before trying again
 
