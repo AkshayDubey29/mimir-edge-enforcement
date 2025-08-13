@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -33,6 +34,64 @@ import (
 	envoy_service_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/service/ratelimit/v3"
 )
 
+// ScientificNotationInt64 is a custom flag type that can parse scientific notation
+type ScientificNotationInt64 int64
+
+func (s *ScientificNotationInt64) String() string {
+	return fmt.Sprintf("%d", *s)
+}
+
+func (s *ScientificNotationInt64) Set(value string) error {
+	// Handle scientific notation (e.g., "4e6", "1.5e7")
+	if strings.Contains(strings.ToLower(value), "e") {
+		f, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return fmt.Errorf("invalid scientific notation: %s", value)
+		}
+		// Check for overflow
+		if f > float64(math.MaxInt64) || f < float64(math.MinInt64) {
+			return fmt.Errorf("value out of range for int64: %s", value)
+		}
+		*s = ScientificNotationInt64(int64(f))
+		return nil
+	}
+
+	// Handle regular integer parsing
+	i, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid integer: %s", value)
+	}
+	*s = ScientificNotationInt64(i)
+	return nil
+}
+
+// ScientificNotationFloat64 is a custom flag type that can parse scientific notation
+type ScientificNotationFloat64 float64
+
+func (s *ScientificNotationFloat64) String() string {
+	return fmt.Sprintf("%f", *s)
+}
+
+func (s *ScientificNotationFloat64) Set(value string) error {
+	// Handle scientific notation (e.g., "4e6", "1.5e7")
+	if strings.Contains(strings.ToLower(value), "e") {
+		f, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return fmt.Errorf("invalid scientific notation: %s", value)
+		}
+		*s = ScientificNotationFloat64(f)
+		return nil
+	}
+
+	// Handle regular float parsing
+	f, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return fmt.Errorf("invalid float: %s", value)
+	}
+	*s = ScientificNotationFloat64(f)
+	return nil
+}
+
 var (
 	// Server configuration
 	extAuthzPort  = flag.String("ext-authz-port", "8080", "Port for ext_authz gRPC server")
@@ -46,10 +105,10 @@ var (
 	maxRequestBytes    = flag.Int64("max-request-bytes", 4194304, "Maximum request body size in bytes")
 	failureModeAllow   = flag.Bool("failure-mode-allow", false, "Whether to allow requests when body parsing fails")
 
-	// Default limits
-	defaultSamplesPerSecond    = flag.Float64("default-samples-per-second", 10000, "Default samples per second limit")
-	defaultBurstPercent        = flag.Float64("default-burst-percent", 0.2, "Default burst percentage")
-	defaultMaxBodyBytes        = flag.Int64("default-max-body-bytes", 4194304, "Default maximum body size in bytes")
+	// Default limits - using custom parsers for scientific notation support
+	defaultSamplesPerSecond    = ScientificNotationFloat64(10000)
+	defaultBurstPercent        = ScientificNotationFloat64(0.2)
+	defaultMaxBodyBytes        = ScientificNotationInt64(4194304)
 	defaultMaxLabelsPerSeries  = flag.Int("default-max-labels-per-series", 60, "Default maximum labels per series")
 	defaultMaxLabelValueLength = flag.Int("default-max-label-value-length", 2048, "Default maximum label value length")
 	defaultMaxSeriesPerRequest = flag.Int("default-max-series-per-request", 100000, "Default maximum series per request")
@@ -74,6 +133,13 @@ var (
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
 
+func init() {
+	// Register custom flag types
+	flag.Var(&defaultSamplesPerSecond, "default-samples-per-second", "Default samples per second limit (supports scientific notation)")
+	flag.Var(&defaultBurstPercent, "default-burst-percent", "Default burst percentage (supports scientific notation)")
+	flag.Var(&defaultMaxBodyBytes, "default-max-body-bytes", "Default maximum body size in bytes (supports scientific notation)")
+}
+
 func main() {
 	flag.Parse()
 
@@ -84,6 +150,13 @@ func main() {
 	}
 	zerolog.SetGlobalLevel(level)
 	logger := log.With().Str("component", "rls").Logger()
+
+	// Log parsed values for debugging
+	logger.Info().
+		Float64("default_samples_per_second", float64(defaultSamplesPerSecond)).
+		Float64("default_burst_percent", float64(defaultBurstPercent)).
+		Int64("default_max_body_bytes", int64(defaultMaxBodyBytes)).
+		Msg("parsed configuration values")
 
 	// Create RLS configuration
 	config := &service.RLSConfig{
@@ -96,9 +169,9 @@ func main() {
 		MimirHost:          *mimirHost,
 		MimirPort:          *mimirPort,
 		DefaultLimits: limits.TenantLimits{
-			SamplesPerSecond:    *defaultSamplesPerSecond,
-			BurstPercent:        *defaultBurstPercent,
-			MaxBodyBytes:        *defaultMaxBodyBytes,
+			SamplesPerSecond:    float64(defaultSamplesPerSecond),
+			BurstPercent:        float64(defaultBurstPercent),
+			MaxBodyBytes:        int64(defaultMaxBodyBytes),
 			MaxLabelsPerSeries:  int32(*defaultMaxLabelsPerSeries),
 			MaxLabelValueLength: int32(*defaultMaxLabelValueLength),
 			MaxSeriesPerRequest: int32(*defaultMaxSeriesPerRequest),
