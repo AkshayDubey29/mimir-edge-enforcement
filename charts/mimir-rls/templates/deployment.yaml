@@ -59,7 +59,7 @@ spec:
             # Default tenant limits
             - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
             - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
-            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes | default 4194304 }}"
             - "--default-max-labels-per-series={{ .Values.limits.defaultMaxLabelsPerSeries | default 60 }}"
             - "--default-max-label-value-length={{ .Values.limits.defaultMaxLabelValueLength | default 2048 }}"
             - "--default-max-series-per-request={{ .Values.limits.defaultMaxSeriesPerRequest | default 100000 }}"
