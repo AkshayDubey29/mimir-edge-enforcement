@@ -82,11 +82,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(redis_commands_processed_total[5m])",
+          "expr": "rate(rls_traffic_flow_total[5m])"
           "refId": "A"
         }
       ],
-      "title": "Redis Commands/sec",
+      "title": "RLS Traffic Flow Rate",
       "type": "stat"
     },
     {
@@ -149,11 +149,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "histogram_quantile(0.95, rate(redis_operation_duration_seconds_bucket[5m])) * 1000",
+          "expr": "histogram_quantile(0.95, rate(rls_authz_check_duration_seconds_bucket[5m])) * 1000"
           "refId": "A"
         }
       ],
-      "title": "Redis 95th Percentile Latency",
+      "title": "RLS 95th Percentile Response Time",
       "type": "stat"
     },
     {
@@ -236,11 +236,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(redis_commands_processed_total[5m]) by (cmd)",
+          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant)"
           "refId": "A"
         }
       ],
-      "title": "Redis Commands by Type",
+      "title": "RLS Traffic Flow by Tenant",
       "type": "timeseries"
     },
     {
@@ -303,11 +303,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(redis_operation_errors_total[5m]) / rate(redis_commands_processed_total[5m])",
+          "expr": "rate(rls_body_parse_errors_total[5m]) / rate(rls_traffic_flow_total[5m])"
           "refId": "A"
         }
       ],
-      "title": "Redis Error Rate",
+      "title": "RLS Parse Error Rate",
       "type": "stat"
     },
     {
@@ -370,11 +370,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "redis_connected_clients",
+          "expr": "rls_limits_stale_seconds"
           "refId": "A"
         }
       ],
-      "title": "Redis Connected Clients",
+      "title": "RLS Limits Stale Time",
       "type": "stat"
     },
     {
@@ -457,11 +457,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "redis_memory_used_bytes",
+          "expr": "rls_labels_count_gauge"
           "refId": "A"
         }
       ],
-      "title": "Redis Memory Usage",
+      "title": "RLS Labels Count by Tenant",
       "type": "timeseries"
     },
     {
@@ -544,11 +544,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "redis_keyspace_keys",
+          "expr": "rls_limit_threshold_gauge"
           "refId": "A"
         }
       ],
-      "title": "Redis Keyspace Keys",
+      "title": "RLS Limit Thresholds by Tenant",
       "type": "timeseries"
     },
     {
@@ -631,11 +631,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_global_series_count_gauge",
+          "expr": "rls_limit_violations_total"
           "refId": "A"
         }
       ],
-      "title": "Global Series Count by Tenant (Redis)",
+      "title": "RLS Limit Violations by Tenant",
       "type": "timeseries"
     },
     {
@@ -718,11 +718,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_metric_series_count_gauge",
+          "expr": "rls_decisions_total"
           "refId": "A"
         }
       ],
-      "title": "Per-Metric Series Count (Redis)",
+      "title": "RLS Decisions by Tenant",
       "type": "timeseries"
     }
   ],
@@ -746,7 +746,7 @@
           "type": "prometheus",
           "uid": "mimir-couwatch"
         },
-        "definition": "label_values(rls_global_series_count_gauge, tenant)",
+        "definition": "label_values(rls_decisions_total, tenant)",
         "hide": 0,
         "includeAll": true,
         "label": "Tenant",
@@ -754,7 +754,7 @@
         "name": "tenant",
         "options": [],
         "query": {
-          "query": "label_values(rls_global_series_count_gauge, tenant)",
+          "query": "label_values(rls_decisions_total, tenant)",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,
@@ -771,7 +771,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "RLS Redis Monitoring Dashboard",
+  "title": "RLS Performance Monitoring Dashboard",
   "uid": "rls-redis-monitoring",
   "version": 1,
   "weekStart": ""

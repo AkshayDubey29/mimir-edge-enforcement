@@ -256,7 +256,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (reason)",
+          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (reason, tenant)"
           "refId": "A"
         }
       ],
@@ -343,7 +343,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_decisions_total[5m]) by (tenant)",
+          "expr": "rate(rls_decisions_total[5m]) by (tenant, decision)"
           "refId": "A"
         }
       ],
@@ -564,11 +564,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_series_count_gauge",
+          "expr": "rls_labels_count_gauge"
           "refId": "A"
         }
       ],
-      "title": "Series Count by Tenant",
+      "title": "Labels Count by Tenant",
       "type": "timeseries"
     },
     {
@@ -738,7 +738,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_limit_violations_total[5m]) by (tenant, reason)",
+          "expr": "rate(rls_limit_violations_total[5m]) by (tenant, reason)"
           "refId": "A"
         }
       ],
@@ -872,11 +872,11 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rls_body_size_gauge",
+          "expr": "rls_traffic_flow_total"
           "refId": "A"
         }
       ],
-      "title": "Average Request Body Size",
+      "title": "Total Traffic Flow",
       "type": "stat"
     }
   ],
