@@ -41,7 +41,7 @@ enforcement:
 
 # Store configuration
 store:
-  backend: "redis"  # Required for multi-pod deployment with shared state
+  backend: "memory"  # Use memory store for testing (no Redis dependency)
 
 # Mimir configuration for direct integration
 mimir:
@@ -58,8 +58,8 @@ log:
 performance:
   # Request processing optimization
   maxConcurrentRequests: 2000    # High concurrent request handling
-  requestTimeout: "10s"          # Reasonable timeout for RLS processing
-  bodyParseTimeout: "5s"         # Reasonable timeout for body parsing
+  requestTimeout: "30s"          # Increased timeout for high traffic scenarios
+  bodyParseTimeout: "10s"        # Increased timeout for body parsing under load
   
   # Redis connection optimization (Production optimized)
   redisPoolSize: 50              # Reasonable pool size for production
