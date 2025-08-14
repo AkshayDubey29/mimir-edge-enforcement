@@ -7,7 +7,7 @@ LABEL org.opencontainers.image.description="Ultra-fast RLS service with aggressi
 
 # Architecture-aware binary copy
 ARG TARGETARCH
-COPY rls-ultra-fast /usr/local/bin/rls
+COPY rls-${TARGETARCH} /usr/local/bin/rls
 
 # Expose ports
 EXPOSE 8080 8081 8082 9090
