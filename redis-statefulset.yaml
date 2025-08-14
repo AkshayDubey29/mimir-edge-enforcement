@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-shared-service
+  namespace: redis-shared
+  labels:
+    app: redis-shared
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+  selector:
+    app: redis-shared
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis-shared
+  namespace: redis-shared
+  labels:
+    app: redis-shared
+spec:
+  serviceName: redis-shared-service
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redis-shared
+  template:
+    metadata:
+      labels:
+        app: redis-shared
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      terminationGracePeriodSeconds: 30
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        command:
+        - redis-server
+        - --bind
+        - "0.0.0.0"
+        - --appendonly
+        - "yes"
+        - --maxmemory
+        - "800mb"
+        - --maxmemory-policy
+        - "allkeys-lru"
+        - --save
+        - "900 1"
+        - --save
+        - "300 10"
+        - --save
+        - "60 10000"
+        - --timeout
+        - "300"
+        - --tcp-keepalive
+        - "300"
+        - --protected-mode
+        - "no"
+        - --tcp-backlog
+        - "511"
+        - --databases
+        - "16"
+        ports:
+        - containerPort: 6379
+          name: redis
+        livenessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 6379
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 999
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi
+      storageClassName: standard

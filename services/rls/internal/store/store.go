@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/limits"
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
@@ -57,13 +59,22 @@ type TenantData struct {
 type MemoryStore struct {
 	tenants map[string]*TenantData
 	logger  zerolog.Logger
+
+	// 🔧 NEW: Memory-based metric series tracking
+	globalSeriesCounts map[string]int64                      // tenantID -> count
+	metricSeriesCounts map[string]map[string]int64           // tenantID -> metricName -> count
+	seriesHashes       map[string]map[string]map[string]bool // tenantID -> metricName -> hash -> exists
+	mu                 sync.RWMutex                          // Protect concurrent access
 }
 
 // NewMemoryStore creates a new in-memory store
 func NewMemoryStore(logger zerolog.Logger) *MemoryStore {
 	return &MemoryStore{
-		tenants: make(map[string]*TenantData),
-		logger:  logger,
+		tenants:            make(map[string]*TenantData),
+		logger:             logger,
+		globalSeriesCounts: make(map[string]int64),
+		metricSeriesCounts: make(map[string]map[string]int64),
+		seriesHashes:       make(map[string]map[string]map[string]bool),
 	}
 }
 
@@ -108,49 +119,106 @@ func (m *MemoryStore) Close() error {
 
 // 🔧 NEW: Global series tracking methods for MemoryStore
 func (m *MemoryStore) GetGlobalSeriesCount(ctx context.Context, tenantID string) (int64, error) {
-	// For memory store, we'll use a simple map to track series counts
-	// In production, this should be replaced with Redis for persistence
-	return 0, nil // Placeholder - will be implemented with Redis
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.globalSeriesCounts[tenantID], nil
 }
 
 func (m *MemoryStore) SetGlobalSeriesCount(ctx context.Context, tenantID string, count int64) error {
-	// Placeholder implementation
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.globalSeriesCounts[tenantID] = count
 	return nil
 }
 
 func (m *MemoryStore) IncrementGlobalSeriesCount(ctx context.Context, tenantID string, increment int64) error {
-	// Placeholder implementation
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.globalSeriesCounts[tenantID] += increment
 	return nil
 }
 
 // 🔧 NEW: Per-metric series tracking methods for MemoryStore
 func (m *MemoryStore) GetMetricSeriesCount(ctx context.Context, tenantID, metricName string) (int64, error) {
-	return 0, nil // Placeholder
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if counts, exists := m.metricSeriesCounts[tenantID]; exists {
+		if count, exists := counts[metricName]; exists {
+			return count, nil
+		}
+	}
+	return 0, fmt.Errorf("metric series count for tenant %s, metric %s not found", tenantID, metricName)
 }
 
 func (m *MemoryStore) SetMetricSeriesCount(ctx context.Context, tenantID, metricName string, count int64) error {
-	return nil // Placeholder
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.metricSeriesCounts[tenantID]; !exists {
+		m.metricSeriesCounts[tenantID] = make(map[string]int64)
+	}
+	m.metricSeriesCounts[tenantID][metricName] = count
+	return nil
 }
 
 func (m *MemoryStore) IncrementMetricSeriesCount(ctx context.Context, tenantID, metricName string, increment int64) error {
-	return nil // Placeholder
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.metricSeriesCounts[tenantID]; !exists {
+		m.metricSeriesCounts[tenantID] = make(map[string]int64)
+	}
+	m.metricSeriesCounts[tenantID][metricName] += increment
+	return nil
 }
 
 func (m *MemoryStore) GetAllMetricSeriesCounts(ctx context.Context, tenantID string) (map[string]int64, error) {
-	return make(map[string]int64), nil // Placeholder
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if counts, exists := m.metricSeriesCounts[tenantID]; exists {
+		return counts, nil
+	}
+	return make(map[string]int64), nil
 }
 
 // 🔧 NEW: Series deduplication methods for MemoryStore
 func (m *MemoryStore) AddSeriesHash(ctx context.Context, tenantID, metricName, seriesHash string) error {
-	return nil // Placeholder
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.seriesHashes[tenantID]; !exists {
+		m.seriesHashes[tenantID] = make(map[string]map[string]bool)
+	}
+	if _, exists := m.seriesHashes[tenantID][metricName]; !exists {
+		m.seriesHashes[tenantID][metricName] = make(map[string]bool)
+	}
+	m.seriesHashes[tenantID][metricName][seriesHash] = true
+	return nil
 }
 
 func (m *MemoryStore) IsSeriesHashExists(ctx context.Context, tenantID, metricName, seriesHash string) (bool, error) {
-	return false, nil // Placeholder
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, exists := m.seriesHashes[tenantID]; !exists {
+		return false, nil
+	}
+	if _, exists := m.seriesHashes[tenantID][metricName]; !exists {
+		return false, nil
+	}
+	return m.seriesHashes[tenantID][metricName][seriesHash], nil
 }
 
 func (m *MemoryStore) GetSeriesHashes(ctx context.Context, tenantID, metricName string) ([]string, error) {
-	return []string{}, nil // Placeholder
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, exists := m.seriesHashes[tenantID]; !exists {
+		return []string{}, nil
+	}
+	if _, exists := m.seriesHashes[tenantID][metricName]; !exists {
+		return []string{}, nil
+	}
+	hashes := make([]string, 0, len(m.seriesHashes[tenantID][metricName]))
+	for hash := range m.seriesHashes[tenantID][metricName] {
+		hashes = append(hashes, hash)
+	}
+	return hashes, nil
 }
 
 // RedisStore implements Store interface using Redis

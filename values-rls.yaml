@@ -41,7 +41,14 @@ enforcement:
 
 # Store configuration
 store:
-  backend: "memory"  # Use memory store for testing (no Redis dependency)
+  backend: "redis"  # Use Redis for production (shared state across pods)
+
+# Redis configuration for external Redis service
+redis:
+  enabled: true
+  mode: "external"  # Use external Redis service
+  external:
+    address: "redis-shared-service.redis-shared.svc.cluster.local:6379"
 
 # Mimir configuration for direct integration
 mimir:
@@ -157,57 +164,6 @@ serviceMonitor:
   scrapeTimeout: 10s
   labels: {}
   annotations: {}
-
-# Redis configuration for shared state
-redis:
-  # Redis deployment mode
-  mode: "external"  # Use external Redis for production
-  
-  # External Redis configuration (when mode: "external")
-  external:
-    enabled: true  # Use external Redis
-    address: "redis-shared-service.redis-shared.svc.cluster.local:6379"  # External Redis service
-    password: ""  # Redis password if required
-    database: 0  # Redis database number
-  
-  # Sidecar Redis configuration (when mode: "sidecar")
-  sidecar:
-    enabled: false  # Disabled when using external Redis
-    image:
-      repository: redis
-      tag: "7.2-alpine"
-      pullPolicy: IfNotPresent
-    resources:
-      limits:
-        cpu: 500m
-        memory: 1Gi
-      requests:
-        cpu: 100m
-        memory: 256Mi
-    persistence:
-      enabled: true  # Production: Enable persistence for data durability
-      size: 10Gi
-      storageClass: "standard"  # Production: Use standard storage class
-    securityContext:
-      runAsNonRoot: true
-      runAsUser: 999
-      fsGroup: 999
-    # Production Redis configuration
-    config:
-      maxmemory: "800mb"
-      maxmemoryPolicy: "allkeys-lru"
-      appendonly: "yes"
-      save: ["900 1", "300 10", "60 10000"]
-      timeout: 300
-      tcpKeepalive: 300
-      # Security settings
-      protectedMode: "yes"
-      # Performance settings
-      tcpBacklog: 511
-      databases: 16
-
-# Image pull secrets
-imagePullSecrets: []
 
 # Liveness and readiness probes - Production
 livenessProbe:
