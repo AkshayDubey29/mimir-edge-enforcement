@@ -85,7 +85,7 @@ replicaCount: 3  # Production: Multiple replicas for high availability
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
-  tag: "latest-scientific"  # Latest version with scientific notation support
+  tag: "latest"  # Latest version with scientific notation support and multi-arch builds
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
 # Resource configuration - TEMPORARILY REDUCED FOR TESTING
