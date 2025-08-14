@@ -85,7 +85,7 @@ logging:
 
 # Resource limits and overload management
 resourceLimits:
-  maxHeapSizeBytes: 1536MB       # 1.5 GiB (75% of 2Gi container limit)
+  maxHeapSizeBytes: 1610612736  # 1.5 GiB (75% of 2Gi container limit) - Fixed: numeric value in bytes
   shrinkHeapThreshold: 0.8       # Start shrinking heap at 80%
   heapStopAcceptingThreshold: 0.95  # Stop accepting at 95% heap
 
