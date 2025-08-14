@@ -85,7 +85,7 @@ logging:
 
 # Resource limits and overload management
 resourceLimits:
-  maxHeapSizeBytes: 1610612736  # 1.5 GiB (75% of 2Gi container limit) - Fixed: numeric value in bytes
+  maxHeapSizeBytes: 1207959552  # 1.125 GiB (75% of 1.5Gi container limit) - Optimized for cluster
   shrinkHeapThreshold: 0.8       # Start shrinking heap at 80%
   heapStopAcceptingThreshold: 0.95  # Stop accepting at 95% heap
 
@@ -126,14 +126,14 @@ securityContext:
     drop:
       - ALL
 
-# Resource configuration - Production
+# Resource configuration - OPTIMIZED FOR CLUSTER CAPACITY
 resources:
   limits:
-    cpu: 2000m
-    memory: 2Gi
+    cpu: 1500m    # Optimized for cluster capacity (1.5 cores)
+    memory: 1.5Gi # Optimized for cluster capacity (1.5GB)
   requests:
-    cpu: 500m
-    memory: 1Gi
+    cpu: 300m     # Optimized for cluster capacity (0.3 cores)
+    memory: 512Mi # Optimized for cluster capacity (512MB)
 
 # Node selector
 nodeSelector: {}
