@@ -88,14 +88,14 @@ image:
   tag: "latest"  # Latest version with scientific notation support and multi-arch builds
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# Resource configuration - TEMPORARILY REDUCED FOR TESTING
+# Resource configuration - OPTIMIZED FOR CLUSTER CAPACITY
 resources:
   limits:
-    cpu: 1000m    # Reduced for testing
-    memory: 1Gi   # Reduced for testing
+    cpu: 1500m    # Optimized for cluster capacity (1.5 cores)
+    memory: 1.5Gi # Optimized for cluster capacity (1.5GB)
   requests:
-    cpu: 250m     # Reduced for testing
-    memory: 512Mi # Reduced for testing
+    cpu: 300m     # Optimized for cluster capacity (0.3 cores)
+    memory: 512Mi # Optimized for cluster capacity (512MB)
 
 # Security context
 securityContext:
