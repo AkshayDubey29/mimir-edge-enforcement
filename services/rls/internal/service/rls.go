@@ -1464,28 +1464,31 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 
 		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: loaded tenant from store")
 	} else {
-		// Create new tenant with NO limits until overrides-sync sets them
-		// This prevents race conditions where requests see default limits before overrides-sync updates them
+		// 🔧 FIX: Handle Redis nil errors gracefully - create tenant with default limits
+		// This prevents 503 errors when tenants don't exist in Redis yet
+		rls.logger.Info().Str("tenant_id", tenantID).Err(err).Msg("RLS: tenant not found in store, creating with default limits")
+		
+		// Create new tenant with DEFAULT limits to prevent 503 errors
+		// These limits will be overridden by overrides-sync when it runs
 		tenant = &TenantState{
 			Info: limits.TenantInfo{
 				ID:   tenantID,
 				Name: tenantID,
-				// 🔧 FIX: Start with NO limits to prevent race conditions
-				Limits: limits.TenantLimits{
-					SamplesPerSecond: 0, // No limit until overrides-sync sets it
-					MaxBodyBytes:     0, // No limit until overrides-sync sets it
-				},
-				Enforcement: limits.EnforcementConfig{
-					Enabled: false, // 🔧 FIX: Disable enforcement until overrides-sync enables it
-				},
+				// 🔧 FIX: Use default limits to prevent 503 errors
+				Limits: rls.config.DefaultLimits,
+				Enforcement: rls.config.DefaultEnforcement,
 			},
-			// 🔧 FIX: No buckets until overrides-sync creates them
-			SamplesBucket:  nil, // No rate limiting until overrides-sync sets it
-			BytesBucket:    nil, // No rate limiting until overrides-sync sets it
-			RequestsBucket: nil, // No rate limiting until overrides-sync sets it
 		}
 
-		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: created new tenant (not in store)")
+		// Create buckets with default limits
+		if rls.config.DefaultLimits.SamplesPerSecond > 0 {
+			tenant.SamplesBucket = buckets.NewTokenBucket(rls.config.DefaultLimits.SamplesPerSecond, rls.config.DefaultLimits.SamplesPerSecond)
+		}
+		if rls.config.DefaultLimits.MaxBodyBytes > 0 {
+			tenant.BytesBucket = buckets.NewTokenBucket(float64(rls.config.DefaultLimits.MaxBodyBytes), float64(rls.config.DefaultLimits.MaxBodyBytes))
+		}
+
+		rls.logger.Info().Str("tenant_id", tenantID).Msg("RLS: created new tenant with default limits")
 	}
 
 	rls.tenants[tenantID] = tenant
