@@ -40,6 +40,13 @@ type RLSConfig struct {
 	MimirPort          string
 }
 
+// SeriesCacheEntry represents a cached series count entry
+type SeriesCacheEntry struct {
+	GlobalCount int64
+	MetricCounts map[string]int64
+	LastUpdated  time.Time
+}
+
 // RLS represents the Rate Limit Service
 // TimeBucket represents a time-based data bucket for aggregation
 type TimeBucket struct {
@@ -125,6 +132,10 @@ type RLS struct {
 	counters      map[string]*TenantCounters
 	recentDenials []limits.DenialInfo
 
+	// 🔧 NEW: In-memory cache for series counts to reduce Redis calls
+	seriesCacheMu sync.RWMutex
+	seriesCache    map[string]*SeriesCacheEntry
+
 	// Traffic flow tracking
 	trafficFlowMu sync.RWMutex
 	trafficFlow   *TrafficFlowState
@@ -207,6 +218,7 @@ func NewRLS(config *RLSConfig, logger zerolog.Logger) *RLS {
 		trafficFlow:    &TrafficFlowState{ResponseTimes: make(map[string]float64)},
 		timeAggregator: NewTimeAggregator(),
 		cache:          make(map[string]*CacheEntry),
+		seriesCache:    make(map[string]*SeriesCacheEntry), // 🔧 NEW: Initialize series cache
 	}
 
 	rls.metrics = rls.createMetrics()
@@ -1467,7 +1479,7 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 		// 🔧 FIX: Handle Redis nil errors gracefully - create tenant with default limits
 		// This prevents 503 errors when tenants don't exist in Redis yet
 		rls.logger.Info().Str("tenant_id", tenantID).Err(err).Msg("RLS: tenant not found in store, creating with default limits")
-		
+
 		// Create new tenant with DEFAULT limits to prevent 503 errors
 		// These limits will be overridden by overrides-sync when it runs
 		tenant = &TenantState{
@@ -1475,7 +1487,7 @@ func (rls *RLS) getTenant(tenantID string) *TenantState {
 				ID:   tenantID,
 				Name: tenantID,
 				// 🔧 FIX: Use default limits to prevent 503 errors
-				Limits: rls.config.DefaultLimits,
+				Limits:      rls.config.DefaultLimits,
 				Enforcement: rls.config.DefaultEnforcement,
 			},
 		}
@@ -1749,29 +1761,86 @@ func (rls *RLS) GetMimirPort() string {
 
 // getTenantGlobalSeriesCount returns the current global series count for a tenant
 func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
-	// 🔥 ULTRA-FAST PATH: Ultra-fast Redis calls with minimal timeout
+	// 🔧 FIX: Use cache first to reduce Redis calls and improve performance
+	rls.seriesCacheMu.RLock()
+	if entry, exists := rls.seriesCache[tenantID]; exists && time.Since(entry.LastUpdated) < 30*time.Second {
+		rls.seriesCacheMu.RUnlock()
+		return entry.GlobalCount
+	}
+	rls.seriesCacheMu.RUnlock()
+
+	// 🔧 FIX: Better Redis error handling with fallback logic
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	count, err := rls.store.GetGlobalSeriesCount(ctx, tenantID)
 	if err != nil {
-		// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
+		// 🔧 FIX: Handle Redis nil errors gracefully - this is expected for new tenants
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "nil") {
+			// This is normal for new tenants - no series count exists yet
+			rls.logger.Debug().Str("tenant_id", tenantID).Msg("RLS: no global series count found (new tenant)")
+			return 0
+		}
+		
+		// For other Redis errors, log but don't fail the request
+		rls.logger.Warn().Str("tenant_id", tenantID).Err(err).Msg("RLS: Redis error getting global series count, using 0")
 		return 0
 	}
+
+	// 🔧 FIX: Update cache with successful result
+	rls.seriesCacheMu.Lock()
+	rls.seriesCache[tenantID] = &SeriesCacheEntry{
+		GlobalCount:  count,
+		MetricCounts: make(map[string]int64), // Will be updated by getTenantMetricSeriesCount
+		LastUpdated:  time.Now(),
+	}
+	rls.seriesCacheMu.Unlock()
+
 	return count
 }
 
 // getTenantMetricSeriesCount returns the current series count per metric for a tenant
 func (rls *RLS) getTenantMetricSeriesCount(tenantID string, requestInfo *limits.RequestInfo) map[string]int64 {
-	// 🔥 ULTRA-FAST PATH: Ultra-fast Redis calls with minimal timeout
+	// 🔧 FIX: Use cache first to reduce Redis calls and improve performance
+	rls.seriesCacheMu.RLock()
+	if entry, exists := rls.seriesCache[tenantID]; exists && time.Since(entry.LastUpdated) < 30*time.Second {
+		rls.seriesCacheMu.RUnlock()
+		return entry.MetricCounts
+	}
+	rls.seriesCacheMu.RUnlock()
+
+	// 🔧 FIX: Better Redis error handling with fallback logic
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	counts, err := rls.store.GetAllMetricSeriesCounts(ctx, tenantID)
 	if err != nil {
-		// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
+		// 🔧 FIX: Handle Redis nil errors gracefully - this is expected for new tenants
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "nil") {
+			// This is normal for new tenants - no metric series counts exist yet
+			rls.logger.Debug().Str("tenant_id", tenantID).Msg("RLS: no metric series counts found (new tenant)")
+			return make(map[string]int64)
+		}
+		
+		// For other Redis errors, log but don't fail the request
+		rls.logger.Warn().Str("tenant_id", tenantID).Err(err).Msg("RLS: Redis error getting metric series counts, using empty map")
 		return make(map[string]int64)
 	}
+
+	// 🔧 FIX: Update cache with successful result
+	rls.seriesCacheMu.Lock()
+	if entry, exists := rls.seriesCache[tenantID]; exists {
+		entry.MetricCounts = counts
+		entry.LastUpdated = time.Now()
+	} else {
+		rls.seriesCache[tenantID] = &SeriesCacheEntry{
+			GlobalCount:  0, // Will be updated by getTenantGlobalSeriesCount
+			MetricCounts: counts,
+			LastUpdated:  time.Now(),
+		}
+	}
+	rls.seriesCacheMu.Unlock()
+
 	return counts
 }
 
@@ -1818,6 +1887,11 @@ func (rls *RLS) updateGlobalSeriesCounts(tenantID string, requestInfo *limits.Re
 				// 🔥 ULTRA-FAST PATH: Silent fail for maximum performance
 			}
 		}
+
+		// 🔧 FIX: Invalidate cache after updates to ensure fresh data
+		rls.seriesCacheMu.Lock()
+		delete(rls.seriesCache, tenantID)
+		rls.seriesCacheMu.Unlock()
 	}()
 }
 

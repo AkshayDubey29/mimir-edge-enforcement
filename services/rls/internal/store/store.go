@@ -401,6 +401,11 @@ func (r *RedisStore) GetAllMetricSeriesCounts(ctx context.Context, tenantID stri
 		return nil, fmt.Errorf("redis keys error: %w", err)
 	}
 
+	// 🔧 FIX: Handle case where no metric series keys exist (normal for new tenants)
+	if len(keys) == 0 {
+		return make(map[string]int64), nil
+	}
+
 	metricCounts := make(map[string]int64)
 	for _, key := range keys {
 		// Extract metric name from key: rls:series:metric:tenantID:metricName
@@ -409,6 +414,11 @@ func (r *RedisStore) GetAllMetricSeriesCounts(ctx context.Context, tenantID stri
 			metricName := parts[4]
 			count, err := r.client.Get(ctx, key).Int64()
 			if err != nil {
+				// 🔧 FIX: Handle Redis nil errors gracefully instead of logging as error
+				if err == redis.Nil {
+					// Key was deleted between Keys() and Get() - skip it
+					continue
+				}
 				r.logger.Error().Err(err).Str("key", key).Msg("failed to get metric series count")
 				continue
 			}
