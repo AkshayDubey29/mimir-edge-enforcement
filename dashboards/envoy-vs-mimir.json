@@ -8,16 +8,16 @@
       "description": "All HTTP response codes from Envoy",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"2.*\"}[5m])) by (response_code)",
-          "legendFormat": "2xx - {{response_code}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"2\"}[5m])) by (envoy_response_code_class)",
+        "legendFormat": "2xx - {{envoy_response_code_class}}xx"
         },
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*\"}[5m])) by (response_code)",
-          "legendFormat": "4xx - {{response_code}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (envoy_response_code_class)",
+        "legendFormat": "4xx - {{envoy_response_code_class}}xx"
         },
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"5.*\"}[5m])) by (response_code)",
-          "legendFormat": "5xx - {{response_code}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"5\"}[5m])) by (envoy_response_code_class)",
+        "legendFormat": "5xx - {{envoy_response_code_class}}xx"
         }
       ]
     },
@@ -42,7 +42,7 @@
           "legendFormat": "RLS Deny - {{tenant}}"
         },
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (route)",
           "legendFormat": "HTTP 429 - {{route}}"
         }
       ]
@@ -68,8 +68,8 @@
       "description": "Error rates across the system",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*|5.*\"}[5m])) by (response_code)",
-          "legendFormat": "HTTP {{response_code}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=~\"4|5\"}[5m])) by (envoy_response_code_class)",
+        "legendFormat": "HTTP {{envoy_response_code_class}}xx"
         },
         {
           "expr": "rate(rls_body_parse_errors_total[5m])",
