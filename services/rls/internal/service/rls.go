@@ -39,7 +39,7 @@ type RLSConfig struct {
 	MimirHost          string
 	MimirPort          string
 	// 🔧 NEW: Configuration for new tenant leniency
-	NewTenantLeniency  bool  // Enable lenient limits for new tenants
+	NewTenantLeniency bool // Enable lenient limits for new tenants
 }
 
 // SeriesCacheEntry represents a cached series count entry
@@ -1538,32 +1538,35 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		Interface("metric_series_counts", requestInfo.MetricSeriesCounts).
 		Msg("DEBUG: Cardinality check - series counts analysis")
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Enable cardinality checks with performance optimizations
+		// 🔧 PERFORMANCE OPTIMIZATION: Enable cardinality checks with performance optimizations
 	// Check per-user series limit (global across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
-		// 🔧 FIX: Be more lenient with new tenants (no existing series)
-		isNewTenant := currentTenantSeries == 0
+		// 🔧 FIX: Be more lenient when adding new series (not just new tenants)
+		hasExistingSeries := currentTenantSeries > 0
+		newSeriesRatio := float64(requestInfo.ObservedSeries) / float64(currentTenantSeries+requestInfo.ObservedSeries)
 		
 		// Calculate if adding new series would exceed the global limit
 		projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
 		
-		// For new tenants, allow up to 50% of the limit to prevent false positives
+		// Apply leniency when adding significant new series (>20% of total) or for tenants with no existing series
 		effectiveLimit := int64(tenant.Info.Limits.MaxSeriesPerRequest)
-		if isNewTenant && rls.config.NewTenantLeniency {
-			effectiveLimit = effectiveLimit / 2 // Allow 50% for new tenants
+		if rls.config.NewTenantLeniency && (currentTenantSeries == 0 || newSeriesRatio > 0.2) {
+			effectiveLimit = effectiveLimit / 2 // Allow 50% for new series additions
 			rls.logger.Debug().
 				Str("tenant", tenant.Info.ID).
-				Bool("is_new_tenant", true).
+				Bool("has_existing_series", hasExistingSeries).
+				Float64("new_series_ratio", newSeriesRatio).
 				Bool("leniency_enabled", rls.config.NewTenantLeniency).
 				Int64("original_limit", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
 				Int64("effective_limit", effectiveLimit).
-				Msg("DEBUG: New tenant detected - using lenient limit")
+				Msg("DEBUG: New series addition detected - using lenient limit")
 		}
-		
+
 		if projectedTotalSeries > effectiveLimit {
 			rls.logger.Info().
 				Str("tenant", tenant.Info.ID).
-				Bool("is_new_tenant", isNewTenant).
+				Bool("has_existing_series", hasExistingSeries).
+				Float64("new_series_ratio", newSeriesRatio).
 				Bool("leniency_enabled", rls.config.NewTenantLeniency).
 				Int64("current_tenant_series", currentTenantSeries).
 				Int64("new_series_in_request", requestInfo.ObservedSeries).
@@ -1584,13 +1587,12 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-	// Check per-metric series limit (global per metric across tenant)
+		// Check per-metric series limit (global per metric across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
-		// 🔧 FIX: Be more lenient with new tenants (no existing series)
-		isNewTenant := currentTenantSeries == 0
+		// 🔧 FIX: Be more lenient when adding new series (not just new tenants)
 		effectiveMetricLimit := int64(tenant.Info.Limits.MaxSeriesPerMetric)
-		if isNewTenant && rls.config.NewTenantLeniency {
-			effectiveMetricLimit = effectiveMetricLimit / 2 // Allow 50% for new tenants
+		if rls.config.NewTenantLeniency && currentTenantSeries == 0 {
+			effectiveMetricLimit = effectiveMetricLimit / 2 // Allow 50% for new series additions
 		}
 		
 		// Calculate if adding new series for any metric would exceed the per-metric limit
@@ -1602,7 +1604,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 				rls.logger.Info().
 					Str("tenant", tenant.Info.ID).
 					Str("metric_name", metricName).
-					Bool("is_new_tenant", isNewTenant).
+					Bool("has_existing_series", currentTenantSeries > 0).
 					Int64("current_metric_series", currentMetricTotal).
 					Int64("new_series_for_metric", seriesCount).
 					Int64("projected_metric_total", projectedMetricTotal).
