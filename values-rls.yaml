@@ -67,6 +67,9 @@ performance:
   maxConcurrentRequests: 2000    # High concurrent request handling
   requestTimeout: "30s"          # Increased timeout for high traffic scenarios
   bodyParseTimeout: "10s"        # Increased timeout for body parsing under load
+
+# 🔧 NEW: New tenant leniency configuration
+newTenantLeniency: true  # Enable lenient limits (50%) for new tenants to prevent false positives
   
   # Redis connection optimization (Production optimized)
   redisPoolSize: 50              # Reasonable pool size for production
