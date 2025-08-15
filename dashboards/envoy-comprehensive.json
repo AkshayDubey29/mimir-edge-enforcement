@@ -8,8 +8,8 @@
       "description": "Successful HTTP responses (2xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"2.*\"}[5m])) by (response_code, route)",
-          "legendFormat": "{{response_code}} - {{route}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"2\"}[5m])) by (envoy_response_code_class, route)",
+        "legendFormat": "{{envoy_response_code_class}}xx - {{route}}"
         }
       ],
       "yAxes": [
@@ -25,8 +25,8 @@
       "description": "Client error HTTP responses (4xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"4.*\"}[5m])) by (response_code, route)",
-          "legendFormat": "{{response_code}} - {{route}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (envoy_response_code_class, route)",
+        "legendFormat": "{{envoy_response_code_class}}xx - {{route}}"
         }
       ],
       "yAxes": [
@@ -42,8 +42,8 @@
       "description": "Server error HTTP responses (5xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=~\"5.*\"}[5m])) by (response_code, route)",
-          "legendFormat": "{{response_code}} - {{route}}"
+                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"5\"}[5m])) by (envoy_response_code_class, route)",
+        "legendFormat": "{{envoy_response_code_class}}xx - {{route}}"
         }
       ],
       "yAxes": [
@@ -59,7 +59,7 @@
       "description": "Rate limited requests (HTTP 429)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"429\"}[5m])) by (route)",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (route)",
           "legendFormat": "429 - {{route}}"
         }
       ],
@@ -76,7 +76,7 @@
       "description": "Forbidden requests (HTTP 403)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"403\"}[5m])) by (route)",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (route)",
           "legendFormat": "403 - {{route}}"
         }
       ],
@@ -93,7 +93,7 @@
       "description": "Bad gateway errors (HTTP 502)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{response_code=\"502\"}[5m])) by (route)",
+          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"5\"}[5m])) by (route)",
           "legendFormat": "502 - {{route}}"
         }
       ],
@@ -229,8 +229,8 @@
       "description": "Successful upstream requests (2xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"2.*\"}[5m])) by (cluster_name, response_code)",
-          "legendFormat": "{{cluster_name}} - {{response_code}}"
+                  "expr": "sum(rate(envoy_cluster_upstream_rq_xx{envoy_response_code_class=\"2\"}[5m])) by (cluster_name, envoy_response_code_class)",
+        "legendFormat": "{{cluster_name}} - {{envoy_response_code_class}}xx"
         }
       ],
       "yAxes": [
@@ -246,8 +246,8 @@
       "description": "Client error upstream requests (4xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"4.*\"}[5m])) by (cluster_name, response_code)",
-          "legendFormat": "{{cluster_name}} - {{response_code}}"
+                  "expr": "sum(rate(envoy_cluster_upstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (cluster_name, envoy_response_code_class)",
+        "legendFormat": "{{cluster_name}} - {{envoy_response_code_class}}xx"
         }
       ],
       "yAxes": [
@@ -263,8 +263,8 @@
       "description": "Server error upstream requests (5xx)",
       "targets": [
         {
-          "expr": "sum(rate(envoy_cluster_upstream_rq_xx{response_code=~\"5.*\"}[5m])) by (cluster_name, response_code)",
-          "legendFormat": "{{cluster_name}} - {{response_code}}"
+                  "expr": "sum(rate(envoy_cluster_upstream_rq_xx{envoy_response_code_class=\"5\"}[5m])) by (cluster_name, envoy_response_code_class)",
+        "legendFormat": "{{cluster_name}} - {{envoy_response_code_class}}xx"
         }
       ],
       "yAxes": [
