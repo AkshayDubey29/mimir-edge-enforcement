@@ -38,11 +38,13 @@ type RLSConfig struct {
 	RedisAddress       string
 	MimirHost          string
 	MimirPort          string
+	// 🔧 NEW: Configuration for new tenant leniency
+	NewTenantLeniency  bool  // Enable lenient limits for new tenants
 }
 
 // SeriesCacheEntry represents a cached series count entry
 type SeriesCacheEntry struct {
-	GlobalCount int64
+	GlobalCount  int64
 	MetricCounts map[string]int64
 	LastUpdated  time.Time
 }
@@ -134,7 +136,7 @@ type RLS struct {
 
 	// 🔧 NEW: In-memory cache for series counts to reduce Redis calls
 	seriesCacheMu sync.RWMutex
-	seriesCache    map[string]*SeriesCacheEntry
+	seriesCache   map[string]*SeriesCacheEntry
 
 	// Traffic flow tracking
 	trafficFlowMu sync.RWMutex
@@ -1526,28 +1528,49 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	currentMetricSeries := rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
 	rls.tenantsMu.RUnlock()
 
-	// 🔧 DEBUG: Log current global series counts
-	// rls.logger.Info().
-	// 	Str("tenant", tenant.Info.ID).
-	// 	Int64("current_tenant_series", currentTenantSeries).
-	// 	Int64("new_series_in_request", requestInfo.ObservedSeries).
-	// 	Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
-	// 	Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
-	// 	Msg("DEBUG: Mimir-style cardinality check - global series counts")
+	// 🔧 DEBUG: Log current global series counts for troubleshooting
+	rls.logger.Debug().
+		Str("tenant", tenant.Info.ID).
+		Int64("current_tenant_series", currentTenantSeries).
+		Int64("new_series_in_request", requestInfo.ObservedSeries).
+		Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
+		Bool("enforce_max_series_per_request", tenant.Info.Enforcement.EnforceMaxSeriesPerRequest).
+		Interface("metric_series_counts", requestInfo.MetricSeriesCounts).
+		Msg("DEBUG: Cardinality check - series counts analysis")
 
 	// 🔧 PERFORMANCE OPTIMIZATION: Enable cardinality checks with performance optimizations
 	// Check per-user series limit (global across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
+		// 🔧 FIX: Be more lenient with new tenants (no existing series)
+		isNewTenant := currentTenantSeries == 0
+		
 		// Calculate if adding new series would exceed the global limit
 		projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
-		if projectedTotalSeries > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+		
+		// For new tenants, allow up to 50% of the limit to prevent false positives
+		effectiveLimit := int64(tenant.Info.Limits.MaxSeriesPerRequest)
+		if isNewTenant && rls.config.NewTenantLeniency {
+			effectiveLimit = effectiveLimit / 2 // Allow 50% for new tenants
+			rls.logger.Debug().
+				Str("tenant", tenant.Info.ID).
+				Bool("is_new_tenant", true).
+				Bool("leniency_enabled", rls.config.NewTenantLeniency).
+				Int64("original_limit", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
+				Int64("effective_limit", effectiveLimit).
+				Msg("DEBUG: New tenant detected - using lenient limit")
+		}
+		
+		if projectedTotalSeries > effectiveLimit {
 			rls.logger.Info().
 				Str("tenant", tenant.Info.ID).
+				Bool("is_new_tenant", isNewTenant).
+				Bool("leniency_enabled", rls.config.NewTenantLeniency).
 				Int64("current_tenant_series", currentTenantSeries).
 				Int64("new_series_in_request", requestInfo.ObservedSeries).
 				Int64("projected_total", projectedTotalSeries).
-				Int64("max_series_per_user", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
-				Msg("DEBUG: Mimir-style cardinality check - per-user series limit exceeded")
+				Int64("effective_limit", effectiveLimit).
+				Int64("original_limit", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
+				Msg("DEBUG: Cardinality check - per-user series limit exceeded")
 
 			// 🔧 NEW: Record limit violation metrics
 			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_user_series_limit_exceeded").Inc()
@@ -1563,20 +1586,29 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 	// Check per-metric series limit (global per metric across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
+		// 🔧 FIX: Be more lenient with new tenants (no existing series)
+		isNewTenant := currentTenantSeries == 0
+		effectiveMetricLimit := int64(tenant.Info.Limits.MaxSeriesPerMetric)
+		if isNewTenant && rls.config.NewTenantLeniency {
+			effectiveMetricLimit = effectiveMetricLimit / 2 // Allow 50% for new tenants
+		}
+		
 		// Calculate if adding new series for any metric would exceed the per-metric limit
 		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
 			currentMetricTotal := currentMetricSeries[metricName]
 			projectedMetricTotal := currentMetricTotal + seriesCount
 
-			if projectedMetricTotal > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
+			if projectedMetricTotal > effectiveMetricLimit {
 				rls.logger.Info().
 					Str("tenant", tenant.Info.ID).
 					Str("metric_name", metricName).
+					Bool("is_new_tenant", isNewTenant).
 					Int64("current_metric_series", currentMetricTotal).
 					Int64("new_series_for_metric", seriesCount).
 					Int64("projected_metric_total", projectedMetricTotal).
-					Int64("max_series_per_metric", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
-					Msg("DEBUG: Mimir-style cardinality check - per-metric series limit exceeded")
+					Int64("effective_metric_limit", effectiveMetricLimit).
+					Int64("original_metric_limit", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
+					Msg("DEBUG: Cardinality check - per-metric series limit exceeded")
 
 				// 🔧 NEW: Record limit violation metrics
 				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "per_metric_series_limit_exceeded").Inc()
@@ -1781,7 +1813,7 @@ func (rls *RLS) getTenantGlobalSeriesCount(tenantID string) int64 {
 			rls.logger.Debug().Str("tenant_id", tenantID).Msg("RLS: no global series count found (new tenant)")
 			return 0
 		}
-		
+
 		// For other Redis errors, log but don't fail the request
 		rls.logger.Warn().Str("tenant_id", tenantID).Err(err).Msg("RLS: Redis error getting global series count, using 0")
 		return 0
@@ -1821,7 +1853,7 @@ func (rls *RLS) getTenantMetricSeriesCount(tenantID string, requestInfo *limits.
 			rls.logger.Debug().Str("tenant_id", tenantID).Msg("RLS: no metric series counts found (new tenant)")
 			return make(map[string]int64)
 		}
-		
+
 		// For other Redis errors, log but don't fail the request
 		rls.logger.Warn().Str("tenant_id", tenantID).Err(err).Msg("RLS: Redis error getting metric series counts, using empty map")
 		return make(map[string]int64)

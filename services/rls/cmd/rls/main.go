@@ -115,6 +115,9 @@ var (
 	mimirHost = flag.String("mimir-host", "mock-mimir-distributor.mimir.svc.cluster.local", "Mimir distributor host")
 	mimirPort = flag.String("mimir-port", "8080", "Mimir distributor port")
 
+	// 🔧 NEW: New tenant leniency configuration
+	newTenantLeniency = flag.Bool("new-tenant-leniency", true, "Enable lenient limits for new tenants (50% of normal limits)")
+
 	// Logging
 	logLevel = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
@@ -163,6 +166,7 @@ func main() {
 		RedisAddress:       *redisAddress,
 		MimirHost:          *mimirHost,
 		MimirPort:          *mimirPort,
+		NewTenantLeniency:  *newTenantLeniency, // 🔧 NEW: Add new tenant leniency configuration
 		DefaultLimits: limits.TenantLimits{
 			SamplesPerSecond:    defaultSamplesPerSecond,
 			BurstPercent:        defaultBurstPercent,
