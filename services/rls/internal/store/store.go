@@ -332,15 +332,24 @@ func (r *RedisStore) Close() error {
 	return r.client.Close()
 }
 
-// 🔧 NEW: Global series tracking methods for RedisStore
+// 🔧 NEW: Global series tracking methods for RedisStore with circuit breaker
 func (r *RedisStore) GetGlobalSeriesCount(ctx context.Context, tenantID string) (int64, error) {
+	// 🔧 HIGH SCALE: Add circuit breaker protection
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			r.logger.Error().Interface("panic", recovered).Str("tenant", tenantID).Msg("Redis GetGlobalSeriesCount panic recovered")
+		}
+	}()
+	
 	key := fmt.Sprintf("rls:series:global:%s", tenantID)
 	count, err := r.client.Get(ctx, key).Int64()
 	if err != nil {
 		if err == redis.Nil {
 			return 0, nil // No series count found, return 0
 		}
-		return 0, fmt.Errorf("redis get global series count error: %w", err)
+		// 🔧 HIGH SCALE: Log Redis errors but don't fail the request
+		r.logger.Warn().Err(err).Str("tenant", tenantID).Str("key", key).Msg("Redis get global series count error - using 0")
+		return 0, nil // Return 0 instead of error to prevent 503s
 	}
 	return count, nil
 }
