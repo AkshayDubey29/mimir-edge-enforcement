@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -1525,7 +1526,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	// Get current global series counts for this tenant with circuit breaker protection
 	var currentTenantSeries int64
 	var currentMetricSeries map[string]int64
-	
+
 	// 🔧 NEW: Circuit breaker for Redis operations to prevent 503s
 	func() {
 		defer func() {
@@ -1536,7 +1537,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 				currentMetricSeries = make(map[string]int64)
 			}
 		}()
-		
+
 		rls.tenantsMu.RLock()
 		currentTenantSeries = rls.getTenantGlobalSeriesCount(tenant.Info.ID)
 		currentMetricSeries = rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
@@ -1640,9 +1641,31 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-	// Check other limits (existing logic)
+	// 🔧 HIGH SCALE: Adaptive body size enforcement to prevent 413 errors
 	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 {
-		if bodyBytes > tenant.Info.Limits.MaxBodyBytes {
+		// 🔧 NEW: Check if tenant is sending large payloads consistently
+		recentDenials := rls.getRecentDenials(tenant.Info.ID, 10*time.Minute)
+		bodySizeDenials := 0
+		for _, denial := range recentDenials {
+			if denial.Reason == "body_size_exceeded" {
+				bodySizeDenials++
+			}
+		}
+		
+		// Apply lenient body size limits for tenants with consistent large payloads
+		effectiveBodyLimit := tenant.Info.Limits.MaxBodyBytes
+		if bodySizeDenials > 3 {
+			// Allow 50% larger body size for tenants with consistent large payloads
+			effectiveBodyLimit = int64(float64(tenant.Info.Limits.MaxBodyBytes) * 1.5)
+			rls.logger.Info().
+				Str("tenant", tenant.Info.ID).
+				Int("body_size_denials", bodySizeDenials).
+				Int64("original_limit", tenant.Info.Limits.MaxBodyBytes).
+				Int64("effective_limit", effectiveBodyLimit).
+				Msg("RLS: Applying lenient body size limit for tenant with large payloads")
+		}
+		
+		if bodyBytes > effectiveBodyLimit {
 			// 🔧 NEW: Record limit violation metrics
 			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "body_size_exceeded").Inc()
 			rls.metrics.BodySizeGauge.WithLabelValues(tenant.Info.ID).Set(float64(bodyBytes))
@@ -1669,17 +1692,43 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-	// Rate limiting checks (existing logic)
+	// 🔧 HIGH SCALE: Adaptive rate limiting to prevent metric flow stoppage
 	if tenant.Info.Enforcement.EnforceSamplesPerSecond && tenant.SamplesBucket != nil {
-		if !tenant.SamplesBucket.Take(float64(samples)) {
-			// 🔧 NEW: Record limit violation metrics
-			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "samples_per_second_exceeded").Inc()
-			rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(samples))
+		// 🔧 NEW: Check if tenant is in "recovery mode" (recent denials)
+		recentDenials := rls.getRecentDenials(tenant.Info.ID, 5*time.Minute)
+		isInRecovery := len(recentDenials) > 5 // More than 5 denials in 5 minutes
+		
+		if isInRecovery {
+			// 🔧 NEW: Apply lenient rate limiting for tenants in recovery
+			rls.logger.Info().
+				Str("tenant", tenant.Info.ID).
+				Int("recent_denials", len(recentDenials)).
+				Msg("RLS: Tenant in recovery mode - applying lenient rate limiting")
+			
+			// Allow 50% more samples during recovery
+			recoverySamples := int64(float64(samples) * 1.5)
+			if !tenant.SamplesBucket.Take(float64(recoverySamples)) {
+				// Still denied, but with recovery logging
+				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "samples_per_second_exceeded_recovery").Inc()
+				rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(samples))
+				
+				decision.Allowed = false
+				decision.Reason = "samples_per_second_exceeded_recovery"
+				decision.Code = 429
+				return decision
+			}
+		} else {
+			// Normal rate limiting
+			if !tenant.SamplesBucket.Take(float64(samples)) {
+				// 🔧 NEW: Record limit violation metrics
+				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "samples_per_second_exceeded").Inc()
+				rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(samples))
 
-			decision.Allowed = false
-			decision.Reason = "samples_per_second_exceeded"
-			decision.Code = 429
-			return decision
+				decision.Allowed = false
+				decision.Reason = "samples_per_second_exceeded"
+				decision.Code = 429
+				return decision
+			}
 		}
 	}
 
@@ -1692,6 +1741,29 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
+	// 🔧 HIGH SCALE: Safety valve to prevent complete metric flow stoppage
+	// If tenant has been denied too much recently, allow some traffic through
+	if !decision.Allowed {
+		recentDenials := rls.getRecentDenials(tenant.Info.ID, 2*time.Minute)
+		if len(recentDenials) > 10 {
+			// 🔧 NEW: Safety valve - allow 10% of traffic even when limits are exceeded
+			if rand.Float64() < 0.1 { // 10% chance to allow
+				rls.logger.Warn().
+					Str("tenant", tenant.Info.ID).
+					Int("recent_denials", len(recentDenials)).
+					Str("original_reason", decision.Reason).
+					Msg("RLS: Safety valve activated - allowing traffic despite limits")
+				
+				decision.Allowed = true
+				decision.Reason = "safety_valve_activated"
+				decision.Code = 200
+				
+				// Record safety valve usage
+				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "safety_valve_activated").Inc()
+			}
+		}
+	}
+
 	// 🔧 HIGH SCALE OPTIMIZATION: Enhanced Redis operations with reliability improvements
 	if decision.Allowed {
 		// 🔧 NEW: Async Redis updates with circuit breaker to prevent 503s
@@ -1701,11 +1773,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 					rls.logger.Error().Interface("panic", r).Str("tenant", tenant.Info.ID).Msg("RLS: Redis update panic recovered")
 				}
 			}()
-			
+
 			// Use a separate context with timeout for Redis updates
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			
+
 			// 🔧 NEW: Non-blocking Redis updates to prevent request delays
 			select {
 			case <-ctx.Done():
@@ -1742,6 +1814,24 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 	}
 
 	return decision
+}
+
+// 🔧 NEW: getRecentDenials gets recent denials for a tenant within a time window
+func (rls *RLS) getRecentDenials(tenantID string, window time.Duration) []limits.DenialInfo {
+	rls.countersMu.RLock()
+	defer rls.countersMu.RUnlock()
+	
+	var recentDenials []limits.DenialInfo
+	cutoff := time.Now().Add(-window)
+	
+	// Check recent denials list
+	for _, denial := range rls.recentDenials {
+		if denial.TenantID == tenantID && denial.Timestamp.After(cutoff) {
+			recentDenials = append(recentDenials, denial)
+		}
+	}
+	
+	return recentDenials
 }
 
 // 🔧 NEW: CheckRemoteWriteLimits checks limits for remote write requests
