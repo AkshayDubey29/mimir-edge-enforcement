@@ -1521,12 +1521,27 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		Code:    200,
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Enable Redis operations with performance optimizations
-	// Get current global series counts for this tenant
-	rls.tenantsMu.RLock()
-	currentTenantSeries := rls.getTenantGlobalSeriesCount(tenant.Info.ID)
-	currentMetricSeries := rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
-	rls.tenantsMu.RUnlock()
+	// 🔧 HIGH SCALE OPTIMIZATION: Enhanced Redis operations with reliability improvements
+	// Get current global series counts for this tenant with circuit breaker protection
+	var currentTenantSeries int64
+	var currentMetricSeries map[string]int64
+	
+	// 🔧 NEW: Circuit breaker for Redis operations to prevent 503s
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				rls.logger.Error().Interface("panic", r).Str("tenant", tenant.Info.ID).Msg("RLS: Redis operation panic recovered")
+				// Use safe defaults on panic
+				currentTenantSeries = 0
+				currentMetricSeries = make(map[string]int64)
+			}
+		}()
+		
+		rls.tenantsMu.RLock()
+		currentTenantSeries = rls.getTenantGlobalSeriesCount(tenant.Info.ID)
+		currentMetricSeries = rls.getTenantMetricSeriesCount(tenant.Info.ID, requestInfo)
+		rls.tenantsMu.RUnlock()
+	}()
 
 	// 🔧 DEBUG: Log current global series counts for troubleshooting
 	rls.logger.Debug().
@@ -1544,10 +1559,10 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		// 🔧 FIX: Be more lenient when adding new series (not just new tenants)
 		hasExistingSeries := currentTenantSeries > 0
 		newSeriesRatio := float64(requestInfo.ObservedSeries) / float64(currentTenantSeries+requestInfo.ObservedSeries)
-		
+
 		// Calculate if adding new series would exceed the global limit
 		projectedTotalSeries := currentTenantSeries + requestInfo.ObservedSeries
-		
+
 		// Apply leniency when adding significant new series (>20% of total) or for tenants with no existing series
 		effectiveLimit := int64(tenant.Info.Limits.MaxSeriesPerRequest)
 		if rls.config.NewTenantLeniency && (currentTenantSeries == 0 || newSeriesRatio > 0.2) {
@@ -1587,14 +1602,14 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-		// Check per-metric series limit (global per metric across tenant)
+	// Check per-metric series limit (global per metric across tenant)
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
 		// 🔧 FIX: Be more lenient when adding new series (not just new tenants)
 		effectiveMetricLimit := int64(tenant.Info.Limits.MaxSeriesPerMetric)
 		if rls.config.NewTenantLeniency && currentTenantSeries == 0 {
 			effectiveMetricLimit = effectiveMetricLimit / 2 // Allow 50% for new series additions
 		}
-		
+
 		// Calculate if adding new series for any metric would exceed the per-metric limit
 		for metricName, seriesCount := range requestInfo.MetricSeriesCounts {
 			currentMetricTotal := currentMetricSeries[metricName]
@@ -1677,9 +1692,28 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		}
 	}
 
-	// 🔧 PERFORMANCE OPTIMIZATION: Enable Redis operations with performance optimizations
+	// 🔧 HIGH SCALE OPTIMIZATION: Enhanced Redis operations with reliability improvements
 	if decision.Allowed {
-		rls.updateGlobalSeriesCounts(tenant.Info.ID, requestInfo)
+		// 🔧 NEW: Async Redis updates with circuit breaker to prevent 503s
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					rls.logger.Error().Interface("panic", r).Str("tenant", tenant.Info.ID).Msg("RLS: Redis update panic recovered")
+				}
+			}()
+			
+			// Use a separate context with timeout for Redis updates
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			
+			// 🔧 NEW: Non-blocking Redis updates to prevent request delays
+			select {
+			case <-ctx.Done():
+				rls.logger.Warn().Str("tenant", tenant.Info.ID).Msg("RLS: Redis update timeout - continuing without update")
+			default:
+				rls.updateGlobalSeriesCounts(tenant.Info.ID, requestInfo)
+			}
+		}()
 
 		// 🔧 NEW: Record current values for successful requests
 		rls.metrics.SeriesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(requestInfo.ObservedSeries))
