@@ -1674,7 +1674,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 			decision.Allowed = false
 			decision.Reason = "body_size_exceeded"
-			decision.Code = 413
+			decision.Code = 429  // Changed from 413 to 429 for limit violations
 			return decision
 		}
 	}
@@ -1688,7 +1688,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 			decision.Allowed = false
 			decision.Reason = "labels_per_series_exceeded"
-			decision.Code = 413
+			decision.Code = 429  // Changed from 413 to 429 for limit violations
 			return decision
 		}
 	}
