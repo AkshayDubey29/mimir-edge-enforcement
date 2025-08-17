@@ -61,6 +61,10 @@ data:
               # 🔧 FIX: Add timeouts to prevent hanging requests and buffer issues
               request_timeout: {{ .Values.extAuthz.timeout | default "10s" }}
               stream_idle_timeout: 300s
+              # 🔧 FIX: Add HTTP/2 buffer configuration to handle large requests (50MB)
+              http2_protocol_options:
+                initial_stream_window_size: {{ .Values.extAuthz.maxRequestBytes | default 52428800 | int64 }}
+                initial_connection_window_size: {{ .Values.extAuthz.maxRequestBytes | default 52428800 | int64 }}
               # Enable proper handling of forwarded headers from NGINX
               use_remote_address: {{ .Values.proxy.httpProtocol.useRemoteAddress }}
               xff_num_trusted_hops: {{ .Values.proxy.httpProtocol.xffNumTrustedHops | int }}
@@ -101,11 +105,17 @@ data:
                     function envoy_on_response(response_handle)
                       -- Check if response is from RLS and has trigger status codes
                       local status = response_handle:headers():get(":status")
-                      local upstream_cluster = response_handle:streamInfo():upstreamCluster()
+                      local stream_info = response_handle:streamInfo()
+                      local upstream_cluster = nil
+                      
+                      -- Safely get upstream cluster with error handling
+                      if stream_info then
+                        upstream_cluster = stream_info:upstreamCluster()
+                      end
                       
                       {{- $logFallbackEvents := .Values.rlsFallback.logFallbackEvents }}
                       {{- range .Values.rlsFallback.triggerStatusCodes }}
-                      if status == "{{ . }}" and upstream_cluster == "rls_remote_write" then
+                      if status == "{{ . }}" and upstream_cluster and upstream_cluster == "rls_remote_write" then
                         -- Add fallback header for retry to Mimir distributor
                         response_handle:headers():add("x-rls-fallback", "true")
                         {{- if $logFallbackEvents }}
