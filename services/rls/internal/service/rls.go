@@ -1651,7 +1651,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 				bodySizeDenials++
 			}
 		}
-		
+
 		// Apply lenient body size limits for tenants with consistent large payloads
 		effectiveBodyLimit := tenant.Info.Limits.MaxBodyBytes
 		if bodySizeDenials > 3 {
@@ -1664,7 +1664,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 				Int64("effective_limit", effectiveBodyLimit).
 				Msg("RLS: Applying lenient body size limit for tenant with large payloads")
 		}
-		
+
 		if bodyBytes > effectiveBodyLimit {
 			// 🔧 NEW: Record limit violation metrics
 			rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "body_size_exceeded").Inc()
@@ -1697,21 +1697,21 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 		// 🔧 NEW: Check if tenant is in "recovery mode" (recent denials)
 		recentDenials := rls.getRecentDenials(tenant.Info.ID, 5*time.Minute)
 		isInRecovery := len(recentDenials) > 5 // More than 5 denials in 5 minutes
-		
+
 		if isInRecovery {
 			// 🔧 NEW: Apply lenient rate limiting for tenants in recovery
 			rls.logger.Info().
 				Str("tenant", tenant.Info.ID).
 				Int("recent_denials", len(recentDenials)).
 				Msg("RLS: Tenant in recovery mode - applying lenient rate limiting")
-			
+
 			// Allow 50% more samples during recovery
 			recoverySamples := int64(float64(samples) * 1.5)
 			if !tenant.SamplesBucket.Take(float64(recoverySamples)) {
 				// Still denied, but with recovery logging
 				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "samples_per_second_exceeded_recovery").Inc()
 				rls.metrics.SamplesCountGauge.WithLabelValues(tenant.Info.ID).Set(float64(samples))
-				
+
 				decision.Allowed = false
 				decision.Reason = "samples_per_second_exceeded_recovery"
 				decision.Code = 429
@@ -1753,11 +1753,11 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 					Int("recent_denials", len(recentDenials)).
 					Str("original_reason", decision.Reason).
 					Msg("RLS: Safety valve activated - allowing traffic despite limits")
-				
+
 				decision.Allowed = true
 				decision.Reason = "safety_valve_activated"
 				decision.Code = 200
-				
+
 				// Record safety valve usage
 				rls.metrics.LimitViolationsTotal.WithLabelValues(tenant.Info.ID, "safety_valve_activated").Inc()
 			}
@@ -1820,17 +1820,17 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 func (rls *RLS) getRecentDenials(tenantID string, window time.Duration) []limits.DenialInfo {
 	rls.countersMu.RLock()
 	defer rls.countersMu.RUnlock()
-	
+
 	var recentDenials []limits.DenialInfo
 	cutoff := time.Now().Add(-window)
-	
+
 	// Check recent denials list
 	for _, denial := range rls.recentDenials {
 		if denial.TenantID == tenantID && denial.Timestamp.After(cutoff) {
 			recentDenials = append(recentDenials, denial)
 		}
 	}
-	
+
 	return recentDenials
 }
 

@@ -54,7 +54,7 @@ data:
         # 🚨 EMERGENCY BYPASS: Direct upstream for emergency rollback
         upstream mimir_direct {
             # Direct path to Mimir Distributor (emergency bypass only)
-            server distributor.mimir.svc.cluster.local:8080;
+            server mimir-distributor.mimir.svc.cluster.local:8080;
             keepalive 16;
         }
 
@@ -78,7 +78,7 @@ data:
             }
 
             location /runtime_config {
-                proxy_pass http://distributor.mimir.svc.cluster.local:8080$request_uri;
+                proxy_pass http://mimir-distributor.mimir.svc.cluster.local:8080$request_uri;
             }
 
             location ~ /service/([^/]+)/ {
@@ -139,9 +139,6 @@ data:
                 proxy_pass http://ruler.mimir.svc.cluster.local:8080$request_uri;
             }
             location = /api/v1/rules {
-                proxy_pass http://ruler.mimir.svc.cluster.local:8080$request_uri;
-            }
-            location /prometheus/api/v1/rules {
                 proxy_pass http://ruler.mimir.svc.cluster.local:8080$request_uri;
             }
             location = /prometheus/rules {

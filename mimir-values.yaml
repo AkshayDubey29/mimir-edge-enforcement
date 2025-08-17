@@ -1,0 +1,112 @@
+mimir:
+  structuredConfig:
+    server:
+      http_listen_port: 8080
+    distributor:
+      ring:
+        kvstore:
+          store: memberlist
+    ingester:
+      ring:
+        kvstore:
+          store: memberlist
+        replication_factor: 1
+    compactor:
+      sharding_ring:
+        kvstore:
+          store: memberlist
+    store_gateway:
+      sharding_ring:
+        kvstore:
+          store: memberlist
+    ruler:
+      ring:
+        kvstore:
+          store: memberlist
+    alertmanager:
+      sharding_ring:
+        kvstore:
+          store: memberlist
+
+  distributor:
+    replicas: 2
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+
+  ingester:
+    replicas: 2
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+      requests:
+        cpu: 200m
+        memory: 256Mi
+
+  compactor:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  store_gateway:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  ruler:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  alertmanager:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  query_frontend:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  querier:
+    replicas: 1
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  memberlist:
+    enabled: true

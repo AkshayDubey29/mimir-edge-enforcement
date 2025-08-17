@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mimir-nginx
+  namespace: mimir
+  labels:
+    app: mimir-nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: mimir-nginx
+  template:
+    metadata:
+      labels:
+        app: mimir-nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25-alpine
+        ports:
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: nginx-secrets
+          mountPath: /etc/nginx/secrets
+          readOnly: true
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: mimir-nginx
+      - name: nginx-secrets
+        secret:
+          secretName: mimir-nginx-secrets
+          optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mimir-nginx
+  namespace: mimir
+  labels:
+    app: mimir-nginx
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: mimir-nginx
