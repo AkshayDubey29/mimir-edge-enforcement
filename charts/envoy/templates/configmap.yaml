@@ -97,25 +97,25 @@ data:
               - name: envoy.filters.http.lua
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
-                                      inline_code: |
-                      function envoy_on_response(response_handle)
-                        -- Check if response is from RLS and has trigger status codes
-                        local status = response_handle:headers():get(":status")
-                        local upstream_cluster = response_handle:streamInfo():upstreamCluster()
-                        
-                        {{- $logFallbackEvents := .Values.rlsFallback.logFallbackEvents }}
-                        {{- range .Values.rlsFallback.triggerStatusCodes }}
-                        if status == "{{ . }}" and upstream_cluster == "rls_remote_write" then
-                          -- Add fallback header for retry to Mimir distributor
-                          response_handle:headers():add("x-rls-fallback", "true")
-                          {{- if $logFallbackEvents }}
-                          -- Log the fallback event
-                          response_handle:logInfo("RLS fallback triggered: {{ . }} error from RLS, routing to Mimir distributor")
-                          {{- end }}
-                          break
-                        end
+                  inline_code: |
+                    function envoy_on_response(response_handle)
+                      -- Check if response is from RLS and has trigger status codes
+                      local status = response_handle:headers():get(":status")
+                      local upstream_cluster = response_handle:streamInfo():upstreamCluster()
+                      
+                      {{- $logFallbackEvents := .Values.rlsFallback.logFallbackEvents }}
+                      {{- range .Values.rlsFallback.triggerStatusCodes }}
+                      if status == "{{ . }}" and upstream_cluster == "rls_remote_write" then
+                        -- Add fallback header for retry to Mimir distributor
+                        response_handle:headers():add("x-rls-fallback", "true")
+                        {{- if $logFallbackEvents }}
+                        -- Log the fallback event
+                        response_handle:logInfo("RLS fallback triggered: {{ . }} error from RLS, routing to Mimir distributor")
                         {{- end }}
+                        break
                       end
+                      {{- end }}
+                    end
               {{- end }}
               
               # 🔧 REMOVED: ext_authz filter for direct integration
