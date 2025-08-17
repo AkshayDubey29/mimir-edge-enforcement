@@ -154,19 +154,6 @@ data:
                     route:
                       cluster: mimir_distributor
                       timeout: {{ .Values.rlsFallback.fallbackTimeout | default .Values.proxy.upstreamTimeout }}
-                      {{- if .Values.rlsFallback.addFallbackHeaders }}
-                      # 🔧 NEW: Add headers to track fallback usage
-                      request_headers_to_add:
-                      - header:
-                          key: "x-rls-bypass"
-                          value: "true"
-                      - header:
-                          key: "x-fallback-reason"
-                          value: "rls-service-unavailable"
-                      - header:
-                          key: "x-fallback-timestamp"
-                          value: "%START_TIME%"
-                      {{- end }}
                   {{- end }}
                   
                   # 🔧 FIX: Remote write endpoint (metrics ingestion) - Direct to RLS with fallback
