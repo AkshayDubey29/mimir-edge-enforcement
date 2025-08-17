@@ -446,7 +446,8 @@ func (rls *RLS) Check(ctx context.Context, req *envoy_service_auth_v3.CheckReque
 	}
 
 	// 🔥 ULTRA-FAST PATH: Skip parsing for very large requests to prevent timeouts
-	if bodyBytes > 10*1024*1024 { // 10MB limit (reduced from 50MB)
+	// Use configured MaxRequestBytes instead of hardcoded 10MB limit
+	if rls.config.MaxRequestBytes > 0 && bodyBytes > rls.config.MaxRequestBytes {
 		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
 		rls.metrics.TrafficFlowTotal.WithLabelValues(tenantID, "deny").Inc()
 		rls.metrics.TrafficFlowLatency.WithLabelValues(tenantID, "deny").Observe(time.Since(start).Seconds())
