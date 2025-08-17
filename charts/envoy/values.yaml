@@ -46,6 +46,16 @@ rateLimit:
   domain: "mimir_remote_write"
   grpcTimeout: "5s"          # gRPC call timeout
 
+# RLS Fallback configuration - Production Reliability
+rlsFallback:
+  enabled: true                    # Enable fallback to Mimir distributor
+  triggerStatusCodes: ["503"]      # Status codes that trigger fallback
+  maxRetries: 1                    # Number of retries before fallback
+  retryTimeout: "5s"               # Timeout for retry attempts
+  fallbackTimeout: "30s"           # Timeout for fallback requests
+  logFallbackEvents: true          # Log fallback events for monitoring
+  addFallbackHeaders: true         # Add headers to track fallback usage
+
 # Proxy configuration
 proxy:
   upstreamTimeout: "30s"
