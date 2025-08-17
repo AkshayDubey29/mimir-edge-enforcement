@@ -54,7 +54,7 @@ spec:
             - "--tenant-header={{ .Values.tenantHeader }}"
             - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
             {{- if .Values.limits.maxRequestBytes }}
-            - "--max-request-bytes={{ .Values.limits.maxRequestBytes }}"
+            - "--max-request-bytes={{ .Values.limits.maxRequestBytes | int64 }}"
             {{- else }}
             - "--max-request-bytes=4194304"
             {{- end }}
@@ -64,7 +64,7 @@ spec:
             - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
             - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
             {{- if .Values.limits.maxBodyBytes }}
-            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes | int64 }}"
             {{- else }}
             - "--default-max-body-bytes=4194304"
             {{- end }}
