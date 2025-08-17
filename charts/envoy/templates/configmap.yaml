@@ -92,6 +92,31 @@ data:
                       downstream_local_address="%DOWNSTREAM_LOCAL_ADDRESS%"
                       downstream_remote_address="%DOWNSTREAM_REMOTE_ADDRESS%"
               http_filters:
+              {{- if .Values.rlsFallback.enabled }}
+              # 🔧 NEW: Lua filter for RLS fallback mechanism
+              - name: envoy.filters.http.lua
+                typed_config:
+                  "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                  inline_code: |
+                    function envoy_on_response(response_handle)
+                      -- Check if response is from RLS and has trigger status codes
+                      local status = response_handle:headers():get(":status")
+                      local upstream_cluster = response_handle:streamInfo():upstreamCluster()
+                      
+                      {{- range .Values.rlsFallback.triggerStatusCodes }}
+                      if status == "{{ . }}" and upstream_cluster == "rls_remote_write" then
+                        -- Add fallback header for retry to Mimir distributor
+                        response_handle:headers():add("x-rls-fallback", "true")
+                        {{- if .Values.rlsFallback.logFallbackEvents }}
+                        -- Log the fallback event
+                        response_handle:logInfo("RLS fallback triggered: {{ . }} error from RLS, routing to Mimir distributor")
+                        {{- end }}
+                        break
+                      end
+                      {{- end }}
+                    end
+              {{- end }}
+              
               # 🔧 REMOVED: ext_authz filter for direct integration
               # Ext authz adds complexity and latency for internal applications
               # Direct integration with RLS will be implemented instead
@@ -118,12 +143,48 @@ data:
                 - name: local_service
                   domains: ["*"]
                   routes:
-                  # 🔧 FIX: Remote write endpoint (metrics ingestion) - Direct to RLS
+                  {{- if .Values.rlsFallback.enabled }}
+                  # 🔧 NEW: Fallback route for RLS failures - Direct to Mimir distributor
+                  - match:
+                      prefix: "{{ .Values.remoteWrite.path }}"
+                      headers:
+                      - name: "x-rls-fallback"
+                        present_match: true
+                    route:
+                      cluster: mimir_distributor
+                      timeout: {{ .Values.rlsFallback.fallbackTimeout | default .Values.proxy.upstreamTimeout }}
+                      {{- if .Values.rlsFallback.addFallbackHeaders }}
+                      # 🔧 NEW: Add headers to track fallback usage
+                      request_headers_to_add:
+                      - header:
+                          key: "x-rls-bypass"
+                          value: "true"
+                      - header:
+                          key: "x-fallback-reason"
+                          value: "rls-service-unavailable"
+                      - header:
+                          key: "x-fallback-timestamp"
+                          value: "%START_TIME%"
+                      {{- end }}
+                  {{- end }}
+                  
+                  # 🔧 FIX: Remote write endpoint (metrics ingestion) - Direct to RLS with fallback
                   - match:
                       prefix: "{{ .Values.remoteWrite.path }}"
                     route:
                       cluster: rls_remote_write
                       timeout: {{ .Values.proxy.upstreamTimeout }}
+                      {{- if .Values.rlsFallback.enabled }}
+                      retry_policy:
+                        retry_on: "5xx,connect-failure,refused-stream,unavailable,cancelled,retriable-status-codes"
+                        num_retries: {{ .Values.rlsFallback.maxRetries | default 1 }}
+                        per_try_timeout: {{ .Values.rlsFallback.retryTimeout | default "5s" | quote }}
+                        retry_host_predicate:
+                        - name: envoy.retry_host_predicates.previous_hosts
+                        retry_back_off:
+                          base_interval: "0.1s"
+                          max_interval: "1s"
+                      {{- end }}
 
                   
                   # 🔧 FIX: Prometheus query endpoints (read operations)

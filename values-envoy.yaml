@@ -58,6 +58,16 @@ rateLimit:
   grpcTimeout: "5s"         # Production timeout
   timeout: "2s"             # Production timeout
 
+# RLS Fallback configuration - Production Reliability
+rlsFallback:
+  enabled: true                    # Enable fallback to Mimir distributor
+  triggerStatusCodes: ["503"]      # Status codes that trigger fallback
+  maxRetries: 1                    # Number of retries before fallback
+  retryTimeout: "5s"               # Timeout for retry attempts
+  fallbackTimeout: "30s"           # Timeout for fallback requests
+  logFallbackEvents: true          # Log fallback events for monitoring
+  addFallbackHeaders: true         # Add headers to track fallback usage
+
 # Proxy configuration - Production Optimized
 proxy:
   upstreamTimeout: "30s"  # Production timeout for metric payloads
