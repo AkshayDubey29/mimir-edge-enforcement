@@ -236,7 +236,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant)",
+          "expr": "sum by (tenant) (rate(rls_traffic_flow_total[5m]))",
           "refId": "A"
         }
       ],

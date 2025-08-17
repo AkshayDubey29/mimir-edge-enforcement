@@ -56,7 +56,7 @@
     {
       "type": "graph",
       "title": "Envoy HTTP 429 Rate Limited",
-      "description": "Rate limited requests (HTTP 429)",
+      "description": "Rate limited requests (HTTP 429 for limit violations, 413 for size issues)",
       "targets": [
         {
           "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (route)",

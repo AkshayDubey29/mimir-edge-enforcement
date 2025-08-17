@@ -26,15 +26,15 @@
     {
       "type": "graph",
       "title": "Rate Limiting Effectiveness",
-      "description": "Rate limiting decisions and HTTP 429 responses",
+      "description": "Rate limiting decisions and HTTP 429 responses (limit violations) vs 413 (size issues)",
       "targets": [
         {
-          "expr": "sum(rate(rls_decisions_total{decision=\"deny\"}[5m])) by (tenant)",
+          "expr": "sum by (tenant) (rate(rls_decisions_total{decision=\"deny\"}[5m]))",
           "legendFormat": "RLS Deny - {{tenant}}"
         },
         {
-          "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m])) by (route)",
-          "legendFormat": "HTTP 429 - {{route}}"
+          "expr": "sum by (route) (rate(envoy_http_downstream_rq_xx{envoy_response_code_class=\"4\"}[5m]))",
+          "legendFormat": "HTTP 4xx - {{route}}"
         }
       ],
       "yAxes": [
@@ -50,11 +50,11 @@
       "description": "System latency at different percentiles",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(envoy_http_downstream_rq_time_bucket[5m])) by (le, route))",
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(envoy_http_downstream_rq_time_bucket[5m])))",
           "legendFormat": "Envoy p95 - {{route}}"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "expr": "histogram_quantile(0.95, sum by (le, tenant) (rate(rls_authz_check_duration_seconds_bucket[5m])))",
           "legendFormat": "RLS p95 - {{tenant}}"
         }
       ],
@@ -68,11 +68,11 @@
     {
       "type": "graph",
       "title": "Error Rates",
-      "description": "Error rates across the system",
+      "description": "Error rates across the system (413 for size issues, 429 for limit violations)",
       "targets": [
         {
-                  "expr": "sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class=~\"4|5\"}[5m])) by (envoy_response_code_class)",
-        "legendFormat": "HTTP {{envoy_response_code_class}}xx"
+          "expr": "sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx{envoy_response_code_class=~\"4|5\"}[5m]))",
+          "legendFormat": "HTTP {{envoy_response_code_class}}xx"
         },
         {
           "expr": "rate(rls_body_parse_errors_total[5m])",
@@ -92,7 +92,7 @@
       "description": "Activity by tenant",
       "targets": [
         {
-          "expr": "sum(rate(rls_traffic_flow_total[5m])) by (tenant, decision)",
+          "expr": "sum by (tenant, decision) (rate(rls_traffic_flow_total[5m]))",
           "legendFormat": "{{tenant}} - {{decision}}"
         }
       ],
@@ -106,10 +106,10 @@
     {
       "type": "graph",
       "title": "Limit Violations by Type",
-      "description": "Limit violations broken down by reason",
+      "description": "Limit violations broken down by reason (429 for limit violations)",
       "targets": [
         {
-          "expr": "sum(rate(rls_limit_violations_total[5m])) by (reason)",
+          "expr": "sum by (reason) (rate(rls_limit_violations_total[5m]))",
           "legendFormat": "{{reason}}"
         }
       ],

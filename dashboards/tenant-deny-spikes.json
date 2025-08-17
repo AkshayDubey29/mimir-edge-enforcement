@@ -5,10 +5,10 @@
     {
       "type": "graph",
       "title": "Denies by Tenant (5m)",
-      "description": "Rate of denied requests by tenant",
+      "description": "Rate of denied requests by tenant (429 for limit violations, 413 for size issues)",
       "targets": [
         {
-          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (tenant)",
+          "expr": "sum by (tenant) (rate(rls_decisions_total{decision=\"deny\"}[5m]))",
           "legendFormat": "{{tenant}}"
         }
       ]
@@ -16,10 +16,10 @@
     {
       "type": "graph",
       "title": "Limit Violations by Tenant",
-      "description": "Limit violations by tenant and reason",
+      "description": "Limit violations by tenant and reason (429 for limit violations)",
       "targets": [
         {
-          "expr": "rate(rls_limit_violations_total[5m]) by (tenant, reason)",
+          "expr": "sum by (tenant, reason) (rate(rls_limit_violations_total[5m]))",
           "legendFormat": "{{tenant}} - {{reason}}"
         }
       ]
@@ -30,7 +30,7 @@
       "description": "Total activity by tenant (allow vs deny)",
       "targets": [
         {
-          "expr": "rate(rls_traffic_flow_total[5m]) by (tenant, decision)",
+          "expr": "sum by (tenant, decision) (rate(rls_traffic_flow_total[5m]))",
           "legendFormat": "{{tenant}} - {{decision}}"
         }
       ]
@@ -71,7 +71,7 @@
           "legendFormat": "Body Size - {{tenant}}"
         },
         {
-          "expr": "rate(rls_traffic_flow_bytes[5m]) by (tenant)",
+          "expr": "sum by (tenant) (rate(rls_traffic_flow_bytes[5m]))",
           "legendFormat": "Bytes/sec - {{tenant}}"
         }
       ]

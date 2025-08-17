@@ -8,7 +8,7 @@
       "description": "Total authorization decisions by decision type and tenant",
       "targets": [
         {
-          "expr": "sum(rate(rls_decisions_total[5m])) by (decision, tenant)",
+          "expr": "sum by (decision, tenant) (rate(rls_decisions_total[5m]))",
           "legendFormat": "{{decision}} - {{tenant}}"
         }
       ],
@@ -22,10 +22,10 @@
     {
       "type": "graph",
       "title": "RLS Decisions by Reason",
-      "description": "Authorization decisions broken down by reason",
+      "description": "Authorization decisions broken down by reason (429 for limit violations, 413 for size issues)",
       "targets": [
         {
-          "expr": "sum(rate(rls_decisions_total[5m])) by (reason)",
+          "expr": "sum by (reason) (rate(rls_decisions_total[5m]))",
           "legendFormat": "{{reason}}"
         }
       ],
@@ -42,7 +42,7 @@
       "description": "95th percentile latency for authorization checks",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "expr": "histogram_quantile(0.95, sum by (le, tenant) (rate(rls_authz_check_duration_seconds_bucket[5m])))",
           "legendFormat": "p95 - {{tenant}}"
         }
       ],
@@ -59,7 +59,7 @@
       "description": "99th percentile latency for authorization checks",
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, sum(rate(rls_authz_check_duration_seconds_bucket[5m])) by (le, tenant))",
+          "expr": "histogram_quantile(0.99, sum by (le, tenant) (rate(rls_authz_check_duration_seconds_bucket[5m])))",
           "legendFormat": "p99 - {{tenant}}"
         }
       ],
@@ -126,7 +126,7 @@
       "description": "Total requests processed by RLS",
       "targets": [
         {
-          "expr": "sum(rate(rls_traffic_flow_total[5m])) by (tenant, decision)",
+          "expr": "sum by (tenant, decision) (rate(rls_traffic_flow_total[5m]))",
           "legendFormat": "{{tenant}} - {{decision}}"
         }
       ],
@@ -143,7 +143,7 @@
       "description": "Latency of requests processed by RLS",
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(rls_traffic_flow_latency_seconds_bucket[5m])) by (le, tenant, decision))",
+          "expr": "histogram_quantile(0.95, sum by (le, tenant, decision) (rate(rls_traffic_flow_latency_seconds_bucket[5m])))",
           "legendFormat": "p95 - {{tenant}} - {{decision}}"
         }
       ],
@@ -160,7 +160,7 @@
       "description": "Total bytes of requests processed by RLS",
       "targets": [
         {
-          "expr": "sum(rate(rls_traffic_flow_bytes[5m])) by (tenant, decision)",
+          "expr": "sum by (tenant, decision) (rate(rls_traffic_flow_bytes[5m]))",
           "legendFormat": "{{tenant}} - {{decision}}"
         }
       ],
@@ -174,10 +174,10 @@
     {
       "type": "graph",
       "title": "RLS Limit Violations Total",
-      "description": "Total number of limit violations by tenant and reason",
+      "description": "Total number of limit violations by tenant and reason (429 for limit violations)",
       "targets": [
         {
-          "expr": "sum(rate(rls_limit_violations_total[5m])) by (tenant, reason)",
+          "expr": "sum by (tenant, reason) (rate(rls_limit_violations_total[5m]))",
           "legendFormat": "{{tenant}} - {{reason}}"
         }
       ],
@@ -298,6 +298,40 @@
       "yAxes": [
         {
           "label": "Limit Threshold"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS Status Code Analysis",
+      "description": "HTTP status codes returned by RLS (429 for limit violations, 413 for size issues)",
+      "targets": [
+        {
+          "expr": "sum by (tenant, reason) (rate(rls_decisions_total{decision=\"deny\"}[5m]))",
+          "legendFormat": "{{tenant}} - {{reason}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Denied requests per second",
+          "unit": "reqps"
+        }
+      ]
+    },
+    {
+      "type": "graph",
+      "title": "RLS 413 vs 429 Distribution",
+      "description": "Distribution of 413 (size issues) vs 429 (limit violations) errors",
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(rls_decisions_total{decision=\"deny\"}[5m]))",
+          "legendFormat": "{{reason}}"
+        }
+      ],
+      "yAxes": [
+        {
+          "label": "Denied requests per second",
+          "unit": "reqps"
         }
       ]
     }

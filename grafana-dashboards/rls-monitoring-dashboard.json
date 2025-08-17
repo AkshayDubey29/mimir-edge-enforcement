@@ -256,7 +256,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_decisions_total{decision=\"deny\"}[5m]) by (reason, tenant)",
+          "expr": "sum by (reason, tenant) (rate(rls_decisions_total{decision=\"deny\"}[5m]))",
           "refId": "A"
         }
       ],
@@ -343,7 +343,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_decisions_total[5m]) by (tenant, decision)",
+          "expr": "sum by (tenant, decision) (rate(rls_decisions_total[5m]))",
           "refId": "A"
         }
       ],
@@ -738,7 +738,7 @@
             "type": "prometheus",
             "uid": "mimir-couwatch"
           },
-          "expr": "rate(rls_limit_violations_total[5m]) by (tenant, reason)",
+          "expr": "sum by (tenant, reason) (rate(rls_limit_violations_total[5m]))",
           "refId": "A"
         }
       ],
