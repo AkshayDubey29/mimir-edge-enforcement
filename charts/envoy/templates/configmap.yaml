@@ -496,7 +496,7 @@ data:
                 address:
                   socket_address:
                     address: {{ .Values.rls.host }}
-                    port_value: 8082  # RLS admin port (HTTP)
+                    port_value: 8080  # RLS ext-authz port (HTTP)
         # 🔧 FIX: Configure connection pool for better reliability
         circuit_breakers:
           thresholds:
