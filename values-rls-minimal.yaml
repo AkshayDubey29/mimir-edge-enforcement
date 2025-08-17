@@ -1,0 +1,168 @@
+# RLS (Rate Limit Service) Values - Minimal Configuration for Kind Cluster
+# Use this file for deploying RLS in Kind cluster with minimal resource usage
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8082  # Main service port (admin API)
+  ports:
+    extAuthz: 8080
+    rateLimit: 8081
+    admin: 8082
+    metrics: 9090
+
+# Tenant identification
+tenantHeader: "X-Scope-OrgID"
+
+# Limits configuration - MINIMAL FOR KIND CLUSTER
+limits:
+  # maxRequestBytes and maxBodyBytes removed to use defaults (4194304)
+  failureModeAllow: true       # Allow requests when parsing fails
+  defaultSamplesPerSecond: 1000      # 1K samples/sec - Reduced for Kind cluster
+  defaultBurstPercent: 50      # 50% burst allowance
+  enforceBodyParsing: true     # Enable body parsing for cardinality analysis
+  defaultMaxLabelsPerSeries: 10       # Reduced for Kind cluster
+  defaultMaxLabelValueLength: 1024    # Reduced for Kind cluster
+  defaultMaxSeriesPerRequest: 10000   # 10K series per request - Reduced for Kind cluster
+
+# Enforcement Configuration - MINIMAL
+enforcement:
+  enabled: true
+  # Cardinality limits - ENABLED
+  enforceMaxSeriesPerRequest: true   # per_user_series_limit
+  enforceMaxSeriesPerMetric: true    # per_metric_series_limit
+  enforceMaxLabelsPerSeries: true    # per_labels_per_series_limit
+  # Rate limiting - ENABLED
+  enforceSamplesPerSecond: true      # Enable ingestion rate limiting
+  enforceBytesPerSecond: false       # No bytes rate limiting
+  # Body size - ENABLED
+  enforceMaxBodyBytes: true          # Enable body size enforcement
+
+# New series leniency configuration
+newTenantLeniency: true  # Enable lenient limits when adding new series
+
+# Store configuration
+store:
+  backend: "memory"  # Use memory store for simplicity
+
+# Redis configuration - DISABLED for minimal setup
+redis:
+  enabled: false
+
+# Mimir configuration for direct integration
+mimir:
+  host: "mimir-distributor.mimir.svc.cluster.local"
+  port: "8080"
+
+# Logging configuration - MINIMAL
+log:
+  level: "info"  # Changed to info to see request processing
+  enableGRPCLogs: false
+  enableDetailedLogs: false
+
+# Performance tuning - MINIMAL
+performance:
+  # Request processing optimization
+  maxConcurrentRequests: 100     # Reduced for Kind cluster
+  requestTimeout: "30s"          # Reduced timeout
+  bodyParseTimeout: "10s"        # Reduced timeout
+  
+  # Memory optimization
+  enableMemoryOptimization: true
+  maxRequestBodySize: "5MB"      # Reduced body size
+  enableRequestPooling: true
+  enableMetricsOptimization: true
+  
+  # Circuit breaker settings
+  circuitBreakerEnabled: true
+  circuitBreakerThreshold: 3     # Reduced threshold
+  circuitBreakerTimeout: "15s"   # Reduced timeout
+
+# Deployment configuration - MINIMAL
+replicaCount: 1  # Single replica for Kind cluster
+
+image:
+  repository: ghcr.io/akshaydubey29/mimir-rls
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# Resource configuration - MINIMAL
+resources:
+  limits:
+    cpu: 100m     # Minimal CPU
+    memory: 128Mi # Minimal memory
+  requests:
+    cpu: 25m      # Minimal CPU request
+    memory: 32Mi  # Minimal memory request
+
+# Security context
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Horizontal Pod Autoscaler - DISABLED for minimal setup
+hpa:
+  enabled: false
+
+# Pod Disruption Budget - DISABLED for minimal setup
+pdb:
+  enabled: false
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+
+# Pod annotations
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity - DISABLED for minimal setup
+affinity: {}
+
+# Service Monitor - DISABLED
+serviceMonitor:
+  enabled: false
+
+# Liveness and readiness probes - MINIMAL
+livenessProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 15
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# Startup probe - DISABLED for minimal setup
+startupProbe:
+  httpGet:
+    path: /readyz
+    port: admin
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 10

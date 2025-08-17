@@ -53,13 +53,21 @@ spec:
             # Tenant and request configuration
             - "--tenant-header={{ .Values.tenantHeader }}"
             - "--enforce-body-parsing={{ .Values.limits.enforceBodyParsing }}"
-            - "--max-request-bytes={{ .Values.limits.maxRequestBytes | default "4194304" }}"
+            {{- if .Values.limits.maxRequestBytes }}
+            - "--max-request-bytes={{ .Values.limits.maxRequestBytes }}"
+            {{- else }}
+            - "--max-request-bytes=4194304"
+            {{- end }}
             - "--failure-mode-allow={{ .Values.limits.failureModeAllow | default false }}"
             
             # Default tenant limits
             - "--default-samples-per-second={{ .Values.limits.defaultSamplesPerSecond }}"
             - "--default-burst-percent={{ .Values.limits.defaultBurstPercent }}"
-            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes | default 4194304 }}"
+            {{- if .Values.limits.maxBodyBytes }}
+            - "--default-max-body-bytes={{ .Values.limits.maxBodyBytes }}"
+            {{- else }}
+            - "--default-max-body-bytes=4194304"
+            {{- end }}
             - "--default-max-labels-per-series={{ .Values.limits.defaultMaxLabelsPerSeries | default 60 }}"
             - "--default-max-label-value-length={{ .Values.limits.defaultMaxLabelValueLength | default 2048 }}"
             - "--default-max-series-per-request={{ .Values.limits.defaultMaxSeriesPerRequest | default 100000 }}"

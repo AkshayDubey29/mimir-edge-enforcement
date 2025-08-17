@@ -2,7 +2,7 @@
 # Use this file for deploying Envoy in production with optimized settings
 
 # Deployment configuration
-replicaCount: 3  # Production: Multiple replicas for high availability
+replicaCount: 10  # Production: Multiple replicas for high availability
 
 nameOverride: ""
 fullnameOverride: ""
@@ -22,7 +22,7 @@ tenantHeader: "X-Scope-OrgID"
 
 # Mimir distributor configuration
 mimir:
-  distributorHost: "mock-mimir-distributor.mimir.svc.cluster.local"
+  distributorHost: "mimir-distributor.mimir.svc.cluster.local"
   distributorPort: 8080
 
 # RLS service configuration
@@ -33,13 +33,13 @@ rls:
 
 # External authorization configuration - Production Optimized
 extAuthz:
-  maxRequestBytes: 10485760   # 10 MiB - Increased for large payloads
+  maxRequestBytes: 52428800   # 50 MiB - Production: Increased for large payloads
   failureModeAllow: true      # Allow on failure for reliability
   timeout: "10s"              # Production timeout
   disableBodyParsing: false   # Keep body parsing for limits
   
   # Buffer settings for production processing
-  bufferMaxBytes: "10485760"       # 10MB buffer for production
+  bufferMaxBytes: "52428800"       # 50MB buffer for production
   bufferTimeout: "5s"              # Production buffer timeout
   
   # Retry configuration - Production
@@ -85,7 +85,7 @@ logging:
 
 # Resource limits and overload management
 resourceLimits:
-  maxHeapSizeBytes: 1207959552  # 1.125 GiB (75% of 1.5Gi container limit) - Optimized for cluster
+  maxHeapSizeBytes: 6442450944  # 6 GiB (75% of 8Gi container limit) - Production optimized
   shrinkHeapThreshold: 0.8       # Start shrinking heap at 80%
   heapStopAcceptingThreshold: 0.95  # Stop accepting at 95% heap
 
@@ -126,14 +126,14 @@ securityContext:
     drop:
       - ALL
 
-# Resource configuration - OPTIMIZED FOR CLUSTER CAPACITY
+# Resource configuration - PRODUCTION HIGH SCALE
 resources:
   limits:
-    cpu: 1500m    # Optimized for cluster capacity (1.5 cores)
-    memory: 1.5Gi # Optimized for cluster capacity (1.5GB)
+    cpu: 2000m    # Production: 2 cores for high scale processing
+    memory: 8Gi   # Production: 8GB memory limit for large payloads
   requests:
-    cpu: 300m     # Optimized for cluster capacity (0.3 cores)
-    memory: 512Mi # Optimized for cluster capacity (512MB)
+    cpu: 500m     # Production: 0.5 cores minimum
+    memory: 4Gi   # Production: 4GB memory request for high scale
 
 # Node selector
 nodeSelector: {}
@@ -155,18 +155,18 @@ affinity:
             - mimir-envoy
         topologyKey: kubernetes.io/hostname
 
-# Horizontal Pod Autoscaler
+# Horizontal Pod Autoscaler - PRODUCTION HIGH SCALE
 hpa:
   enabled: true
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 70
+  minReplicas: 10    # Production: Minimum 10 replicas for high availability
+  maxReplicas: 40    # Production: Maximum 40 replicas for peak load
+  targetCPUUtilizationPercentage: 60    # Production: Lower threshold for faster scaling
+  targetMemoryUtilizationPercentage: 60 # Production: Lower threshold for faster scaling
 
-# Pod Disruption Budget
+# Pod Disruption Budget - PRODUCTION HIGH SCALE
 pdb:
   enabled: true
-  minAvailable: 2  # Ensure at least 2 pods are always available
+  minAvailable: 5  # Production: Ensure at least 5 pods are always available
 
 # Service Monitor for Prometheus - Production
 serviceMonitor:
@@ -189,26 +189,27 @@ livenessProbe:
   httpGet:
     path: /ready
     port: admin
-  initialDelaySeconds: 30
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 3
+  initialDelaySeconds: 60  # Production: Longer initial delay for large pods
+  periodSeconds: 30        # Production: Less frequent checks
+  timeoutSeconds: 10       # Production: Longer timeout
+  failureThreshold: 5      # Production: More failures before restart
 
 readinessProbe:
   httpGet:
     path: /ready
     port: admin
-  initialDelaySeconds: 5
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 3
+  initialDelaySeconds: 30  # Production: Longer initial delay
+  periodSeconds: 15        # Production: More frequent readiness checks
+  timeoutSeconds: 8        # Production: Longer timeout
+  failureThreshold: 3      # Production: Fewer failures before marking not ready
+  successThreshold: 2      # Production: Require 2 successful checks before ready
 
-# Startup probe
+# Startup probe - PRODUCTION OPTIMIZED
 startupProbe:
   httpGet:
     path: /ready
     port: admin
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  timeoutSeconds: 5
-  failureThreshold: 30
+  initialDelaySeconds: 30  # Production: Longer initial delay
+  periodSeconds: 15        # Production: Less frequent during startup
+  timeoutSeconds: 10       # Production: Longer timeout during startup
+  failureThreshold: 30     # Production: 7.5 minutes total startup time

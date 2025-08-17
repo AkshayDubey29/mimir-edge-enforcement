@@ -14,17 +14,17 @@ service:
 # Tenant identification
 tenantHeader: "X-Scope-OrgID"
 
-# Limits configuration - HIGH SCALE OPTIMIZED
+# Limits configuration - PRODUCTION HIGH SCALE
 limits:
-  maxRequestBytes: "52428800"  # 50 MiB - High scale: Increased for 5M series
-  maxBodyBytes: 52428800       # 50 MiB - High scale: Increased for large payloads
+  maxRequestBytes: 52428800    # 50 MiB - Production: Increased for 5M series
+  maxBodyBytes: 52428800       # 50 MiB - Production: Increased for large payloads
   failureModeAllow: true       # Production: Allow requests when parsing fails
-  defaultSamplesPerSecond: 10000     # 10K samples/sec - High scale: Increased for 5M series
-  defaultBurstPercent: 50      # 50% burst allowance - High scale: More burst capacity
+  defaultSamplesPerSecond: 10000     # 10K samples/sec - Production: Increased for 5M series
+  defaultBurstPercent: 50      # 50% burst allowance - Production: More burst capacity
   enforceBodyParsing: true     # Production: Enable body parsing for cardinality analysis
-  defaultMaxLabelsPerSeries: 20      # High scale: Increased label limit
-  defaultMaxLabelValueLength: 4096   # High scale: Increased label value length
-  defaultMaxSeriesPerRequest: 100000 # High scale: 100K series per request for 5M total
+  defaultMaxLabelsPerSeries: 20      # Production: Increased label limit
+  defaultMaxLabelValueLength: 4096   # Production: Increased label value length
+  defaultMaxSeriesPerRequest: 100000 # Production: 100K series per request for 5M total
 
 # Enforcement Configuration - Production Ready
 enforcement:
@@ -44,7 +44,7 @@ newTenantLeniency: true  # Enable lenient limits (50%) when adding new series to
 
 # Store configuration
 store:
-  backend: "redis"  # Use Redis for production (shared state across pods)
+  backend: "memory"  # TEMPORARILY USING MEMORY - Use Redis for production (shared state across pods)
 
 # Redis configuration for external Redis service
 redis:
@@ -55,7 +55,7 @@ redis:
 
 # Mimir configuration for direct integration
 mimir:
-  host: "mock-mimir-distributor.mimir.svc.cluster.local"
+  host: "mimir-distributor.mimir.svc.cluster.local"
   port: "8080"
 
 # Logging configuration - PRODUCTION OPTIMIZED
@@ -64,24 +64,24 @@ log:
   enableGRPCLogs: false  # Disable gRPC logs for performance
   enableDetailedLogs: false  # Disable detailed logs for performance
 
-# Performance tuning - HIGH SCALE OPTIMIZED
+# Performance tuning - PRODUCTION HIGH SCALE
 performance:
   # Request processing optimization
-  maxConcurrentRequests: 5000    # High scale: 5K concurrent requests for 50 tenants
-  requestTimeout: "60s"          # High scale: Increased timeout for large payloads
-  bodyParseTimeout: "20s"        # High scale: Increased timeout for 5M series parsing
+  maxConcurrentRequests: 10000   # Production: 10K concurrent requests for high scale
+  requestTimeout: "60s"          # Production: Increased timeout for large payloads
+  bodyParseTimeout: "20s"        # Production: Increased timeout for 5M series parsing
   
-  # Redis connection optimization (High scale optimized)
-  redisPoolSize: 100             # High scale: Larger pool for 10 pods
-  redisMinIdleConns: 20          # High scale: More idle connections
-  redisMaxRetries: 5             # High scale: More retries for reliability
-  redisConnectTimeout: "2s"      # High scale: Increased connection timeout
-  redisReadTimeout: "5s"         # High scale: Increased read timeout
-  redisWriteTimeout: "5s"        # High scale: Increased write timeout
+  # Redis connection optimization (Production optimized)
+  redisPoolSize: 200             # Production: Larger pool for 40 pods
+  redisMinIdleConns: 50          # Production: More idle connections
+  redisMaxRetries: 5             # Production: More retries for reliability
+  redisConnectTimeout: "2s"      # Production: Increased connection timeout
+  redisReadTimeout: "5s"         # Production: Increased read timeout
+  redisWriteTimeout: "5s"        # Production: Increased write timeout
   
   # Memory optimization
   enableMemoryOptimization: true # Enable memory-efficient processing
-  maxRequestBodySize: "10MB"     # Maximum request body size
+  maxRequestBodySize: "50MB"     # Production: Maximum request body size
   enableRequestPooling: true     # Enable request object pooling
   enableMetricsOptimization: true # Optimize metrics collection
   
@@ -90,22 +90,22 @@ performance:
   circuitBreakerThreshold: 5     # Failure threshold
   circuitBreakerTimeout: "30s"   # Recovery timeout
 
-# Deployment configuration - SCALE OPTIMIZED
-replicaCount: 10  # High scale: 50 tenants, 5M series - increased for reliability
+# Deployment configuration - PRODUCTION HIGH SCALE
+replicaCount: 10  # Production: Start with 10 replicas
 
 image:
   repository: ghcr.io/akshaydubey29/mimir-rls
   tag: "latest"  # Latest version with scientific notation support and multi-arch builds
   pullPolicy: IfNotPresent  # Production: Use IfNotPresent for efficiency
 
-# Resource configuration - HIGH SCALE OPTIMIZED
+# Resource configuration - PRODUCTION HIGH SCALE
 resources:
   limits:
-    cpu: 2000m    # High scale: 2 cores for 5M series processing
-    memory: 2Gi   # High scale: 2GB for large tenant data
+    cpu: 4000m    # Production: 4 cores for high scale processing
+    memory: 16Gi  # Production: 16GB memory limit for large payloads
   requests:
-    cpu: 500m     # High scale: 0.5 cores minimum
-    memory: 1Gi   # High scale: 1GB minimum for tenant caching
+    cpu: 1000m    # Production: 1 core minimum
+    memory: 8Gi   # Production: 8GB memory request for high scale
 
 # Security context
 securityContext:
@@ -117,18 +117,18 @@ securityContext:
     drop:
       - ALL
 
-# Horizontal Pod Autoscaler (HIGH SCALE OPTIMIZED)
+# Horizontal Pod Autoscaler - PRODUCTION HIGH SCALE
 hpa:
   enabled: true
-  minReplicas: 8    # High scale: Minimum 8 replicas for 50 tenants
-  maxReplicas: 20   # High scale: Maximum 20 replicas for peak load
-  targetCPUUtilizationPercentage: 60    # Lower threshold for faster scaling
-  targetMemoryUtilizationPercentage: 60 # Lower threshold for faster scaling
+  minReplicas: 10    # Production: Minimum 10 replicas for high availability
+  maxReplicas: 40    # Production: Maximum 40 replicas for peak load
+  targetCPUUtilizationPercentage: 60    # Production: Lower threshold for faster scaling
+  targetMemoryUtilizationPercentage: 60 # Production: Lower threshold for faster scaling
 
-# Pod Disruption Budget - HIGH SCALE
+# Pod Disruption Budget - PRODUCTION HIGH SCALE
 pdb:
   enabled: true
-  minAvailable: 6  # High scale: Ensure at least 6 pods are always available
+  minAvailable: 5  # Production: Ensure at least 5 pods available during disruptions
 
 # Service Account
 serviceAccount:
@@ -168,32 +168,32 @@ serviceMonitor:
   labels: {}
   annotations: {}
 
-# Liveness and readiness probes - HIGH SCALE
+# Liveness and readiness probes - PRODUCTION OPTIMIZED
 livenessProbe:
   httpGet:
     path: /readyz
     port: admin
-  initialDelaySeconds: 60  # High scale: Longer initial delay for large tenant loading
-  periodSeconds: 30        # High scale: Less frequent checks to reduce overhead
-  timeoutSeconds: 10       # High scale: Longer timeout for health checks
-  failureThreshold: 5      # High scale: More failures before restart
+  initialDelaySeconds: 60  # Production: Longer initial delay for large pods
+  periodSeconds: 30        # Production: Less frequent checks to reduce overhead
+  timeoutSeconds: 10       # Production: Longer timeout for health checks
+  failureThreshold: 5      # Production: More failures before restart
 
 readinessProbe:
   httpGet:
     path: /readyz
     port: admin
-  initialDelaySeconds: 45  # High scale: Allow time for tenant data loading
-  periodSeconds: 15        # High scale: More frequent readiness checks
-  timeoutSeconds: 8        # High scale: Longer timeout
-  failureThreshold: 3      # High scale: Fewer failures before marking not ready
-  successThreshold: 2      # High scale: Require 2 successful checks before ready
+  initialDelaySeconds: 30  # Production: Longer initial delay
+  periodSeconds: 15        # Production: More frequent readiness checks
+  timeoutSeconds: 8        # Production: Longer timeout
+  failureThreshold: 3      # Production: Fewer failures before marking not ready
+  successThreshold: 2      # Production: Require 2 successful checks before ready
 
-# Startup probe - HIGH SCALE
+# Startup probe - PRODUCTION OPTIMIZED
 startupProbe:
   httpGet:
     path: /readyz
     port: admin
-  initialDelaySeconds: 30  # High scale: Allow time for initial tenant loading
-  periodSeconds: 15        # High scale: Less frequent during startup
-  timeoutSeconds: 10       # High scale: Longer timeout during startup
-  failureThreshold: 40     # High scale: More failures allowed during startup (10 minutes total)
+  initialDelaySeconds: 30  # Production: Longer initial delay
+  periodSeconds: 15        # Production: Less frequent during startup
+  timeoutSeconds: 10       # Production: Longer timeout during startup
+  failureThreshold: 30     # Production: 7.5 minutes total startup time
