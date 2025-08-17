@@ -13,6 +13,13 @@ service:
 # Tenant identification
 tenantHeader: "X-Scope-OrgID"
 
+# Server configuration
+server:
+  enableExtAuthz: false  # Disable ext-authz server (use admin port for HTTP requests)
+  enableRateLimit: true  # Enable rate limit server
+  enableAdmin: true      # Enable admin server (HTTP endpoint)
+  enableMetrics: true    # Enable metrics server
+
 # Listen configuration
 listen:
   extAuthz: ":8080"
@@ -85,6 +92,25 @@ redis:
 # Logging configuration
 log:
   level: "info"
+
+# Health check configuration
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: admin
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: admin
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
 
 # Mimir configuration for direct integration
 mimir:

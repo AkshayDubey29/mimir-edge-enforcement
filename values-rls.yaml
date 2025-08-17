@@ -6,18 +6,25 @@ service:
   type: ClusterIP
   port: 8082  # Main service port (admin API)
   ports:
-    extAuthz: 8080
+    extAuthz: 8080  # DISABLED - not used
     rateLimit: 8081
-    admin: 8082
+    admin: 8082     # Main HTTP endpoint for remote write
     metrics: 9090
 
 # Tenant identification
 tenantHeader: "X-Scope-OrgID"
 
+# Server configuration
+server:
+  enableExtAuthz: false  # Disable ext-authz server (use admin port for HTTP requests)
+  enableRateLimit: true  # Enable rate limit server
+  enableAdmin: true      # Enable admin server (HTTP endpoint)
+  enableMetrics: true    # Enable metrics server
+
 # Limits configuration - PRODUCTION HIGH SCALE
 limits:
   maxRequestBytes: 52428800    # 50 MiB - Production: Increased for 5M series
-  maxBodyBytes: 52428800       # 50 MiB - Production: Increased for large payloads
+  maxBodyBytes: 52428800       # 50 MiB - Production: Maximum body size per request
   failureModeAllow: true       # Production: Allow requests when parsing fails
   defaultSamplesPerSecond: 10000     # 10K samples/sec - Production: Increased for 5M series
   defaultBurstPercent: 50      # 50% burst allowance - Production: More burst capacity
@@ -35,7 +42,7 @@ enforcement:
   enforceMaxLabelsPerSeries: true    # per_labels_per_series_limit
   # Rate limiting - ENABLED
   enforceSamplesPerSecond: true      # Enable ingestion rate limiting
-  enforceBytesPerSecond: false       # No bytes rate limiting (focus on samples)
+  enforceBytesPerSecond: false       # ⚠️ DISABLED: Current implementation uses MaxBodyBytes as rate limit (too restrictive)
   # Body size - ENABLED
   enforceMaxBodyBytes: true          # Enable body size enforcement
 
@@ -63,6 +70,25 @@ log:
   level: "info"  # Production logging level
   enableGRPCLogs: false  # Disable gRPC logs for performance
   enableDetailedLogs: false  # Disable detailed logs for performance
+
+# Health check configuration - More lenient for Kind cluster
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /healthz
+      port: admin
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /readyz
+      port: admin
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
 
 # Performance tuning - PRODUCTION HIGH SCALE
 performance:

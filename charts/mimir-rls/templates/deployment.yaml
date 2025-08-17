@@ -35,20 +35,36 @@ spec:
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
+            {{- if .Values.server.enableExtAuthz }}
             - name: ext-authz
               containerPort: {{ .Values.service.ports.extAuthz }}
+            {{- end }}
+            {{- if .Values.server.enableRateLimit }}
             - name: ratelimit
               containerPort: {{ .Values.service.ports.rateLimit }}
+            {{- end }}
+            {{- if .Values.server.enableAdmin }}
             - name: admin
               containerPort: {{ .Values.service.ports.admin }}
+            {{- end }}
+            {{- if .Values.server.enableMetrics }}
             - name: metrics
               containerPort: {{ .Values.service.ports.metrics }}
+            {{- end }}
           args:
-            # Server ports
+            # Server ports (conditional based on configuration)
+            {{- if .Values.server.enableExtAuthz }}
             - "--ext-authz-port={{ .Values.service.ports.extAuthz }}"
+            {{- end }}
+            {{- if .Values.server.enableRateLimit }}
             - "--rate-limit-port={{ .Values.service.ports.rateLimit }}"
+            {{- end }}
+            {{- if .Values.server.enableAdmin }}
             - "--admin-port={{ .Values.service.ports.admin }}"
+            {{- end }}
+            {{- if .Values.server.enableMetrics }}
             - "--metrics-port={{ .Values.service.ports.metrics }}"
+            {{- end }}
             
             # Tenant and request configuration
             - "--tenant-header={{ .Values.tenantHeader }}"
@@ -100,14 +116,18 @@ spec:
             httpGet:
               path: /healthz
               port: admin
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            initialDelaySeconds: {{ .Values.healthCheck.livenessProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.healthCheck.livenessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.healthCheck.livenessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.healthCheck.livenessProbe.failureThreshold | default 3 }}
           readinessProbe:
             httpGet:
               path: /readyz
               port: admin
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: {{ .Values.healthCheck.readinessProbe.initialDelaySeconds | default 30 }}
+            periodSeconds: {{ .Values.healthCheck.readinessProbe.periodSeconds | default 30 }}
+            timeoutSeconds: {{ .Values.healthCheck.readinessProbe.timeoutSeconds | default 5 }}
+            failureThreshold: {{ .Values.healthCheck.readinessProbe.failureThreshold | default 3 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           {{- if and .Values.redis.enabled (eq .Values.redis.mode "sidecar") .Values.redis.sidecar.persistence.enabled }}
