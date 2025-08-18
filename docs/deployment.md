@@ -1164,7 +1164,7 @@ curl https://mimir-admin.your-domain.com/api/tenants
 ### Grafana Dashboards
 ```bash
 # Import pre-built dashboards
-kubectl apply -f examples/monitoring/grafana-dashboards.yaml
+# Note: Dashboard files are now in the dashboards/ folder
 
 # Or access the Admin UI for real-time monitoring
 open https://mimir-admin.your-domain.com

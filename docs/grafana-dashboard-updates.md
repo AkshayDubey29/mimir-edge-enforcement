@@ -55,14 +55,14 @@ Updated all Grafana dashboards to reflect the new status code semantics and fix 
 #### **Status Code Updates**
 - ✅ Updated "Envoy HTTP 429 Rate Limited" description to clarify 413 vs 429
 
-### **5. Grafana RLS Monitoring Dashboard** (`grafana-dashboards/rls-monitoring-dashboard.json`)
+### **5. Grafana RLS Monitoring Dashboard** (`dashboards/rls-monitoring-dashboard.json`)
 
 #### **Query Syntax Fixes**
 - ✅ `rate(rls_decisions_total{decision="deny"}[5m]) by (reason, tenant)` → `sum by (reason, tenant) (rate(rls_decisions_total{decision="deny"}[5m]))`
 - ✅ `rate(rls_decisions_total[5m]) by (tenant, decision)` → `sum by (tenant, decision) (rate(rls_decisions_total[5m]))`
 - ✅ `rate(rls_limit_violations_total[5m]) by (tenant, reason)` → `sum by (tenant, reason) (rate(rls_limit_violations_total[5m]))`
 
-### **6. Grafana RLS Redis Monitoring Dashboard** (`grafana-dashboards/rls-redis-monitoring-dashboard.json`)
+### **6. Grafana RLS Redis Monitoring Dashboard** (`dashboards/rls-redis-monitoring-dashboard.json`)
 
 #### **Query Syntax Fixes**
 - ✅ `rate(rls_traffic_flow_total[5m]) by (tenant)` → `sum by (tenant) (rate(rls_traffic_flow_total[5m]))`
