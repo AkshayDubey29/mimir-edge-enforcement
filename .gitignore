@@ -1,16 +1,41 @@
-# Binaries
+# Binaries and compiled files
+# RLS binaries
 services/rls/rls
-services/rls/rls-amd64
-services/rls/rls-arm64
+services/rls/rls-*
 services/rls/main
+services/rls/dist/
+services/rls/cmd/rls/rls
+
+# Overrides-sync binaries
 services/overrides-sync/overrides-sync
-services/overrides-sync/overrides-sync-amd64
-services/overrides-sync/overrides-sync-arm64
+services/overrides-sync/overrides-sync-*
 services/overrides-sync/main
+services/overrides-sync/dist/
+
+# General binaries
+*.exe
+*.bin
+*.dll
+*.so
+*.dylib
+*.app
+
+# Go build artifacts
+*.test
+*.out
+go.work
 
 # Build artifacts
 ui/admin/dist/
 ui/admin/node_modules/
+ui/admin/.next/
+ui/admin/.nuxt/
+ui/admin/.output/
+
+# Docker build artifacts
+*.tar
+*.tar.gz
+*.tgz
 
 # OS generated files
 .DS_Store
@@ -34,3 +59,20 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+*.bak
+*.backup
+*.orig
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage reports
+coverage/
+*.cover
+*.prof
+
+# Cache directories
+.cache/
+*.cache/
