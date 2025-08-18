@@ -12,6 +12,7 @@ data:
         socket_address:
           address: 0.0.0.0
           port_value: 9901
+      {{- if .Values.logging.enableAdminLogs | default false }}
       # 🔧 DEBUG: Add more admin endpoints for troubleshooting
       access_log:
         - name: envoy.access_loggers.stdout
@@ -19,6 +20,7 @@ data:
             "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
             log_format:
               text_format: "[%START_TIME%] %REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL% %RESPONSE_CODE% %RESPONSE_FLAGS% %BYTES_SENT% %DURATION% %REQ(X-FORWARDED-FOR)% %REQ(USER-AGENT)% %REQ(X-REQUEST-ID)% %REQ(:AUTHORITY)% %UPSTREAM_HOST%\n"
+      {{- end }}
 
     # Overload manager with memory monitoring (compatible with all Envoy versions)
     overload_manager:
@@ -68,11 +70,29 @@ data:
               # Enable proper handling of forwarded headers from NGINX
               use_remote_address: {{ .Values.proxy.httpProtocol.useRemoteAddress }}
               xff_num_trusted_hops: {{ .Values.proxy.httpProtocol.xffNumTrustedHops | int }}
-              # 🔧 DEBUG: Enhanced access logs for detailed troubleshooting
+              # 🔧 LOGGING: Conditional access logs based on configuration
+              {{- if .Values.logging.enableAccessLogs }}
               access_log:
               - name: envoy.access_loggers.stdout
                 typed_config:
                   "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                  {{- if .Values.logging.logFormat | default "text" | eq "json" }}
+                  log_format:
+                    json_format:
+                      timestamp: "%START_TIME%"
+                      method: "%REQ(:METHOD)%"
+                      path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                      protocol: "%PROTOCOL%"
+                      response_code: "%RESPONSE_CODE%"
+                      response_flags: "%RESPONSE_FLAGS%"
+                      bytes_received: "%BYTES_RECEIVED%"
+                      bytes_sent: "%BYTES_SENT%"
+                      duration: "%DURATION%"
+                      upstream_service_time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+                      tenant: "%REQ({{ .Values.tenantHeader }})%"
+                      upstream_cluster: "%UPSTREAM_CLUSTER%"
+                      upstream_host: "%UPSTREAM_HOST%"
+                  {{- else }}
                   log_format:
                     text_format: |
                       [%START_TIME%] ENVOY_ACCESS: "%REQ(:METHOD)% %REQ(X-ENVOY-ORIGINAL-PATH?:PATH)% %PROTOCOL%"
@@ -80,21 +100,10 @@ data:
                       %DURATION% %RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)% "%REQ(X-FORWARDED-FOR)%"
                       "%REQ(USER-AGENT)%" "%REQ(X-REQUEST-ID)%" "%REQ(:AUTHORITY)%" "%UPSTREAM_HOST%"
                       tenant="%REQ({{ .Values.tenantHeader }})%" 
-                      ext_authz_status="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:status)%"
-                      ext_authz_denied="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:denied)%"
-                      ext_authz_failure_reason="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:failure_reason)%"
-                      ext_authz_metadata="%DYNAMIC_METADATA(envoy.filters.http.ext_authz)%"
-                      ext_authz_ok="%DYNAMIC_METADATA(envoy.filters.http.ext_authz:ok)%"
-                      ext_authz_all_metadata="%DYNAMIC_METADATA(envoy.filters.http.ext_authz)%"
-                      route_name="%ROUTE_NAME%"
-                      cluster_name="%UPSTREAM_CLUSTER%"
-                      request_headers="%REQ(ALL)%"
-                      response_headers="%RESP(ALL)%"
                       upstream_cluster="%UPSTREAM_CLUSTER%"
                       upstream_host="%UPSTREAM_HOST%"
-                      upstream_local_address="%UPSTREAM_LOCAL_ADDRESS%"
-                      downstream_local_address="%DOWNSTREAM_LOCAL_ADDRESS%"
-                      downstream_remote_address="%DOWNSTREAM_REMOTE_ADDRESS%"
+                  {{- end }}
+              {{- end }}
               http_filters:
               {{- if .Values.rlsFallback.enabled }}
               # 🔧 NEW: Lua filter for RLS fallback mechanism

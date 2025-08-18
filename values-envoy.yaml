@@ -86,12 +86,20 @@ loadBalancer:
     unhealthyThreshold: 3        # Production failure detection
     healthyThreshold: 2          # Production recovery
 
-# Logging configuration - Production
+# Logging configuration - Production (REDUCED VERBOSITY)
 logging:
-  level: "info"                  # Production logging level
-  enableAccessLogs: true         # Enable access logs for monitoring
+  level: "warn"                  # Production: Reduced from info to warn to minimize logs
+  enableAccessLogs: false        # Production: Disable access logs to reduce verbosity
   enableDebugLogs: false         # Disable debug logging for performance
   enableDetailedLogs: false      # Disable detailed logs for performance
+  
+  # Additional logging controls for reduced verbosity
+  logFormat: "json"              # Use JSON format for structured logging
+  logSamplingRate: 0.1           # Only log 10% of requests to reduce volume
+  enableErrorLogs: true          # Keep error logs for troubleshooting
+  enableHealthCheckLogs: false   # Disable health check logs
+  enableMetricsLogs: false       # Disable metrics logs
+  enableAdminLogs: false         # Disable admin interface logs
 
 # Resource limits and overload management
 resourceLimits:

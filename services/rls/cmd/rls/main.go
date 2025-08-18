@@ -1313,7 +1313,7 @@ func handleRemoteWrite(rls *service.RLS) http.HandlerFunc {
 		if len(filteredBody) == 0 {
 			bodyToSend = body
 		}
-		
+
 		mimirURL := fmt.Sprintf("http://%s:%s/api/v1/push", rls.GetMimirHost(), rls.GetMimirPort())
 
 		// Create request to Mimir

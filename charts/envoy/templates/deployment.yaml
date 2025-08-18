@@ -38,6 +38,17 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.logging.level }}
+          command:
+            - /usr/local/bin/envoy
+            - -c
+            - /etc/envoy/envoy.yaml
+            - --log-level
+            - {{ .Values.logging.level }}
+            {{- if .Values.logging.enableErrorLogs | default true }}
+            - --enable-error-logs
+            {{- end }}
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
