@@ -52,12 +52,12 @@ type RLSConfig struct {
 
 // 🔧 NEW: SelectiveFilteringConfig holds configuration for selective filtering
 type SelectiveFilteringConfig struct {
-	Enabled              bool   // Enable selective filtering
-	FallbackToDeny       bool   // Fall back to deny if filtering fails
-	SeriesSelectionStrategy string // Strategy for selecting which series to drop: "random", "oldest", "newest", "priority"
-	MetricPriority       []string // Priority order for metrics (higher priority metrics are dropped last)
-	MaxFilteringPercentage int64  // Don't filter more than this percentage of request
-	MinSeriesToKeep      int64   // Always keep at least this many series
+	Enabled                 bool     // Enable selective filtering
+	FallbackToDeny          bool     // Fall back to deny if filtering fails
+	SeriesSelectionStrategy string   // Strategy for selecting which series to drop: "random", "oldest", "newest", "priority"
+	MetricPriority          []string // Priority order for metrics (higher priority metrics are dropped last)
+	MaxFilteringPercentage  int64    // Don't filter more than this percentage of request
+	MinSeriesToKeep         int64    // Always keep at least this many series
 }
 
 // SeriesCacheEntry represents a cached series count entry
@@ -1918,14 +1918,14 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 	if rls.config.SelectiveFiltering.Enabled {
 		// Use selective filtering instead of binary allow/deny
 		selectiveResult := rls.SelectiveFilterRequest(tenantID, body, contentEncoding)
-		
+
 		// Convert SelectiveFilterResult to Decision
 		decision := limits.Decision{
 			Allowed: selectiveResult.Allowed,
 			Reason:  selectiveResult.Reason,
 			Code:    selectiveResult.Code,
 		}
-		
+
 		// Record selective filtering metrics
 		if selectiveResult.DroppedSeries > 0 {
 			rls.metrics.DecisionsTotal.WithLabelValues("selective_filter", tenantID, "series_filtered").Inc()
@@ -1934,7 +1934,7 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 		} else {
 			rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "selective_filter_allowed").Inc()
 		}
-		
+
 		return decision
 	} else {
 		// Use traditional binary allow/deny logic
