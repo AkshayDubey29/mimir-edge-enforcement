@@ -44,6 +44,18 @@ limits:
   defaultMaxLabelValueLength: 2048
   defaultMaxSeriesPerRequest: 100000
 
+# 🔧 NEW: Selective filtering configuration
+selectiveFiltering:
+  enabled: false  # Enable selective filtering instead of binary allow/deny
+  fallbackToDeny: true  # Fall back to deny if filtering fails
+  seriesSelectionStrategy: "random"  # Strategy: random, oldest, newest, priority
+  metricPriority:  # Priority order for metrics (higher priority = dropped last)
+    - "critical_metrics"
+    - "important_metrics" 
+    - "standard_metrics"
+  maxFilteringPercentage: 50  # Don't filter more than 50% of request
+  minSeriesToKeep: 10  # Always keep at least 10 series
+
 # Selective enforcement configuration
 enforcement:
   enabled: true
