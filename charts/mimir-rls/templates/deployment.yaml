@@ -98,6 +98,13 @@ spec:
             
             # Store configuration
             - "--store-backend={{ .Values.store.backend }}"
+            
+            # 🔧 NEW: Selective filtering configuration
+            - "--selective-filtering-enabled={{ .Values.selectiveFiltering.enabled }}"
+            - "--selective-filtering-fallback-to-deny={{ .Values.selectiveFiltering.fallbackToDeny }}"
+            - "--selective-filtering-strategy={{ .Values.selectiveFiltering.seriesSelectionStrategy }}"
+            - "--selective-filtering-max-percentage={{ .Values.selectiveFiltering.maxFilteringPercentage }}"
+            - "--selective-filtering-min-series-to-keep={{ .Values.selectiveFiltering.minSeriesToKeep }}"
             {{- if eq .Values.store.backend "redis" }}
             {{- if eq .Values.redis.mode "external" }}
             - "--redis-address={{ .Values.redis.external.address }}"

@@ -99,6 +99,13 @@ var (
 	defaultMaxLabelValueLength = flag.Int("default-max-label-value-length", 2048, "Default maximum label value length")
 	defaultMaxSeriesPerRequest = flag.Int("default-max-series-per-request", 100000, "Default maximum series per request")
 
+	// 🔧 NEW: Selective filtering configuration
+	selectiveFilteringEnabled = flag.Bool("selective-filtering-enabled", false, "Enable selective filtering instead of binary allow/deny")
+	selectiveFilteringFallbackToDeny = flag.Bool("selective-filtering-fallback-to-deny", true, "Fall back to deny if selective filtering fails")
+	selectiveFilteringStrategy = flag.String("selective-filtering-strategy", "random", "Strategy for selecting which series to drop: random, oldest, newest, priority")
+	selectiveFilteringMaxPercentage = flag.Int64("selective-filtering-max-percentage", 50, "Don't filter more than this percentage of request")
+	selectiveFilteringMinSeriesToKeep = flag.Int64("selective-filtering-min-series-to-keep", 10, "Always keep at least this many series")
+
 	// Selective enforcement flags
 	enforceSamplesPerSecond    = flag.Bool("enforce-samples-per-second", true, "Whether to enforce samples per second limits")
 	enforceMaxBodyBytes        = flag.Bool("enforce-max-body-bytes", true, "Whether to enforce maximum body size limits")
@@ -167,6 +174,14 @@ func main() {
 		MimirHost:          *mimirHost,
 		MimirPort:          *mimirPort,
 		NewTenantLeniency:  *newTenantLeniency, // 🔧 NEW: Add new tenant leniency configuration
+		// 🔧 NEW: Add selective filtering configuration
+		SelectiveFiltering: service.SelectiveFilteringConfig{
+			Enabled:                 *selectiveFilteringEnabled,
+			FallbackToDeny:          *selectiveFilteringFallbackToDeny,
+			SeriesSelectionStrategy: *selectiveFilteringStrategy,
+			MaxFilteringPercentage:  *selectiveFilteringMaxPercentage,
+			MinSeriesToKeep:         *selectiveFilteringMinSeriesToKeep,
+		},
 		DefaultLimits: limits.TenantLimits{
 			SamplesPerSecond:    defaultSamplesPerSecond,
 			BurstPercent:        defaultBurstPercent,
