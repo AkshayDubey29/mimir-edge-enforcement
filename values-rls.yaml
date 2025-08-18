@@ -49,15 +49,12 @@ enforcement:
 # 🔧 NEW: New series leniency configuration
 newTenantLeniency: true  # Enable lenient limits (50%) when adding new series to prevent false positives
 
-# 🔧 NEW: Selective filtering configuration
+# 🔧 NEW: Selective filtering configuration - LENIENT
 selectiveFiltering:
-  enabled: true  # Enable selective filtering instead of binary allow/deny
+  enabled: true  # Enable selective filtering
   fallbackToDeny: true  # Fall back to deny if filtering fails
   seriesSelectionStrategy: "random"  # Strategy: random, oldest, newest, priority
-  metricPriority:  # Priority order for metrics (higher priority = dropped last)
-    - "critical_metrics"
-    - "important_metrics" 
-    - "standard_metrics"
+  # metricPriority: []  # Removed - no specific metric priorities needed
   maxFilteringPercentage: 100  # Allow filtering up to 100% of excess
   minSeriesToKeep: 1  # Always keep at least 1 series
 

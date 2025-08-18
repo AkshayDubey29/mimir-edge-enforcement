@@ -1852,9 +1852,9 @@ func (rls *RLS) getRecentDenials(tenantID string, window time.Duration) []limits
 	return recentDenials
 }
 
-// 🔧 NEW: CheckRemoteWriteLimits checks limits for remote write requests
-// This function now supports both traditional deny/allow and selective filtering modes
-func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEncoding string) limits.Decision {
+// 🔧 NEW: CheckRemoteWriteLimitsWithFiltering checks limits and returns filtered body for selective filtering
+// This function supports both traditional deny/allow and selective filtering modes
+func (rls *RLS) CheckRemoteWriteLimitsWithFiltering(tenantID string, body []byte, contentEncoding string) (limits.Decision, []byte) {
 	start := time.Now()
 	defer func() {
 		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
@@ -1866,20 +1866,20 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 	// Check if enforcement is enabled
 	if !tenant.Info.Enforcement.Enabled {
 		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "enforcement_disabled").Inc()
-		return limits.Decision{Allowed: true, Reason: "enforcement_disabled", Code: 200}
+		return limits.Decision{Allowed: true, Reason: "enforcement_disabled", Code: 200}, body
 	}
 
 	// Quick body size check
 	bodyBytes := int64(len(body))
 	if bodyBytes < 100 {
 		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "small_request").Inc()
-		return limits.Decision{Allowed: true, Reason: "small_request", Code: 200}
+		return limits.Decision{Allowed: true, Reason: "small_request", Code: 200}, body
 	}
 
 	// Skip parsing for very large requests
 	if bodyBytes > 10*1024*1024 { // 10MB limit
 		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
-		return limits.Decision{Allowed: false, Reason: "request body too large", Code: 413}
+		return limits.Decision{Allowed: false, Reason: "request body too large", Code: 413}, body
 	}
 
 	// Parse request for limits checking
@@ -1899,11 +1899,11 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 		decision := rls.checkLimits(tenant, fallbackSamples, bodyBytes, fallbackRequestInfo)
 		if !decision.Allowed {
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "body_parse_failed_limit_exceeded").Inc()
-			return decision
+			return decision, body
 		}
 
 		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "body_parse_failed_allow").Inc()
-		return limits.Decision{Allowed: true, Reason: "body_parse_failed_allow", Code: 200}
+		return limits.Decision{Allowed: true, Reason: "body_parse_failed_allow", Code: 200}, body
 	}
 
 	// Extract request info
@@ -1935,7 +1935,8 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 			rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "selective_filter_allowed").Inc()
 		}
 
-		return decision
+		// Return the filtered body for selective filtering
+		return decision, selectiveResult.FilteredBody
 	} else {
 		// Use traditional binary allow/deny logic
 		decision := rls.checkLimits(tenant, result.SamplesCount, bodyBytes, requestInfo)
@@ -1946,13 +1947,20 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, decision.Reason).Inc()
 		}
 
-		return decision
+		return decision, body
 	}
 }
 
 // 🔧 NEW: GetMimirHost returns the Mimir host from config
 func (rls *RLS) GetMimirHost() string {
 	return rls.config.MimirHost
+}
+
+// 🔧 NEW: CheckRemoteWriteLimits - backward compatibility function
+// This function maintains backward compatibility while the new function supports selective filtering
+func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEncoding string) limits.Decision {
+	decision, _ := rls.CheckRemoteWriteLimitsWithFiltering(tenantID, body, contentEncoding)
+	return decision
 }
 
 // 🔧 NEW: GetMimirPort returns the Mimir port from config
@@ -4545,7 +4553,7 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 	if err != nil {
 		rls.metrics.BodyParseErrors.Inc()
 		// If we can't parse, fall back to original logic
-		decision := rls.CheckRemoteWriteLimits(tenantID, body, contentEncoding)
+		decision, _ := rls.CheckRemoteWriteLimitsWithFiltering(tenantID, body, contentEncoding)
 		result.Allowed = decision.Allowed
 		result.Reason = decision.Reason
 		result.Code = decision.Code

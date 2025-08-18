@@ -1298,8 +1298,8 @@ func handleRemoteWrite(rls *service.RLS) http.HandlerFunc {
 		}
 		defer r.Body.Close()
 
-		// Check limits using RLS logic
-		decision := rls.CheckRemoteWriteLimits(tenantID, body, r.Header.Get("Content-Encoding"))
+		// Check limits using RLS logic with selective filtering
+		decision, filteredBody := rls.CheckRemoteWriteLimitsWithFiltering(tenantID, body, r.Header.Get("Content-Encoding"))
 
 		if !decision.Allowed {
 			// Return appropriate error based on decision
@@ -1308,10 +1308,16 @@ func handleRemoteWrite(rls *service.RLS) http.HandlerFunc {
 		}
 
 		// Forward to Mimir if limits are not exceeded
+		// Use filteredBody if selective filtering was applied, otherwise use original body
+		bodyToSend := filteredBody
+		if len(filteredBody) == 0 {
+			bodyToSend = body
+		}
+		
 		mimirURL := fmt.Sprintf("http://%s:%s/api/v1/push", rls.GetMimirHost(), rls.GetMimirPort())
 
 		// Create request to Mimir
-		mimirReq, err := http.NewRequest("POST", mimirURL, bytes.NewReader(body))
+		mimirReq, err := http.NewRequest("POST", mimirURL, bytes.NewReader(bodyToSend))
 		if err != nil {
 			http.Error(w, "failed to create request to Mimir", http.StatusInternalServerError)
 			return
