@@ -1,5 +1,5 @@
-# Minimal RLS configuration for kind cluster testing
-# This configuration uses minimal resources to ensure pods can start
+# Ultra-minimal RLS configuration for resource-constrained kind cluster
+# This configuration uses extremely low resources to ensure pods can start
 
 # Selective filtering configuration - LENIENT
 selectiveFiltering:
@@ -13,16 +13,16 @@ selectiveFiltering:
   maxFilteringPercentage: 100  # Allow filtering up to 100% of excess
   minSeriesToKeep: 1  # Always keep at least 1 series
 
-# Minimal resource configuration
+# Ultra-minimal resource configuration
 replicaCount: 1  # Only 1 replica for testing
 
 resources:
   limits:
-    cpu: 500m    # Minimal CPU limit
-    memory: 512Mi  # Minimal memory limit
+    cpu: 200m    # Ultra-minimal CPU limit
+    memory: 128Mi  # Ultra-minimal memory limit
   requests:
-    cpu: 100m    # Minimal CPU request
-    memory: 128Mi   # Minimal memory request
+    cpu: 50m     # Ultra-minimal CPU request
+    memory: 32Mi   # Ultra-minimal memory request
 
 # Store configuration - Use memory for testing
 store:
@@ -39,49 +39,50 @@ server:
   enableAdmin: true      # Enable admin server (HTTP endpoint)
   enableMetrics: true    # Enable metrics server
 
-# Limits configuration - Strict limits for testing
+# Limits configuration - Very strict limits for testing
 limits:
-  defaultSamplesPerSecond: 1000    # Low limit for testing
+  defaultSamplesPerSecond: 100     # Very low limit for testing
   defaultBurstPercent: 50
   enforceBodyParsing: true
-  maxBodyBytes: 1048576            # 1MB limit
-  maxRequestBytes: "1048576"       # 1MB limit
+  maxBodyBytes: 524288             # 512KB limit
+  maxRequestBytes: "524288"        # 512KB limit
   failureModeAllow: false          # Fail closed for security
-  defaultMaxLabelsPerSeries: 10    # Low limit for testing
-  defaultMaxLabelValueLength: 100  # Low limit for testing
-  defaultMaxSeriesPerRequest: 1000 # Low limit for testing
+  defaultMaxLabelsPerSeries: 5     # Very low limit for testing
+  defaultMaxLabelValueLength: 50   # Very low limit for testing
+  defaultMaxSeriesPerRequest: 100  # Very low limit for testing
 
 # Enforcement configuration - Enable all enforcement
 enforcement:
   enabled: true
   enforceMaxSeriesPerRequest: true
+  enforceMaxSeriesPerMetric: true  # Fixed: Added this line
   enforceMaxLabelsPerSeries: true
   enforceSamplesPerSecond: true
   enforceBytesPerSecond: true
   enforceMaxBodyBytes: true
 
-# Health check configuration - More lenient
+# Health check configuration - Very lenient
 healthCheck:
   livenessProbe:
     httpGet:
       path: /healthz
       port: admin
-    initialDelaySeconds: 60
-    periodSeconds: 60
-    timeoutSeconds: 10
-    failureThreshold: 5
+    initialDelaySeconds: 120
+    periodSeconds: 120
+    timeoutSeconds: 30
+    failureThreshold: 10
   readinessProbe:
     httpGet:
       path: /readyz
       port: admin
-    initialDelaySeconds: 60
-    periodSeconds: 60
-    timeoutSeconds: 10
-    failureThreshold: 5
+    initialDelaySeconds: 120
+    periodSeconds: 120
+    timeoutSeconds: 30
+    failureThreshold: 10
 
 # Logging configuration
 log:
-  level: "info"
+  level: "warn"  # Reduce logging for performance
 
 # Mimir configuration
 mimir:

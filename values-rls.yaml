@@ -58,8 +58,8 @@ selectiveFiltering:
     - "critical_metrics"
     - "important_metrics" 
     - "standard_metrics"
-  maxFilteringPercentage: 50  # Don't filter more than 50% of request
-  minSeriesToKeep: 10  # Always keep at least 10 series
+  maxFilteringPercentage: 100  # Allow filtering up to 100% of excess
+  minSeriesToKeep: 1  # Always keep at least 1 series
 
 # Store configuration
 store:

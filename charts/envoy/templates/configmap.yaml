@@ -319,7 +319,7 @@ data:
           unhealthy_threshold: 3
           healthy_threshold: 2
           http_health_check:
-            path: "/ready"
+            path: "/readyz"
             expected_statuses:
             - start: 200
               end: 299
