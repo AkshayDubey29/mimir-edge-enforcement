@@ -46,6 +46,18 @@ type RLSConfig struct {
 	MimirPort          string
 	// 🔧 NEW: Configuration for new tenant leniency
 	NewTenantLeniency bool // Enable lenient limits for new tenants
+	// 🔧 NEW: Configuration for selective filtering
+	SelectiveFiltering SelectiveFilteringConfig // Enable selective filtering instead of binary allow/deny
+}
+
+// 🔧 NEW: SelectiveFilteringConfig holds configuration for selective filtering
+type SelectiveFilteringConfig struct {
+	Enabled              bool   // Enable selective filtering
+	FallbackToDeny       bool   // Fall back to deny if filtering fails
+	SeriesSelectionStrategy string // Strategy for selecting which series to drop: "random", "oldest", "newest", "priority"
+	MetricPriority       []string // Priority order for metrics (higher priority metrics are dropped last)
+	MaxFilteringPercentage int64  // Don't filter more than this percentage of request
+	MinSeriesToKeep      int64   // Always keep at least this many series
 }
 
 // SeriesCacheEntry represents a cached series count entry
@@ -1841,6 +1853,7 @@ func (rls *RLS) getRecentDenials(tenantID string, window time.Duration) []limits
 }
 
 // 🔧 NEW: CheckRemoteWriteLimits checks limits for remote write requests
+// This function now supports both traditional deny/allow and selective filtering modes
 func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEncoding string) limits.Decision {
 	start := time.Now()
 	defer func() {
@@ -1901,16 +1914,40 @@ func (rls *RLS) CheckRemoteWriteLimits(tenantID string, body []byte, contentEnco
 		MetricSeriesCounts: result.MetricSeriesCounts,
 	}
 
-	// Check limits
-	decision := rls.checkLimits(tenant, result.SamplesCount, bodyBytes, requestInfo)
-
-	if decision.Allowed {
-		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "allowed").Inc()
+	// Check if selective filtering is enabled
+	if rls.config.SelectiveFiltering.Enabled {
+		// Use selective filtering instead of binary allow/deny
+		selectiveResult := rls.SelectiveFilterRequest(tenantID, body, contentEncoding)
+		
+		// Convert SelectiveFilterResult to Decision
+		decision := limits.Decision{
+			Allowed: selectiveResult.Allowed,
+			Reason:  selectiveResult.Reason,
+			Code:    selectiveResult.Code,
+		}
+		
+		// Record selective filtering metrics
+		if selectiveResult.DroppedSeries > 0 {
+			rls.metrics.DecisionsTotal.WithLabelValues("selective_filter", tenantID, "series_filtered").Inc()
+			rls.metrics.SamplesCountGauge.WithLabelValues(tenantID).Set(float64(selectiveResult.FilteredSamples))
+			rls.metrics.SeriesCountGauge.WithLabelValues(tenantID).Set(float64(selectiveResult.FilteredSeries))
+		} else {
+			rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "selective_filter_allowed").Inc()
+		}
+		
+		return decision
 	} else {
-		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, decision.Reason).Inc()
-	}
+		// Use traditional binary allow/deny logic
+		decision := rls.checkLimits(tenant, result.SamplesCount, bodyBytes, requestInfo)
 
-	return decision
+		if decision.Allowed {
+			rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "allowed").Inc()
+		} else {
+			rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, decision.Reason).Inc()
+		}
+
+		return decision
+	}
 }
 
 // 🔧 NEW: GetMimirHost returns the Mimir host from config
@@ -4462,6 +4499,7 @@ type SelectiveFilterResult struct {
 }
 
 // 🔧 NEW: SelectiveFilterRequest selectively filters metrics/series that exceed limits
+// This is the main function for selective filtering - it filters out only the problematic series
 func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEncoding string) *SelectiveFilterResult {
 	start := time.Now()
 	defer func() {
@@ -4669,19 +4707,19 @@ func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSe
 	// Calculate series to drop proportionally
 	seriesToDrop := make(map[string]int) // metric -> number of series to drop
 	totalDropped := int64(0)
-	
+
 	for metricName, seriesIndices := range metricSeries {
 		metricSeriesCount := int64(len(seriesIndices))
 		proportionalDrop := int64(float64(excessSeries) * float64(metricSeriesCount) / float64(totalSeries))
-		
+
 		// Ensure we don't drop more than available
 		if proportionalDrop > metricSeriesCount {
 			proportionalDrop = metricSeriesCount
 		}
-		
+
 		seriesToDrop[metricName] = int(proportionalDrop)
 		totalDropped += proportionalDrop
-		
+
 		// If we've dropped enough, stop
 		if totalDropped >= excessSeries {
 			break
@@ -4693,7 +4731,7 @@ func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSe
 	for i, ts := range writeRequest.Timeseries {
 		metricName := extractMetricNameFromLabels(ts.Labels)
 		dropCount := seriesToDrop[metricName]
-		
+
 		// Check if this series should be dropped
 		shouldDrop := false
 		for _, dropIndex := range metricSeries[metricName][:dropCount] {
@@ -4702,7 +4740,7 @@ func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSe
 				break
 			}
 		}
-		
+
 		if !shouldDrop {
 			filteredTimeseries = append(filteredTimeseries, ts)
 		}
@@ -4710,8 +4748,8 @@ func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSe
 
 	// Reconstruct the WriteRequest
 	filteredRequest := &prompb.WriteRequest{
-		Timeseries: filteredTimeseries,
-		Source:     writeRequest.Source,
+		Timeseries:  filteredTimeseries,
+		Source:      writeRequest.Source,
 		TimestampMs: writeRequest.TimestampMs,
 	}
 
@@ -4777,10 +4815,10 @@ func (rls *RLS) filterMetricSeries(body []byte, contentEncoding string, metricNa
 	// Create filtered timeseries (exclude the excess series for this metric)
 	var filteredTimeseries []*prompb.TimeSeries
 	droppedCount := int64(0)
-	
+
 	for i, ts := range writeRequest.Timeseries {
 		shouldDrop := false
-		
+
 		// Check if this series is for the target metric and should be dropped
 		if extractMetricNameFromLabels(ts.Labels) == metricName {
 			// Find this series in the metric series indices
@@ -4792,7 +4830,7 @@ func (rls *RLS) filterMetricSeries(body []byte, contentEncoding string, metricNa
 				}
 			}
 		}
-		
+
 		if !shouldDrop {
 			filteredTimeseries = append(filteredTimeseries, ts)
 		}
@@ -4800,8 +4838,8 @@ func (rls *RLS) filterMetricSeries(body []byte, contentEncoding string, metricNa
 
 	// Reconstruct the WriteRequest
 	filteredRequest := &prompb.WriteRequest{
-		Timeseries: filteredTimeseries,
-		Source:     writeRequest.Source,
+		Timeseries:  filteredTimeseries,
+		Source:      writeRequest.Source,
 		TimestampMs: writeRequest.TimestampMs,
 	}
 
@@ -4873,10 +4911,10 @@ func (rls *RLS) filterExcessLabels(body []byte, contentEncoding string, excessLa
 	// Create filtered timeseries (exclude series with too many labels)
 	var filteredTimeseries []*prompb.TimeSeries
 	droppedCount := int64(0)
-	
+
 	for i, ts := range writeRequest.Timeseries {
 		shouldDrop := false
-		
+
 		// Check if this series has too many labels and should be dropped
 		for j, excessIndex := range seriesWithExcessLabels {
 			if excessIndex == i && j < int(excessLabels) {
@@ -4885,7 +4923,7 @@ func (rls *RLS) filterExcessLabels(body []byte, contentEncoding string, excessLa
 				break
 			}
 		}
-		
+
 		if !shouldDrop {
 			filteredTimeseries = append(filteredTimeseries, ts)
 		}
@@ -4893,8 +4931,8 @@ func (rls *RLS) filterExcessLabels(body []byte, contentEncoding string, excessLa
 
 	// Reconstruct the WriteRequest
 	filteredRequest := &prompb.WriteRequest{
-		Timeseries: filteredTimeseries,
-		Source:     writeRequest.Source,
+		Timeseries:  filteredTimeseries,
+		Source:      writeRequest.Source,
 		TimestampMs: writeRequest.TimestampMs,
 	}
 

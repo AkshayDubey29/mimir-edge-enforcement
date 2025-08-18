@@ -49,6 +49,18 @@ enforcement:
 # 🔧 NEW: New series leniency configuration
 newTenantLeniency: true  # Enable lenient limits (50%) when adding new series to prevent false positives
 
+# 🔧 NEW: Selective filtering configuration
+selectiveFiltering:
+  enabled: true  # Enable selective filtering instead of binary allow/deny
+  fallbackToDeny: true  # Fall back to deny if filtering fails
+  seriesSelectionStrategy: "random"  # Strategy: random, oldest, newest, priority
+  metricPriority:  # Priority order for metrics (higher priority = dropped last)
+    - "critical_metrics"
+    - "important_metrics" 
+    - "standard_metrics"
+  maxFilteringPercentage: 50  # Don't filter more than 50% of request
+  minSeriesToKeep: 10  # Always keep at least 10 series
+
 # Store configuration
 store:
   backend: "memory"  # TEMPORARILY USING MEMORY - Use Redis for production (shared state across pods)
