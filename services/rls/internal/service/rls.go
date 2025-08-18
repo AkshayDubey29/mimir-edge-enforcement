@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -12,13 +14,16 @@ import (
 	"sync"
 	"time"
 
+	prompb "github.com/AkshayDubey29/mimir-edge-enforcement/protos/prometheus"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/buckets"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/limits"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/parser"
 	"github.com/AkshayDubey29/mimir-edge-enforcement/services/rls/internal/store"
+	"github.com/golang/snappy"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	envoy_extensions_common_ratelimit_v3 "github.com/envoyproxy/go-control-plane/envoy/extensions/common/ratelimit/v3"
@@ -4440,20 +4445,20 @@ func (ta *TimeAggregator) recordPerTenantDecision(tenantID string, timestamp tim
 
 // 🔧 NEW: SelectiveFilterResult represents the result of selective filtering
 type SelectiveFilterResult struct {
-	Allowed     bool
+	Allowed      bool
 	FilteredBody []byte
-	Reason      string
-	Code        int32
+	Reason       string
+	Code         int32
 	// Statistics about what was filtered
-	OriginalSamples  int64
-	FilteredSamples  int64
-	DroppedSamples   int64
-	OriginalSeries   int64
-	FilteredSeries   int64
-	DroppedSeries    int64
+	OriginalSamples int64
+	FilteredSamples int64
+	DroppedSamples  int64
+	OriginalSeries  int64
+	FilteredSeries  int64
+	DroppedSeries   int64
 	// Detailed filtering info
-	FilteredMetrics  map[string]int64 // metric -> dropped series count
-	LimitViolations  map[string]int64 // limit type -> violation count
+	FilteredMetrics map[string]int64 // metric -> dropped series count
+	LimitViolations map[string]int64 // limit type -> violation count
 }
 
 // 🔧 NEW: SelectiveFilterRequest selectively filters metrics/series that exceed limits
@@ -4464,12 +4469,12 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 	}()
 
 	result := &SelectiveFilterResult{
-		Allowed:          true,
-		FilteredBody:     body, // Start with original body
-		Reason:           "selective_filter_applied",
-		Code:             200,
-		FilteredMetrics:  make(map[string]int64),
-		LimitViolations:  make(map[string]int64),
+		Allowed:         true,
+		FilteredBody:    body, // Start with original body
+		Reason:          "selective_filter_applied",
+		Code:            200,
+		FilteredMetrics: make(map[string]int64),
+		LimitViolations: make(map[string]int64),
 	}
 
 	// Get tenant state
@@ -4521,19 +4526,19 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
 		currentTenantSeries := rls.getTenantGlobalSeriesCount(tenantID)
 		projectedTotal := currentTenantSeries + parseResult.SeriesCount
-		
+
 		if projectedTotal > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
 			// Calculate how many series we need to drop
 			excessSeries := projectedTotal - int64(tenant.Info.Limits.MaxSeriesPerRequest)
-			
+
 			// Apply selective filtering - drop excess series proportionally across metrics
 			filteredBody, droppedSeries := rls.filterExcessSeries(body, contentEncoding, excessSeries, parseResult)
-			
+
 			result.FilteredBody = filteredBody
 			result.DroppedSeries = droppedSeries
 			result.FilteredSeries = parseResult.SeriesCount - droppedSeries
 			result.LimitViolations["per_user_series_limit"] = excessSeries
-			
+
 			rls.logger.Info().
 				Str("tenant", tenantID).
 				Int64("current_series", currentTenantSeries).
@@ -4548,24 +4553,24 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 	// 2. Check per-metric series limit
 	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
 		currentMetricSeries := rls.getTenantMetricSeriesCount(tenantID, &limits.RequestInfo{})
-		
+
 		for metricName, seriesCount := range parseResult.MetricSeriesCounts {
 			currentMetricTotal := currentMetricSeries[metricName]
 			projectedMetricTotal := currentMetricTotal + seriesCount
-			
+
 			if projectedMetricTotal > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
 				// Calculate excess series for this metric
 				excessSeries := projectedMetricTotal - int64(tenant.Info.Limits.MaxSeriesPerMetric)
-				
+
 				// Filter out excess series for this specific metric
 				filteredBody, droppedSeries := rls.filterMetricSeries(body, contentEncoding, metricName, excessSeries, parseResult)
-				
+
 				result.FilteredBody = filteredBody
 				result.DroppedSeries += droppedSeries
 				result.FilteredSeries -= droppedSeries
 				result.FilteredMetrics[metricName] = droppedSeries
 				result.LimitViolations["per_metric_series_limit"] += excessSeries
-				
+
 				rls.logger.Info().
 					Str("tenant", tenantID).
 					Str("metric", metricName).
@@ -4584,15 +4589,15 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 		if parseResult.LabelsCount > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
 			// For labels per series, we need to filter series with too many labels
 			excessLabels := parseResult.LabelsCount - int64(tenant.Info.Limits.MaxLabelsPerSeries)
-			
+
 			// Filter out series with too many labels
 			filteredBody, droppedSeries := rls.filterExcessLabels(body, contentEncoding, excessLabels, parseResult)
-			
+
 			result.FilteredBody = filteredBody
 			result.DroppedSeries += droppedSeries
 			result.FilteredSeries -= droppedSeries
 			result.LimitViolations["labels_per_series_limit"] = excessLabels
-			
+
 			rls.logger.Info().
 				Str("tenant", tenantID).
 				Int64("labels_count", parseResult.LabelsCount).
@@ -4612,7 +4617,7 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 			result.Allowed = false
 			result.Reason = "body_size_exceeded_after_filtering"
 			result.Code = 429
-			
+
 			rls.logger.Warn().
 				Str("tenant", tenantID).
 				Int64("filtered_body_size", filteredBodySize).
@@ -4634,51 +4639,343 @@ func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEnco
 
 // 🔧 NEW: filterExcessSeries filters out excess series proportionally across all metrics
 func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSeries int64, parseResult *parser.ParseResult) ([]byte, int64) {
-	// This is a simplified implementation - in practice, you'd need to:
-	// 1. Parse the protobuf structure
-	// 2. Identify which series to drop
-	// 3. Reconstruct the protobuf without those series
-	// 4. Re-compress if needed
+	// Decompress the body first
+	decompressed, err := decompressBody(body, contentEncoding)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to decompress body for filtering")
+		return body, 0
+	}
+
+	// Parse the protobuf
+	var writeRequest prompb.WriteRequest
+	if err := proto.Unmarshal(decompressed, &writeRequest); err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to parse protobuf for filtering")
+		return body, 0
+	}
+
+	// Calculate how many series to drop from each metric proportionally
+	totalSeries := int64(len(writeRequest.Timeseries))
+	if totalSeries == 0 {
+		return body, 0
+	}
+
+	// Group series by metric
+	metricSeries := make(map[string][]int) // metric -> slice of series indices
+	for i, ts := range writeRequest.Timeseries {
+		metricName := extractMetricNameFromLabels(ts.Labels)
+		metricSeries[metricName] = append(metricSeries[metricName], i)
+	}
+
+	// Calculate series to drop proportionally
+	seriesToDrop := make(map[string]int) // metric -> number of series to drop
+	totalDropped := int64(0)
 	
-	// For now, return the original body and log the intent
+	for metricName, seriesIndices := range metricSeries {
+		metricSeriesCount := int64(len(seriesIndices))
+		proportionalDrop := int64(float64(excessSeries) * float64(metricSeriesCount) / float64(totalSeries))
+		
+		// Ensure we don't drop more than available
+		if proportionalDrop > metricSeriesCount {
+			proportionalDrop = metricSeriesCount
+		}
+		
+		seriesToDrop[metricName] = int(proportionalDrop)
+		totalDropped += proportionalDrop
+		
+		// If we've dropped enough, stop
+		if totalDropped >= excessSeries {
+			break
+		}
+	}
+
+	// Create filtered timeseries
+	var filteredTimeseries []*prompb.TimeSeries
+	for i, ts := range writeRequest.Timeseries {
+		metricName := extractMetricNameFromLabels(ts.Labels)
+		dropCount := seriesToDrop[metricName]
+		
+		// Check if this series should be dropped
+		shouldDrop := false
+		for _, dropIndex := range metricSeries[metricName][:dropCount] {
+			if dropIndex == i {
+				shouldDrop = true
+				break
+			}
+		}
+		
+		if !shouldDrop {
+			filteredTimeseries = append(filteredTimeseries, ts)
+		}
+	}
+
+	// Reconstruct the WriteRequest
+	filteredRequest := &prompb.WriteRequest{
+		Timeseries: filteredTimeseries,
+		Source:     writeRequest.Source,
+		TimestampMs: writeRequest.TimestampMs,
+	}
+
+	// Serialize the filtered request
+	filteredBytes, err := proto.Marshal(filteredRequest)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to serialize filtered protobuf")
+		return body, 0
+	}
+
+	// Re-compress if original was compressed
+	finalBody := filteredBytes
+	if contentEncoding != "" {
+		compressed, err := compressBody(filteredBytes, contentEncoding)
+		if err != nil {
+			rls.logger.Error().Err(err).Msg("RLS: Failed to compress filtered body")
+			return body, 0
+		}
+		finalBody = compressed
+	}
+
 	rls.logger.Info().
 		Int64("excess_series", excessSeries).
-		Msg("RLS: Would filter excess series (implementation needed)")
-	
-	return body, 0 // Placeholder - actual implementation needed
+		Int64("total_dropped", totalDropped).
+		Int("original_series", len(writeRequest.Timeseries)).
+		Int("filtered_series", len(filteredTimeseries)).
+		Msg("RLS: Successfully filtered excess series")
+
+	return finalBody, totalDropped
 }
 
 // 🔧 NEW: filterMetricSeries filters out excess series for a specific metric
 func (rls *RLS) filterMetricSeries(body []byte, contentEncoding string, metricName string, excessSeries int64, parseResult *parser.ParseResult) ([]byte, int64) {
-	// This is a simplified implementation - in practice, you'd need to:
-	// 1. Parse the protobuf structure
-	// 2. Identify series for the specific metric
-	// 3. Drop excess series for that metric
-	// 4. Reconstruct the protobuf
-	// 5. Re-compress if needed
+	// Decompress the body first
+	decompressed, err := decompressBody(body, contentEncoding)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to decompress body for metric filtering")
+		return body, 0
+	}
+
+	// Parse the protobuf
+	var writeRequest prompb.WriteRequest
+	if err := proto.Unmarshal(decompressed, &writeRequest); err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to parse protobuf for metric filtering")
+		return body, 0
+	}
+
+	// Find all series for the specific metric
+	var metricSeriesIndices []int
+	for i, ts := range writeRequest.Timeseries {
+		if extractMetricNameFromLabels(ts.Labels) == metricName {
+			metricSeriesIndices = append(metricSeriesIndices, i)
+		}
+	}
+
+	// Calculate how many series to drop
+	metricSeriesCount := int64(len(metricSeriesIndices))
+	if metricSeriesCount <= excessSeries {
+		// Drop all series for this metric
+		excessSeries = metricSeriesCount
+	}
+
+	// Create filtered timeseries (exclude the excess series for this metric)
+	var filteredTimeseries []*prompb.TimeSeries
+	droppedCount := int64(0)
 	
-	// For now, return the original body and log the intent
+	for i, ts := range writeRequest.Timeseries {
+		shouldDrop := false
+		
+		// Check if this series is for the target metric and should be dropped
+		if extractMetricNameFromLabels(ts.Labels) == metricName {
+			// Find this series in the metric series indices
+			for j, metricIndex := range metricSeriesIndices {
+				if metricIndex == i && j < int(excessSeries) {
+					shouldDrop = true
+					droppedCount++
+					break
+				}
+			}
+		}
+		
+		if !shouldDrop {
+			filteredTimeseries = append(filteredTimeseries, ts)
+		}
+	}
+
+	// Reconstruct the WriteRequest
+	filteredRequest := &prompb.WriteRequest{
+		Timeseries: filteredTimeseries,
+		Source:     writeRequest.Source,
+		TimestampMs: writeRequest.TimestampMs,
+	}
+
+	// Serialize the filtered request
+	filteredBytes, err := proto.Marshal(filteredRequest)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to serialize filtered protobuf for metric")
+		return body, 0
+	}
+
+	// Re-compress if original was compressed
+	finalBody := filteredBytes
+	if contentEncoding != "" {
+		compressed, err := compressBody(filteredBytes, contentEncoding)
+		if err != nil {
+			rls.logger.Error().Err(err).Msg("RLS: Failed to compress filtered body for metric")
+			return body, 0
+		}
+		finalBody = compressed
+	}
+
 	rls.logger.Info().
 		Str("metric", metricName).
 		Int64("excess_series", excessSeries).
-		Msg("RLS: Would filter excess metric series (implementation needed)")
-	
-	return body, 0 // Placeholder - actual implementation needed
+		Int64("dropped_series", droppedCount).
+		Int("original_series", len(writeRequest.Timeseries)).
+		Int("filtered_series", len(filteredTimeseries)).
+		Msg("RLS: Successfully filtered excess metric series")
+
+	return finalBody, droppedCount
 }
 
 // 🔧 NEW: filterExcessLabels filters out series with too many labels
 func (rls *RLS) filterExcessLabels(body []byte, contentEncoding string, excessLabels int64, parseResult *parser.ParseResult) ([]byte, int64) {
-	// This is a simplified implementation - in practice, you'd need to:
-	// 1. Parse the protobuf structure
-	// 2. Identify series with too many labels
-	// 3. Drop those series
-	// 4. Reconstruct the protobuf
-	// 5. Re-compress if needed
+	// Decompress the body first
+	decompressed, err := decompressBody(body, contentEncoding)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to decompress body for label filtering")
+		return body, 0
+	}
+
+	// Parse the protobuf
+	var writeRequest prompb.WriteRequest
+	if err := proto.Unmarshal(decompressed, &writeRequest); err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to parse protobuf for label filtering")
+		return body, 0
+	}
+
+	// Calculate the label limit (this should come from tenant config)
+	// For now, we'll use a reasonable default
+	labelLimit := int64(20) // Default label limit per series
+
+	// Find series with too many labels
+	var seriesWithExcessLabels []int
+	for i, ts := range writeRequest.Timeseries {
+		labelCount := int64(len(ts.Labels))
+		if labelCount > labelLimit {
+			seriesWithExcessLabels = append(seriesWithExcessLabels, i)
+		}
+	}
+
+	// Calculate how many series to drop
+	excessSeriesCount := int64(len(seriesWithExcessLabels))
+	if excessSeriesCount <= excessLabels {
+		// Drop all series with excess labels
+		excessLabels = excessSeriesCount
+	}
+
+	// Create filtered timeseries (exclude series with too many labels)
+	var filteredTimeseries []*prompb.TimeSeries
+	droppedCount := int64(0)
 	
-	// For now, return the original body and log the intent
+	for i, ts := range writeRequest.Timeseries {
+		shouldDrop := false
+		
+		// Check if this series has too many labels and should be dropped
+		for j, excessIndex := range seriesWithExcessLabels {
+			if excessIndex == i && j < int(excessLabels) {
+				shouldDrop = true
+				droppedCount++
+				break
+			}
+		}
+		
+		if !shouldDrop {
+			filteredTimeseries = append(filteredTimeseries, ts)
+		}
+	}
+
+	// Reconstruct the WriteRequest
+	filteredRequest := &prompb.WriteRequest{
+		Timeseries: filteredTimeseries,
+		Source:     writeRequest.Source,
+		TimestampMs: writeRequest.TimestampMs,
+	}
+
+	// Serialize the filtered request
+	filteredBytes, err := proto.Marshal(filteredRequest)
+	if err != nil {
+		rls.logger.Error().Err(err).Msg("RLS: Failed to serialize filtered protobuf for labels")
+		return body, 0
+	}
+
+	// Re-compress if original was compressed
+	finalBody := filteredBytes
+	if contentEncoding != "" {
+		compressed, err := compressBody(filteredBytes, contentEncoding)
+		if err != nil {
+			rls.logger.Error().Err(err).Msg("RLS: Failed to compress filtered body for labels")
+			return body, 0
+		}
+		finalBody = compressed
+	}
+
 	rls.logger.Info().
 		Int64("excess_labels", excessLabels).
-		Msg("RLS: Would filter series with excess labels (implementation needed)")
-	
-	return body, 0 // Placeholder - actual implementation needed
+		Int64("dropped_series", droppedCount).
+		Int("original_series", len(writeRequest.Timeseries)).
+		Int("filtered_series", len(filteredTimeseries)).
+		Int64("label_limit", labelLimit).
+		Msg("RLS: Successfully filtered series with excess labels")
+
+	return finalBody, droppedCount
+}
+
+// 🔧 HELPER FUNCTIONS for protobuf manipulation
+
+// decompressBody decompresses the body based on content encoding
+func decompressBody(body []byte, contentEncoding string) ([]byte, error) {
+	switch contentEncoding {
+	case "gzip":
+		reader, err := gzip.NewReader(bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+		return io.ReadAll(reader)
+	case "snappy":
+		return snappy.Decode(nil, body)
+	case "":
+		return body, nil
+	default:
+		return nil, fmt.Errorf("unsupported content encoding: %s", contentEncoding)
+	}
+}
+
+// compressBody compresses the body based on content encoding
+func compressBody(body []byte, contentEncoding string) ([]byte, error) {
+	switch contentEncoding {
+	case "gzip":
+		var buf bytes.Buffer
+		writer := gzip.NewWriter(&buf)
+		if _, err := writer.Write(body); err != nil {
+			return nil, err
+		}
+		if err := writer.Close(); err != nil {
+			return nil, err
+		}
+		return buf.Bytes(), nil
+	case "snappy":
+		return snappy.Encode(nil, body), nil
+	case "":
+		return body, nil
+	default:
+		return nil, fmt.Errorf("unsupported content encoding: %s", contentEncoding)
+	}
+}
+
+// extractMetricNameFromLabels extracts the metric name from labels
+func extractMetricNameFromLabels(labels []*prompb.Label) string {
+	for _, label := range labels {
+		if label.Name == "__name__" {
+			return label.Value
+		}
+	}
+	return "unknown_metric"
 }
