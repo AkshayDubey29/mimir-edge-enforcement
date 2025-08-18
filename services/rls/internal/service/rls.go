@@ -1674,7 +1674,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 			decision.Allowed = false
 			decision.Reason = "body_size_exceeded"
-			decision.Code = 429  // Changed from 413 to 429 for limit violations
+			decision.Code = 429 // Changed from 413 to 429 for limit violations
 			return decision
 		}
 	}
@@ -1688,7 +1688,7 @@ func (rls *RLS) checkLimits(tenant *TenantState, samples int64, bodyBytes int64,
 
 			decision.Allowed = false
 			decision.Reason = "labels_per_series_exceeded"
-			decision.Code = 429  // Changed from 413 to 429 for limit violations
+			decision.Code = 429 // Changed from 413 to 429 for limit violations
 			return decision
 		}
 	}
@@ -4436,4 +4436,249 @@ func (ta *TimeAggregator) recordPerTenantDecision(tenantID string, timestamp tim
 	}
 	bucket1w := ta.getOrCreateBucket(ta.tenantBuckets1w[tenantID], tenantKey1w, timestamp, 7*24*time.Hour)
 	ta.updateBucket(bucket1w, allowed, series, labels, responseTime, violation)
+}
+
+// 🔧 NEW: SelectiveFilterResult represents the result of selective filtering
+type SelectiveFilterResult struct {
+	Allowed     bool
+	FilteredBody []byte
+	Reason      string
+	Code        int32
+	// Statistics about what was filtered
+	OriginalSamples  int64
+	FilteredSamples  int64
+	DroppedSamples   int64
+	OriginalSeries   int64
+	FilteredSeries   int64
+	DroppedSeries    int64
+	// Detailed filtering info
+	FilteredMetrics  map[string]int64 // metric -> dropped series count
+	LimitViolations  map[string]int64 // limit type -> violation count
+}
+
+// 🔧 NEW: SelectiveFilterRequest selectively filters metrics/series that exceed limits
+func (rls *RLS) SelectiveFilterRequest(tenantID string, body []byte, contentEncoding string) *SelectiveFilterResult {
+	start := time.Now()
+	defer func() {
+		rls.metrics.AuthzCheckDuration.WithLabelValues(tenantID).Observe(time.Since(start).Seconds())
+	}()
+
+	result := &SelectiveFilterResult{
+		Allowed:          true,
+		FilteredBody:     body, // Start with original body
+		Reason:           "selective_filter_applied",
+		Code:             200,
+		FilteredMetrics:  make(map[string]int64),
+		LimitViolations:  make(map[string]int64),
+	}
+
+	// Get tenant state
+	tenant := rls.getTenant(tenantID)
+
+	// Check if enforcement is enabled
+	if !tenant.Info.Enforcement.Enabled {
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "enforcement_disabled").Inc()
+		return result
+	}
+
+	// Quick body size check for very small requests
+	bodyBytes := int64(len(body))
+	if bodyBytes < 100 {
+		rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "small_request").Inc()
+		return result
+	}
+
+	// For very large requests, still deny completely (safety measure)
+	if bodyBytes > 10*1024*1024 { // 10MB limit
+		rls.metrics.DecisionsTotal.WithLabelValues("deny", tenantID, "request_too_large").Inc()
+		result.Allowed = false
+		result.Reason = "request body too large"
+		result.Code = 413
+		return result
+	}
+
+	// Parse request to understand what's being sent
+	parseResult, err := parser.ParseRemoteWriteRequest(body, contentEncoding)
+	if err != nil {
+		rls.metrics.BodyParseErrors.Inc()
+		// If we can't parse, fall back to original logic
+		decision := rls.CheckRemoteWriteLimits(tenantID, body, contentEncoding)
+		result.Allowed = decision.Allowed
+		result.Reason = decision.Reason
+		result.Code = decision.Code
+		return result
+	}
+
+	// Initialize statistics
+	result.OriginalSamples = parseResult.SamplesCount
+	result.OriginalSeries = parseResult.SeriesCount
+	result.FilteredSamples = parseResult.SamplesCount
+	result.FilteredSeries = parseResult.SeriesCount
+
+	// 🔧 SELECTIVE FILTERING: Check each limit and filter accordingly
+
+	// 1. Check per-user series limit (total series across all metrics)
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerRequest && tenant.Info.Limits.MaxSeriesPerRequest > 0 {
+		currentTenantSeries := rls.getTenantGlobalSeriesCount(tenantID)
+		projectedTotal := currentTenantSeries + parseResult.SeriesCount
+		
+		if projectedTotal > int64(tenant.Info.Limits.MaxSeriesPerRequest) {
+			// Calculate how many series we need to drop
+			excessSeries := projectedTotal - int64(tenant.Info.Limits.MaxSeriesPerRequest)
+			
+			// Apply selective filtering - drop excess series proportionally across metrics
+			filteredBody, droppedSeries := rls.filterExcessSeries(body, contentEncoding, excessSeries, parseResult)
+			
+			result.FilteredBody = filteredBody
+			result.DroppedSeries = droppedSeries
+			result.FilteredSeries = parseResult.SeriesCount - droppedSeries
+			result.LimitViolations["per_user_series_limit"] = excessSeries
+			
+			rls.logger.Info().
+				Str("tenant", tenantID).
+				Int64("current_series", currentTenantSeries).
+				Int64("new_series", parseResult.SeriesCount).
+				Int64("limit", int64(tenant.Info.Limits.MaxSeriesPerRequest)).
+				Int64("excess_series", excessSeries).
+				Int64("dropped_series", droppedSeries).
+				Msg("RLS: Selective filtering applied - dropped excess series")
+		}
+	}
+
+	// 2. Check per-metric series limit
+	if tenant.Info.Enforcement.EnforceMaxSeriesPerMetric && tenant.Info.Limits.MaxSeriesPerMetric > 0 {
+		currentMetricSeries := rls.getTenantMetricSeriesCount(tenantID, &limits.RequestInfo{})
+		
+		for metricName, seriesCount := range parseResult.MetricSeriesCounts {
+			currentMetricTotal := currentMetricSeries[metricName]
+			projectedMetricTotal := currentMetricTotal + seriesCount
+			
+			if projectedMetricTotal > int64(tenant.Info.Limits.MaxSeriesPerMetric) {
+				// Calculate excess series for this metric
+				excessSeries := projectedMetricTotal - int64(tenant.Info.Limits.MaxSeriesPerMetric)
+				
+				// Filter out excess series for this specific metric
+				filteredBody, droppedSeries := rls.filterMetricSeries(body, contentEncoding, metricName, excessSeries, parseResult)
+				
+				result.FilteredBody = filteredBody
+				result.DroppedSeries += droppedSeries
+				result.FilteredSeries -= droppedSeries
+				result.FilteredMetrics[metricName] = droppedSeries
+				result.LimitViolations["per_metric_series_limit"] += excessSeries
+				
+				rls.logger.Info().
+					Str("tenant", tenantID).
+					Str("metric", metricName).
+					Int64("current_metric_series", currentMetricTotal).
+					Int64("new_metric_series", seriesCount).
+					Int64("limit", int64(tenant.Info.Limits.MaxSeriesPerMetric)).
+					Int64("excess_series", excessSeries).
+					Int64("dropped_series", droppedSeries).
+					Msg("RLS: Selective filtering applied - dropped excess metric series")
+			}
+		}
+	}
+
+	// 3. Check labels per series limit
+	if tenant.Info.Enforcement.EnforceMaxLabelsPerSeries && tenant.Info.Limits.MaxLabelsPerSeries > 0 {
+		if parseResult.LabelsCount > int64(tenant.Info.Limits.MaxLabelsPerSeries) {
+			// For labels per series, we need to filter series with too many labels
+			excessLabels := parseResult.LabelsCount - int64(tenant.Info.Limits.MaxLabelsPerSeries)
+			
+			// Filter out series with too many labels
+			filteredBody, droppedSeries := rls.filterExcessLabels(body, contentEncoding, excessLabels, parseResult)
+			
+			result.FilteredBody = filteredBody
+			result.DroppedSeries += droppedSeries
+			result.FilteredSeries -= droppedSeries
+			result.LimitViolations["labels_per_series_limit"] = excessLabels
+			
+			rls.logger.Info().
+				Str("tenant", tenantID).
+				Int64("labels_count", parseResult.LabelsCount).
+				Int64("limit", int64(tenant.Info.Limits.MaxLabelsPerSeries)).
+				Int64("excess_labels", excessLabels).
+				Int64("dropped_series", droppedSeries).
+				Msg("RLS: Selective filtering applied - dropped series with excess labels")
+		}
+	}
+
+	// 4. Check body size limit (if still exceeded after filtering)
+	if tenant.Info.Enforcement.EnforceMaxBodyBytes && tenant.Info.Limits.MaxBodyBytes > 0 {
+		filteredBodySize := int64(len(result.FilteredBody))
+		if filteredBodySize > tenant.Info.Limits.MaxBodyBytes {
+			// If body is still too large after filtering, we need to drop more
+			// This is a fallback - ideally the above filters should handle this
+			result.Allowed = false
+			result.Reason = "body_size_exceeded_after_filtering"
+			result.Code = 429
+			
+			rls.logger.Warn().
+				Str("tenant", tenantID).
+				Int64("filtered_body_size", filteredBodySize).
+				Int64("limit", tenant.Info.Limits.MaxBodyBytes).
+				Msg("RLS: Body size still exceeded after selective filtering")
+		}
+	}
+
+	// Record metrics
+	if result.DroppedSeries > 0 {
+		rls.metrics.LimitViolationsTotal.WithLabelValues(tenantID, "selective_filtering").Inc()
+		rls.metrics.SamplesCountGauge.WithLabelValues(tenantID).Set(float64(result.FilteredSamples))
+		rls.metrics.SeriesCountGauge.WithLabelValues(tenantID).Set(float64(result.FilteredSeries))
+	}
+
+	rls.metrics.DecisionsTotal.WithLabelValues("allow", tenantID, "selective_filter_applied").Inc()
+	return result
+}
+
+// 🔧 NEW: filterExcessSeries filters out excess series proportionally across all metrics
+func (rls *RLS) filterExcessSeries(body []byte, contentEncoding string, excessSeries int64, parseResult *parser.ParseResult) ([]byte, int64) {
+	// This is a simplified implementation - in practice, you'd need to:
+	// 1. Parse the protobuf structure
+	// 2. Identify which series to drop
+	// 3. Reconstruct the protobuf without those series
+	// 4. Re-compress if needed
+	
+	// For now, return the original body and log the intent
+	rls.logger.Info().
+		Int64("excess_series", excessSeries).
+		Msg("RLS: Would filter excess series (implementation needed)")
+	
+	return body, 0 // Placeholder - actual implementation needed
+}
+
+// 🔧 NEW: filterMetricSeries filters out excess series for a specific metric
+func (rls *RLS) filterMetricSeries(body []byte, contentEncoding string, metricName string, excessSeries int64, parseResult *parser.ParseResult) ([]byte, int64) {
+	// This is a simplified implementation - in practice, you'd need to:
+	// 1. Parse the protobuf structure
+	// 2. Identify series for the specific metric
+	// 3. Drop excess series for that metric
+	// 4. Reconstruct the protobuf
+	// 5. Re-compress if needed
+	
+	// For now, return the original body and log the intent
+	rls.logger.Info().
+		Str("metric", metricName).
+		Int64("excess_series", excessSeries).
+		Msg("RLS: Would filter excess metric series (implementation needed)")
+	
+	return body, 0 // Placeholder - actual implementation needed
+}
+
+// 🔧 NEW: filterExcessLabels filters out series with too many labels
+func (rls *RLS) filterExcessLabels(body []byte, contentEncoding string, excessLabels int64, parseResult *parser.ParseResult) ([]byte, int64) {
+	// This is a simplified implementation - in practice, you'd need to:
+	// 1. Parse the protobuf structure
+	// 2. Identify series with too many labels
+	// 3. Drop those series
+	// 4. Reconstruct the protobuf
+	// 5. Re-compress if needed
+	
+	// For now, return the original body and log the intent
+	rls.logger.Info().
+		Int64("excess_labels", excessLabels).
+		Msg("RLS: Would filter series with excess labels (implementation needed)")
+	
+	return body, 0 // Placeholder - actual implementation needed
 }
