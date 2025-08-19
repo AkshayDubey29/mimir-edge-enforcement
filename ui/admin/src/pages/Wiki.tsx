@@ -691,6 +691,177 @@ export function Wiki() {
             </div>
           </div>
 
+          {/* Ext Authz Flow Details */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🔄 Ext Authz Flow Details</h3>
+            <p className="text-gray-700 mb-4">
+              The ext_authz flow is the core mechanism that enables edge enforcement. It intercepts all incoming 
+              requests to Mimir and makes real-time authorization decisions based on tenant limits.
+            </p>
+            
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">🔄 Request Flow</h4>
+                <ol className="text-sm text-blue-800 space-y-2">
+                  <li>1. Client sends metrics to NGINX</li>
+                  <li>2. NGINX routes to Envoy Proxy</li>
+                  <li>3. Envoy calls ext_authz filter</li>
+                  <li>4. RLS service makes decision</li>
+                  <li>5. Envoy forwards to Mimir or blocks</li>
+                </ol>
+              </div>
+              <div className="p-4 bg-green-50 rounded-lg">
+                <h4 className="font-medium text-green-900 mb-2">⚡ Performance</h4>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• Response time: 0.28-0.54ms</li>
+                  <li>• Throughput: 10K+ requests/sec</li>
+                  <li>• Memory usage: &lt; 100MB</li>
+                  <li>• CPU usage: &lt; 5%</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Enable/Disable Scenarios */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🎛️ Enable/Disable Scenarios</h3>
+            
+            <div className="space-y-4">
+              <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                <h4 className="font-medium text-green-900 mb-2">✅ Enabling Ext Authz</h4>
+                <p className="text-sm text-green-800 mb-3">
+                  When ext_authz is enabled, all requests go through the authorization flow.
+                </p>
+                <div className="text-sm text-green-800 space-y-2">
+                  <div><strong>What happens:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>All requests are intercepted by Envoy ext_authz filter</li>
+                    <li>RLS service evaluates tenant limits in real-time</li>
+                    <li>Requests exceeding limits are blocked with 429 status</li>
+                    <li>Detailed blocking reasons are provided</li>
+                    <li>Metrics and monitoring become active</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Configuration:</div>
+                    <code className="text-xs">envoy.filters.http.ext_authz: enabled</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <h4 className="font-medium text-red-900 mb-2">❌ Disabling Ext Authz</h4>
+                <p className="text-sm text-red-800 mb-3">
+                  When ext_authz is disabled, requests bypass the authorization flow entirely.
+                </p>
+                <div className="text-sm text-red-800 space-y-2">
+                  <div><strong>What happens:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>All requests bypass Envoy ext_authz filter</li>
+                    <li>No tenant limit enforcement occurs</li>
+                    <li>All requests proceed directly to Mimir</li>
+                    <li>No blocking or rate limiting</li>
+                    <li>Monitoring data becomes unavailable</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Configuration:</div>
+                    <code className="text-xs">envoy.filters.http.ext_authz: disabled</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                <h4 className="font-medium text-yellow-900 mb-2">⚠️ Partial Disable (Monitoring Only)</h4>
+                <p className="text-sm text-yellow-800 mb-3">
+                  Ext authz is enabled but enforcement is disabled - only monitoring occurs.
+                </p>
+                <div className="text-sm text-yellow-800 space-y-2">
+                  <div><strong>What happens:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Requests go through ext_authz filter</li>
+                    <li>RLS service evaluates limits but doesn't block</li>
+                    <li>All requests proceed to Mimir regardless of limits</li>
+                    <li>Monitoring and metrics are still collected</li>
+                    <li>Blocking reasons are logged but not enforced</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Configuration:</div>
+                    <code className="text-xs">enforcement.enabled: false</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Failure Modes */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🚨 Failure Modes and Recovery</h3>
+            
+            <div className="space-y-4">
+              <div className="p-4 border border-red-200 rounded-lg bg-red-50">
+                <h4 className="font-medium text-red-900 mb-2">🚨 RLS Service Down</h4>
+                <p className="text-sm text-red-800 mb-3">
+                  When the RLS service is completely unavailable.
+                </p>
+                <div className="text-sm text-red-800 space-y-2">
+                  <div><strong>Behavior:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Envoy ext_authz calls fail with timeout/connection errors</li>
+                    <li>Default behavior: ALLOW (fail-open)</li>
+                    <li>All requests proceed to Mimir without enforcement</li>
+                    <li>Monitoring and metrics are lost</li>
+                    <li>Alerts should be triggered</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Recovery:</div>
+                    <code className="text-xs">Restart RLS service or check network connectivity</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                <h4 className="font-medium text-orange-900 mb-2">⚠️ RLS Service Slow</h4>
+                <p className="text-sm text-orange-800 mb-3">
+                  When the RLS service is responding but with high latency.
+                </p>
+                <div className="text-sm text-orange-800 space-y-2">
+                  <div><strong>Behavior:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>Ext authz calls timeout (default: 200ms)</li>
+                    <li>Default behavior: ALLOW (fail-open)</li>
+                    <li>Some requests may be delayed</li>
+                    <li>Performance degradation for clients</li>
+                    <li>Partial monitoring data available</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Recovery:</div>
+                    <code className="text-xs">Scale RLS service or optimize performance</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h4 className="font-medium text-blue-900 mb-2">ℹ️ Configuration Errors</h4>
+                <p className="text-sm text-blue-800 mb-3">
+                  When there are issues with tenant limits or configuration.
+                </p>
+                <div className="text-sm text-blue-800 space-y-2">
+                  <div><strong>Behavior:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>RLS service uses default limits</li>
+                    <li>Requests are processed with fallback configuration</li>
+                    <li>Errors are logged for debugging</li>
+                    <li>Monitoring continues with default values</li>
+                    <li>No service interruption</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Recovery:</div>
+                    <code className="text-xs">Fix configuration and restart overrides-sync</code>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div>
             <h3 className="text-lg font-semibold mb-4">🛡️ Enhanced Protection Mechanisms</h3>
             <div className="grid gap-4 md:grid-cols-2">
@@ -1983,6 +2154,166 @@ export function Wiki() {
               <div>    &quot;max_label_value_length&quot;: 2048,</div>
               <div>    &quot;max_series_per_request&quot;: 100000</div>
               <div>  {`}`}&apos;</div>
+            </div>
+          </div>
+
+          {/* Comprehensive Configuration Guide */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🔧 Comprehensive Configuration Guide</h3>
+            
+            <div className="space-y-6">
+              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h4 className="font-medium text-blue-900 mb-2">📋 NGINX Configuration</h4>
+                <p className="text-sm text-blue-800 mb-3">
+                  NGINX configuration for selective traffic routing and edge enforcement.
+                </p>
+                <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
+                  <div># Selective routing based on tenant</div>
+                  <div>map $remote_user $route_decision {`{`}</div>
+                  <div>  default &quot;direct&quot;;</div>
+                  <div>  &quot;boltx&quot; &quot;edge&quot;;</div>
+                  <div>  &quot;cloudwatch&quot; &quot;edge&quot;;</div>
+                  <div>{`}`}</div>
+                  <div></div>
+                  <div># Route to edge enforcement for specific tenants</div>
+                  <div>location /api/v1/push {`{`}</div>
+                  <div>  if ($route_decision = &quot;edge&quot;) {`{`}</div>
+                  <div>    proxy_pass http://mimir-envoy;</div>
+                  <div>  {`}`}</div>
+                  <div>  proxy_pass http://mimir-distributor;</div>
+                  <div>{`}`}</div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                <h4 className="font-medium text-green-900 mb-2">⚙️ Envoy Configuration</h4>
+                <p className="text-sm text-green-800 mb-3">
+                  Envoy proxy configuration with ext_authz and ratelimit filters.
+                </p>
+                <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
+                  <div># Ext authz filter configuration</div>
+                  <div>filters:</div>
+                  <div>- name: envoy.filters.http.ext_authz</div>
+                  <div>  typed_config:</div>
+                  <div>    &quot;@type&quot;: type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz</div>
+                  <div>    grpc_service:</div>
+                  <div>      envoy_grpc:</div>
+                  <div>        cluster_name: rls-service</div>
+                  <div>    failure_mode_allow: true</div>
+                  <div>    timeout: 0.2s</div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-purple-200 rounded-lg bg-purple-50">
+                <h4 className="font-medium text-purple-900 mb-2">🔐 RLS Service Configuration</h4>
+                <p className="text-sm text-purple-800 mb-3">
+                  RLS service configuration for tenant limits and enforcement.
+                </p>
+                <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
+                  <div># RLS service configuration</div>
+                  <div>tenant_header: &quot;X-Scope-OrgID&quot;</div>
+                  <div>enforce_body_parsing: true</div>
+                  <div>failure_mode_allow: true</div>
+                  <div>max_request_bytes: 10485760</div>
+                  <div></div>
+                  <div># Default limits</div>
+                  <div>default_limits:</div>
+                  <div>  samples_per_second: 1000</div>
+                  <div>  burst_pct: 0.1</div>
+                  <div>  max_body_bytes: 1048576</div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-orange-200 rounded-lg bg-orange-50">
+                <h4 className="font-medium text-orange-900 mb-2">🔄 Overrides Sync Configuration</h4>
+                <p className="text-sm text-orange-800 mb-3">
+                  Kubernetes controller for syncing tenant limits from ConfigMaps.
+                </p>
+                <div className="bg-gray-900 text-green-400 p-3 rounded font-mono text-xs">
+                  <div># Overrides sync configuration</div>
+                  <div>apiVersion: v1</div>
+                  <div>kind: ConfigMap</div>
+                  <div>metadata:</div>
+                  <div>  name: mimir-overrides</div>
+                  <div>data:</div>
+                  <div>  overrides.yaml: |</div>
+                  <div>    tenant_limits:</div>
+                  <div>      my-tenant:</div>
+                  <div>        samples_per_second: 10000</div>
+                  <div>        burst_pct: 0.2</div>
+                  <div>        max_body_bytes: 10485760</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Deployment Scenarios */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🚀 Deployment Scenarios</h3>
+            
+            <div className="space-y-4">
+              <div className="p-4 border border-green-200 rounded-lg bg-green-50">
+                <h4 className="font-medium text-green-900 mb-2">✅ Production Deployment</h4>
+                <p className="text-sm text-green-800 mb-3">
+                  Full production deployment with all features enabled.
+                </p>
+                <div className="text-sm text-green-800 space-y-2">
+                  <div><strong>Components:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>NGINX with selective routing</li>
+                    <li>Envoy proxy with ext_authz</li>
+                    <li>RLS service with full enforcement</li>
+                    <li>Overrides sync for limit management</li>
+                    <li>Monitoring and alerting</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Command:</div>
+                    <code className="text-xs">./scripts/deploy-production.sh</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-blue-200 rounded-lg bg-blue-50">
+                <h4 className="font-medium text-blue-900 mb-2">🔍 Monitoring Only Deployment</h4>
+                <p className="text-sm text-blue-800 mb-3">
+                  Deployment with enforcement disabled for monitoring and analysis.
+                </p>
+                <div className="text-sm text-blue-800 space-y-2">
+                  <div><strong>Components:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>All components deployed</li>
+                    <li>Enforcement disabled</li>
+                    <li>Full monitoring active</li>
+                    <li>No request blocking</li>
+                    <li>Data collection only</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Configuration:</div>
+                    <code className="text-xs">enforcement.enabled: false</code>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 border border-yellow-200 rounded-lg bg-yellow-50">
+                <h4 className="font-medium text-yellow-900 mb-2">🧪 Canary Deployment</h4>
+                <p className="text-sm text-yellow-800 mb-3">
+                  Gradual rollout with percentage-based traffic routing.
+                </p>
+                <div className="text-sm text-yellow-800 space-y-2">
+                  <div><strong>Components:</strong></div>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>NGINX with canary routing</li>
+                    <li>Percentage-based traffic split</li>
+                    <li>Rollback capability</li>
+                    <li>Monitoring and comparison</li>
+                    <li>Gradual scale-up</li>
+                  </ul>
+                  <div className="mt-3 p-2 bg-white rounded border">
+                    <div className="font-medium">Command:</div>
+                    <code className="text-xs">./scripts/deploy-nginx-canary.sh 10</code>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
