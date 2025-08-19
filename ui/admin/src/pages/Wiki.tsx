@@ -49,34 +49,34 @@ function ArchitectureFlow() {
     {
       id: 2,
       title: "NGINX Router",
-      description: "Canary routing: 90% direct, 10% edge enforcement",
+      description: "Selective routing: boltx/cloudwatch → edge, others → direct",
       icon: Network,
       color: "bg-green-500",
-      details: "Traffic distribution based on canary configuration"
+      details: "Smart traffic distribution based on tenant identity"
     },
     {
       id: 3,
       title: "Envoy Proxy",
-      description: "Ext_authz + ratelimit filters for edge enforcement",
+      description: "Ext_authz + ratelimit + selective filtering",
       icon: Zap,
       color: "bg-purple-500",
-      details: "Authorization and rate limiting decisions"
+      details: "Authorization, rate limiting, and intelligent filtering"
     },
     {
       id: 4,
       title: "RLS Service",
-      description: "Lightning-fast decision engine (0.28ms)",
+      description: "Lightning-fast decision engine with cardinality monitoring",
       icon: Shield,
       color: "bg-orange-500",
-      details: "Token bucket algorithm with tenant limits"
+      details: "Token bucket algorithm with comprehensive limit enforcement"
     },
     {
       id: 5,
       title: "Mimir Distributor",
-      description: "Protected metrics ingestion",
+      description: "Protected metrics ingestion with cardinality control",
       icon: Database,
       color: "bg-red-500",
-      details: "Validated requests within enforced limits"
+      details: "Validated requests within enforced limits and cardinality bounds"
     }
   ];
 
@@ -220,20 +220,28 @@ function ArchitectureFlow() {
 
       {/* Traffic Flow Visualization */}
       <div className="mt-8">
-        <h4 className="font-medium mb-4">Traffic Flow Distribution</h4>
-        <div className="flex items-center justify-center gap-8">
+        <h4 className="font-medium mb-4">Selective Traffic Flow Distribution</h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-2">
-              <div className="text-2xl font-bold text-green-600">90%</div>
+              <div className="text-2xl font-bold text-green-600">Direct</div>
             </div>
-            <div className="text-sm text-gray-600">Direct to Mimir</div>
+            <div className="text-sm text-gray-600">Most Tenants</div>
+            <div className="text-xs text-gray-500 mt-1">Bypass edge enforcement</div>
           </div>
-          <ArrowRight className="h-6 w-6 text-gray-400" />
           <div className="text-center">
             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-2">
-              <div className="text-2xl font-bold text-blue-600">10%</div>
+              <div className="text-2xl font-bold text-blue-600">Edge</div>
             </div>
-            <div className="text-sm text-gray-600">Edge Enforcement</div>
+            <div className="text-sm text-gray-600">boltx & cloudwatch</div>
+            <div className="text-xs text-gray-500 mt-1">Full enforcement</div>
+          </div>
+          <div className="text-center">
+            <div className="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mb-2">
+              <div className="text-2xl font-bold text-purple-600">Filter</div>
+            </div>
+            <div className="text-sm text-gray-600">Selective Filtering</div>
+            <div className="text-xs text-gray-500 mt-1">Intelligent filtering</div>
           </div>
         </div>
       </div>
@@ -704,6 +712,49 @@ export function Wiki() {
                   <li>• <strong>Health Checks</strong> - Comprehensive system monitoring</li>
                   <li>• <strong>Graceful Shutdown</strong> - Zero-downtime deployments</li>
                   <li>• <strong>Config Hot-reload</strong> - Dynamic limit updates</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Latest Features */}
+          <div>
+            <h3 className="text-lg font-semibold mb-4">🚀 Latest Features (v2.0+)</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">🎯 Selective Traffic Routing</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• <strong>Smart tenant-based routing</strong> - boltx/cloudwatch → edge, others → direct</li>
+                  <li>• <strong>Configurable routing rules</strong> based on tenant identity</li>
+                  <li>• <strong>Zero-downtime traffic migration</strong> with instant rollback</li>
+                  <li>• <strong>Real-time routing metrics</strong> and monitoring</li>
+                </ul>
+              </div>
+              <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <h4 className="font-medium text-orange-900 mb-2">🔍 Selective Filtering</h4>
+                <ul className="text-sm text-orange-800 space-y-1">
+                  <li>• <strong>Intelligent request filtering</strong> instead of binary allow/deny</li>
+                  <li>• <strong>Configurable strategies</strong>: random, oldest, newest, priority-based</li>
+                  <li>• <strong>Metric priority ordering</strong> to preserve important metrics</li>
+                  <li>• <strong>Fallback to deny</strong> when filtering fails</li>
+                </ul>
+              </div>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <h4 className="font-medium text-green-900 mb-2">📊 Cardinality Monitoring</h4>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• <strong>Per-metric series tracking</strong> and limits</li>
+                  <li>• <strong>Global series count monitoring</strong> across all metrics</li>
+                  <li>• <strong>Cardinality violation detection</strong> and alerting</li>
+                  <li>• <strong>Real-time cardinality metrics</strong> and trends</li>
+                </ul>
+              </div>
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <h4 className="font-medium text-red-900 mb-2">🛡️ Enhanced Security</h4>
+                <ul className="text-sm text-red-800 space-y-1">
+                  <li>• <strong>Granular enforcement controls</strong> per limit type</li>
+                  <li>• <strong>New tenant leniency</strong> for gradual limit application</li>
+                  <li>• <strong>Buffer overflow protection</strong> with configurable limits</li>
+                  <li>• <strong>Timeout management</strong> to prevent hanging requests</li>
                 </ul>
               </div>
             </div>
