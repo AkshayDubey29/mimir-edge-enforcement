@@ -35,7 +35,9 @@ import {
   EyeOff,
   Play,
   Pause,
-  RotateCcw
+  RotateCcw,
+  Search,
+  X
 } from 'lucide-react';
 
 // Utility function to format bytes in human-readable format
@@ -165,6 +167,9 @@ export function Tenants() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [sortBy, setSortBy] = useState<'name' | 'rps' | 'samples' | 'deny_rate' | 'utilization'>('rps');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [enforcementFilter, setEnforcementFilter] = useState<string>('all');
 
   const { data, isLoading, error, refetch } = useQuery<TenantsResponse>({ 
     queryKey: ['tenants', timeRange], 
@@ -175,11 +180,39 @@ export function Tenants() {
     cacheTime: 60000 // Keep in cache for 1 minute
   });
 
-  // Sort tenants based on current sort criteria
-  const sortedTenants = React.useMemo(() => {
+  // Filter and sort tenants based on current criteria
+  const filteredAndSortedTenants = React.useMemo(() => {
     if (!data?.tenants) return [];
     
-    return [...data.tenants].sort((a, b) => {
+    let filtered = [...data.tenants];
+    
+    // Apply search filter
+    if (searchTerm) {
+      filtered = filtered.filter(tenant => 
+        tenant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tenant.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    }
+    
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(tenant => {
+        const status = getStatusInfo(tenant.enforcement.enabled, tenant.metrics.deny_rate, tenant.metrics.utilization_pct, tenant.enforcement);
+        return status.text.toLowerCase() === statusFilter.toLowerCase();
+      });
+    }
+    
+    // Apply enforcement filter
+    if (enforcementFilter !== 'all') {
+      filtered = filtered.filter(tenant => {
+        if (enforcementFilter === 'enabled') return tenant.enforcement.enabled;
+        if (enforcementFilter === 'disabled') return !tenant.enforcement.enabled;
+        return true;
+      });
+    }
+    
+    // Sort filtered results
+    return filtered.sort((a, b) => {
       let aValue: number, bValue: number;
       
       switch (sortBy) {
@@ -209,7 +242,7 @@ export function Tenants() {
       
       return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
     });
-  }, [data?.tenants, sortBy, sortOrder]);
+  }, [data?.tenants, sortBy, sortOrder, searchTerm, statusFilter, enforcementFilter]);
 
   if (isLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -299,6 +332,66 @@ export function Tenants() {
         )}
       </div>
 
+      {/* Search and Filters */}
+      <div className="flex flex-wrap items-center gap-4">
+        {/* Search */}
+        <div className="flex items-center gap-2">
+          <Search className="h-4 w-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search tenants..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+          />
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">Status:</span>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Status</option>
+            <option value="healthy">Healthy</option>
+            <option value="warning">Warning</option>
+            <option value="critical">Critical</option>
+            <option value="monitoring only">Monitoring Only</option>
+          </select>
+        </div>
+
+        {/* Enforcement Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">Enforcement:</span>
+          <select
+            value={enforcementFilter}
+            onChange={(e) => setEnforcementFilter(e.target.value)}
+            className="px-3 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            <option value="enabled">Enabled</option>
+            <option value="disabled">Disabled</option>
+          </select>
+        </div>
+
+        {/* Clear Filters */}
+        {(searchTerm || statusFilter !== 'all' || enforcementFilter !== 'all') && (
+          <button
+            onClick={() => {
+              setSearchTerm('');
+              setStatusFilter('all');
+              setEnforcementFilter('all');
+            }}
+            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 hover:text-gray-800 transition-colors"
+          >
+            <X className="h-3 w-3" />
+            Clear Filters
+          </button>
+        )}
+      </div>
+
       {/* Summary Stats */}
       {data?.tenants && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -370,7 +463,7 @@ export function Tenants() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {sortedTenants.length === 0 ? (
+          {filteredAndSortedTenants.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Users className="h-12 w-12 mx-auto mb-4 text-gray-300" />
               <p>No tenants found</p>
@@ -426,7 +519,7 @@ export function Tenants() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedTenants.map((tenant) => {
+                  {filteredAndSortedTenants.map((tenant) => {
                     const statusInfo = getStatusInfo(
                       tenant.enforcement.enabled,
                       tenant.metrics.deny_rate,
@@ -538,7 +631,7 @@ export function Tenants() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {sortedTenants.map((tenant) => (
+              {filteredAndSortedTenants.map((tenant) => (
                 <Card key={tenant.id} className="border border-gray-200">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg">{tenant.name}</CardTitle>

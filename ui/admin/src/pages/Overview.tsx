@@ -200,7 +200,7 @@ function getStatusColor(status: string): string {
 }
 
 function getStatusIcon(status: string) {
-  switch (status) {
+    switch (status) {
     case 'healthy': return <CheckCircle className="h-4 w-4" />;
     case 'warning': return <AlertTriangle className="h-4 w-4" />;
     case 'error': return <XCircle className="h-4 w-4" />;
@@ -217,28 +217,28 @@ export function Overview() {
     queryKey: ['overview', timeRange], 
     queryFn: () => fetchOverviewData(timeRange),
     refetchInterval: autoRefresh ? 30000 : false,
-    refetchIntervalInBackground: true,
+      refetchIntervalInBackground: true,
     staleTime: 15000,
     cacheTime: 60000
   });
 
   if (isLoading) return (
-    <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64">
       <div className="text-lg text-gray-600 flex items-center gap-2">
         <RefreshCw className="h-5 w-5 animate-spin" />
         Loading system overview...
       </div>
-    </div>
-  );
+      </div>
+    );
 
   if (error) return (
-    <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64">
       <div className="text-lg text-red-600 flex items-center gap-2">
         <AlertCircle className="h-5 w-5" />
         Error loading overview: {error instanceof Error ? error.message : 'Unknown error'}
+        </div>
       </div>
-    </div>
-  );
+    );
 
   const stats = data?.stats;
   const flowMetrics = data?.flow_metrics;
@@ -284,8 +284,8 @@ export function Overview() {
           </button>
         </div>
       </div>
-
-      {/* Time Range Selector */}
+          
+          {/* Time Range Selector */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-gray-500" />
@@ -311,33 +311,33 @@ export function Overview() {
       {/* Key Metrics Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+        <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Requests</p>
                   <p className="text-2xl font-bold text-gray-900">{stats?.total_requests?.toLocaleString() || '0'}</p>
                   <p className="text-xs text-gray-500">Last {timeRange}</p>
-                </div>
+            </div>
                 <Activity className="h-8 w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Success Rate</p>
                   <p className="text-2xl font-bold text-green-600">{stats?.allow_percentage?.toFixed(1) || '0.0'}%</p>
                   <p className="text-xs text-gray-500">{stats?.allowed_requests?.toLocaleString() || '0'} allowed</p>
-                </div>
+            </div>
                 <CheckCircle className="h-8 w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -346,11 +346,11 @@ export function Overview() {
                   <p className="text-xs text-gray-500">{stats?.allow_percentage ? (100 - stats.allow_percentage).toFixed(1) : '0.0'}% denied</p>
                 </div>
                 <XCircle className="h-8 w-8 text-red-500" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -359,25 +359,25 @@ export function Overview() {
                   <p className="text-xs text-gray-500">Currently monitored</p>
                 </div>
                 <Users className="h-8 w-8 text-purple-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
       )}
 
       {/* Traffic Flow Overview */}
       {flowMetrics && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
               <Network className="h-5 w-5" />
               Traffic Flow Overview
-            </CardTitle>
-            <CardDescription>
+          </CardTitle>
+          <CardDescription>
               Real-time monitoring of request flow through the system
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* NGINX Layer */}
               <div className="space-y-4">
@@ -388,21 +388,21 @@ export function Overview() {
                     {getStatusIcon(flowStatus?.nginx || 'unknown')}
                     {flowStatus?.nginx || 'unknown'}
                   </Badge>
-                </div>
+            </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
                     <span className="font-medium">{flowMetrics?.nginx_requests?.toLocaleString() || '0'}</span>
-                  </div>
+            </div>
                   <div className="flex justify-between">
                     <span>Direct Route:</span>
                     <span className="font-medium text-green-600">{flowMetrics?.nginx_route_direct?.toLocaleString() || '0'}</span>
-                  </div>
+            </div>
                   <div className="flex justify-between">
                     <span>Edge Route:</span>
                     <span className="font-medium text-blue-600">{flowMetrics?.nginx_route_edge?.toLocaleString() || '0'}</span>
-                  </div>
-                </div>
+          </div>
+              </div>
               </div>
 
               {/* Envoy Layer */}
@@ -414,28 +414,28 @@ export function Overview() {
                     {getStatusIcon(flowStatus?.envoy || 'unknown')}
                     {flowStatus?.envoy || 'unknown'}
                   </Badge>
-                </div>
+              </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
                     <span className="font-medium">{flowMetrics?.envoy_requests?.toLocaleString() || '0'}</span>
-                  </div>
+              </div>
                   <div className="flex justify-between">
                     <span>Authorized:</span>
                     <span className="font-medium text-green-600">{flowMetrics?.envoy_authorized?.toLocaleString() || '0'}</span>
-                  </div>
+              </div>
                   <div className="flex justify-between">
                     <span>Denied:</span>
                     <span className="font-medium text-red-600">{flowMetrics?.envoy_denied?.toLocaleString() || '0'}</span>
-                  </div>
+            </div>
                   {flowMetrics?.selective_filtering?.enabled && (
                     <div className="flex justify-between">
                       <span>Filtered:</span>
                       <span className="font-medium text-orange-600">{flowMetrics?.selective_filtering?.filtered_requests?.toLocaleString() || '0'}</span>
-                    </div>
+          </div>
                   )}
-                </div>
               </div>
+            </div>
 
               {/* Mimir Layer */}
               <div className="space-y-4">
@@ -446,28 +446,28 @@ export function Overview() {
                     {getStatusIcon(flowStatus?.mimir || 'unknown')}
                     {flowStatus?.mimir || 'unknown'}
                   </Badge>
-                </div>
+            </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
                     <span className="font-medium">{flowMetrics?.mimir_requests?.toLocaleString() || '0'}</span>
-                  </div>
+              </div>
                   <div className="flex justify-between">
                     <span>Success:</span>
                     <span className="font-medium text-green-600">{flowMetrics?.mimir_success?.toLocaleString() || '0'}</span>
-                  </div>
+            </div>
                   <div className="flex justify-between">
                     <span>Errors:</span>
                     <span className="font-medium text-red-600">{flowMetrics?.mimir_errors?.toLocaleString() || '0'}</span>
-                  </div>
+            </div>
                   {flowMetrics?.cardinality_monitoring?.enabled && (
                     <div className="flex justify-between">
                       <span>Cardinality Violations:</span>
                       <span className="font-medium text-yellow-600">{flowMetrics?.cardinality_monitoring?.violations_detected?.toLocaleString() || '0'}</span>
-                    </div>
-                  )}
-                </div>
               </div>
+                  )}
+            </div>
+            </div>
             </div>
 
             {/* Response Times */}
@@ -477,25 +477,25 @@ export function Overview() {
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-blue-600">
                     {flowMetrics?.response_times?.nginx_to_envoy ? (flowMetrics.response_times.nginx_to_envoy * 1000).toFixed(1) : '0.0'}ms
-                  </div>
+            </div>
                   <div className="text-sm text-gray-600">NGINX → Envoy</div>
-                </div>
+              </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-purple-600">
                     {flowMetrics?.response_times?.envoy_to_mimir ? (flowMetrics.response_times.envoy_to_mimir * 1000).toFixed(1) : '0.0'}ms
-                  </div>
+            </div>
                   <div className="text-sm text-gray-600">Envoy → Mimir</div>
-                </div>
+          </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-green-600">
                     {flowMetrics?.response_times?.total_flow ? (flowMetrics.response_times.total_flow * 1000).toFixed(1) : '0.0'}ms
-                  </div>
+              </div>
                   <div className="text-sm text-gray-600">Total Flow</div>
-                </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
+            </div>
+        </CardContent>
+      </Card>
       )}
 
       {/* System Health Status */}
@@ -522,11 +522,11 @@ export function Overview() {
                     <div className="flex items-center gap-2">
                       {isReady ? <CheckCircle className="h-4 w-4 text-green-500" /> : <Activity className="h-4 w-4 text-blue-500" />}
                       <span className="font-medium text-gray-700">{serviceName}</span>
-                    </div>
+      </div>
                     <Badge className={status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}>
                       {status ? (isReady ? 'Ready' : 'Live') : (isReady ? 'Not Ready' : 'Not Live')}
                     </Badge>
-                  </div>
+            </div>
                 );
               })}
             </div>
@@ -536,17 +536,17 @@ export function Overview() {
 
       {/* Top Tenants */}
       {data?.top_tenants && data.top_tenants.length > 0 && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
               Top Tenants by Activity
             </CardTitle>
-            <CardDescription>
+          <CardDescription>
               Most active tenants in the last {timeRange}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
@@ -565,7 +565,7 @@ export function Overview() {
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-gray-900">{tenant.name}</span>
                           <span className="text-xs text-gray-500">({tenant.id})</span>
-                        </div>
+                  </div>
                       </td>
                       <td className="py-2 px-4">
                         <span className="font-medium">{tenant?.rps?.toFixed(1) || '0.0'}</span>
@@ -590,82 +590,82 @@ export function Overview() {
                               }`}
                               style={{ width: `${Math.min(tenant?.utilization_pct || 0, 100)}%` }}
                             />
-                          </div>
-                        </div>
+                  </div>
+                </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
       )}
 
       {/* Advanced Metrics */}
       {showAdvanced && systemMetrics && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Settings className="h-5 w-5" />
               System Performance Metrics
             </CardTitle>
-            <CardDescription>
+          <CardDescription>
               Detailed system resource utilization and performance indicators
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Cpu className="h-8 w-8 mx-auto mb-2 text-blue-500" />
                 <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.cpu_usage || 0).toFixed(1)}%</div>
                 <div className="text-sm text-gray-600">CPU Usage</div>
-              </div>
+                  </div>
               
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <HardDrive className="h-8 w-8 mx-auto mb-2 text-green-500" />
                 <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.memory_usage || 0).toFixed(1)}%</div>
                 <div className="text-sm text-gray-600">Memory Usage</div>
-              </div>
-              
+            </div>
+
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Network className="h-8 w-8 mx-auto mb-2 text-purple-500" />
                 <div className="text-lg font-semibold text-gray-900">{formatBytes(systemMetrics?.network_throughput || 0)}/s</div>
                 <div className="text-sm text-gray-600">Network Throughput</div>
-              </div>
-              
+            </div>
+
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Timer className="h-8 w-8 mx-auto mb-2 text-orange-500" />
                 <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.response_time_p95 || 0).toFixed(1)}ms</div>
                 <div className="text-sm text-gray-600">P95 Response Time</div>
-              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
       )}
 
       {/* Traffic Flow Timeline Chart */}
       {data?.flow_timeline && data.flow_timeline.length > 0 && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
               Traffic Flow Timeline
             </CardTitle>
-            <CardDescription>
+          <CardDescription>
               Request flow patterns over time
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.flow_timeline}>
-                  <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid strokeDasharray="3 3" />
                   <XAxis 
                     dataKey="timestamp" 
                     tickFormatter={(value) => new Date(value).toLocaleTimeString()}
                   />
-                  <YAxis />
+              <YAxis />
                   <Tooltip 
                     labelFormatter={(value) => new Date(value).toLocaleString()}
                     formatter={(value: any, name: string) => [
@@ -697,20 +697,20 @@ export function Overview() {
                     fill="#EF4444" 
                     fillOpacity={0.6}
                   />
-                </AreaChart>
-              </ResponsiveContainer>
+            </AreaChart>
+          </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+        </CardContent>
+      </Card>
       )}
     </div>
   );
 }
 
 async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
-  const overviewResponse = await fetch(`/api/overview?range=${timeRange}`);
-  const tenantsResponse = await fetch(`/api/tenants?range=${timeRange}`);
-  const trafficFlowResponse = await fetch('/api/traffic/flow');
+    const overviewResponse = await fetch(`/api/overview?range=${timeRange}`);
+    const tenantsResponse = await fetch(`/api/tenants?range=${timeRange}`);
+                  const trafficFlowResponse = await fetch('/api/traffic/flow');
   const systemStatusResponse = await fetch('/api/system/status');
   const systemMetricsResponse = await fetch('/api/metrics/system');
 
@@ -727,7 +727,7 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
     systemMetricsResponse.json()
   ]);
 
-  return {
+    return {
     stats: overview.stats,
     top_tenants: tenants.tenants.slice(0, 10).map((t: any) => ({
       id: t.id,
@@ -749,7 +749,7 @@ async function fetchOverviewData(timeRange: string): Promise<OverviewData> {
 }
 
 async function fetchFlowTimeline(timeRange: string): Promise<FlowDataPoint[]> {
-  const response = await fetch(`/api/timeseries/${timeRange}/flow`);
+    const response = await fetch(`/api/timeseries/${timeRange}/flow`);
   if (!response.ok) {
     return [];
   }
