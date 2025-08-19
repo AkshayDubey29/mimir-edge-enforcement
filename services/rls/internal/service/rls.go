@@ -841,17 +841,27 @@ func (rls *RLS) GetTenantsWithTimeRange(timeRange string) []limits.TenantInfo {
 	for _, t := range tenants {
 		c := rls.counters[t.Info.ID]
 		metrics := limits.TenantMetrics{}
-		if c != nil && c.Total > 0 {
-			// Use time-based aggregation for more stable metrics
-			tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, normalizedRange)
+		
+		// Always get time-based aggregation data, even if counters are zero
+		tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, normalizedRange)
 
-			metrics.AllowRate = tenantAggregatedData["allow_rate"].(float64)
-			metrics.DenyRate = tenantAggregatedData["deny_rate"].(float64)
-			metrics.RPS = tenantAggregatedData["rps"].(float64)
-			metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
-			metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
-			metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
+		// Use time-based aggregation for more stable metrics
+		metrics.AllowRate = tenantAggregatedData["allow_rate"].(float64)
+		metrics.DenyRate = tenantAggregatedData["deny_rate"].(float64)
+		metrics.RPS = tenantAggregatedData["rps"].(float64)
+		metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
+		metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
+		metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
+		
+		// If no time-based data, fall back to counter data
+		if metrics.RPS == 0 && c != nil && c.Total > 0 {
+			// Calculate rates from counters
+			total := float64(c.Total)
+			metrics.AllowRate = float64(c.Allowed) / total * 100.0
+			metrics.DenyRate = float64(c.Denied) / total * 100.0
+			metrics.RPS = total / 60.0 // Assume 1-minute window for RPS calculation
 		}
+		
 		info := t.Info
 		info.Metrics = metrics
 		out = append(out, info)
@@ -888,11 +898,27 @@ func (rls *RLS) ListTenantsWithMetrics() []limits.TenantInfo {
 	for _, t := range tenants {
 		c := rls.counters[t.Info.ID]
 		metrics := limits.TenantMetrics{}
-		if c != nil && c.Total > 0 {
-			metrics.AllowRate = float64(c.Allowed)
-			metrics.DenyRate = float64(c.Denied)
-			metrics.UtilizationPct = 0 // placeholder
+		
+		// Always get time-based aggregation data, even if counters are zero
+		tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, "1h")
+
+		// Use time-based aggregation for more stable metrics
+		metrics.AllowRate = tenantAggregatedData["allow_rate"].(float64)
+		metrics.DenyRate = tenantAggregatedData["deny_rate"].(float64)
+		metrics.RPS = tenantAggregatedData["rps"].(float64)
+		metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
+		metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
+		metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
+		
+		// If no time-based data, fall back to counter data
+		if metrics.RPS == 0 && c != nil && c.Total > 0 {
+			// Calculate rates from counters
+			total := float64(c.Total)
+			metrics.AllowRate = float64(c.Allowed) / total * 100.0
+			metrics.DenyRate = float64(c.Denied) / total * 100.0
+			metrics.RPS = total / 60.0 // Assume 1-minute window for RPS calculation
 		}
+		
 		info := t.Info
 		info.Metrics = metrics
 		out = append(out, info)

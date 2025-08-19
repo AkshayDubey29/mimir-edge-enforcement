@@ -439,6 +439,30 @@ func startAdminServer(ctx context.Context, rls *service.RLS, port string, logger
 		writeJSON(w, http.StatusOK, debugInfo)
 	}).Methods("GET")
 
+	// Debug endpoint to add test data
+	router.HandleFunc("/api/debug/add-test-data", func(w http.ResponseWriter, r *http.Request) {
+		// Add some test tenants and data
+		testTenants := []string{"test-tenant-1", "test-tenant-2", "test-tenant-3", "boltx", "cloudwatch"}
+		
+		// Create some test data by calling the CheckRemoteWriteLimits method
+		// This will create tenants and populate metrics
+		testBody := []byte(`{"metrics": [{"name": "test_metric", "timestamp": 1234567890, "value": 42.0}]}`)
+		
+		for _, tenantID := range testTenants {
+			for i := 0; i < 5; i++ {
+				// Simulate some requests to create tenants and populate metrics
+				rls.CheckRemoteWriteLimits(tenantID, testBody, "gzip")
+			}
+		}
+		
+		response := map[string]any{
+			"message": "Test data added successfully",
+			"tenants_added": testTenants,
+			"timestamp": time.Now().Format(time.RFC3339),
+		}
+		writeJSON(w, http.StatusOK, response)
+	}).Methods("POST")
+
 	// 🔧 DEBUG: Add endpoint to check traffic flow state directly
 	router.HandleFunc("/api/debug/traffic-flow", func(w http.ResponseWriter, r *http.Request) {
 		log.Info().Msg("RLS: INFO - Debug traffic flow endpoint called")
