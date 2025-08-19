@@ -279,20 +279,20 @@ adminUI:
       nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
       
     hosts:
-      - host: mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+      - host: mimir-admin.your-internal-domain.com  # 🔴 CHANGE: Your domain
         paths:
           - path: /
             pathType: Prefix
     tls:
       - secretName: mimir-admin-tls
         hosts:
-          - mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+          - mimir-admin.your-internal-domain.com  # 🔴 CHANGE: Your domain
   
   # Application configuration
   config:
     environment: "production"
     apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"  # 🔧 CUSTOMIZE: Your namespace
-    serverName: "mimir-admin.your-domain.com"  # 🔴 CHANGE: Your domain
+    serverName: "mimir-admin.your-internal-domain.com"  # 🔴 CHANGE: Your domain
     nginxConfig: true
   
   # Security hardening

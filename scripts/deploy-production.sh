@@ -6,8 +6,8 @@ set -euo pipefail
 # Usage: ./scripts/deploy-production.sh [namespace] [domain] [admin-domain] [deployment-mode]
 
 NAMESPACE=${1:-mimir-edge-enforcement}
-DOMAIN=${2:-your-domain.com}
-ADMIN_DOMAIN=${3:-mimir-admin.your-domain.com}
+DOMAIN=${2:-mimir-edge-enforcement.your-internal-domain.com}
+ADMIN_DOMAIN=${3:-mimir-admin.your-internal-domain.com}
 DEPLOYMENT_MODE=${4:-complete}  # Options: complete, core-only, admin-only
 
 # Environment variables
@@ -412,8 +412,8 @@ print_usage() {
     echo ""
     echo "Arguments:"
     echo "  namespace       Kubernetes namespace (default: mimir-edge-enforcement)"
-    echo "  domain          Main domain for your services (default: your-domain.com)"
-    echo "  admin-domain    Domain for Admin UI (default: mimir-admin.your-domain.com)"
+    echo "  domain          Main domain for your services (default: mimir-edge-enforcement.your-internal-domain.com)"
+echo "  admin-domain    Domain for Admin UI (default: mimir-admin.your-internal-domain.com)"
     echo "  deployment-mode Deployment mode (default: complete)"
     echo ""
     echo "Deployment Modes:"

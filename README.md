@@ -35,10 +35,10 @@ export GITHUB_USERNAME=your-username
 export GITHUB_TOKEN=your-personal-access-token
 
 # Deploy everything including Admin UI
-./scripts/deploy-complete.sh production mimir-admin.your-domain.com
+./scripts/deploy-complete.sh production mimir-admin.your-internal-domain.com
 
 # Or use the advanced deployment script
-./scripts/deploy-production.sh production your-domain.com mimir-admin.your-domain.com complete
+./scripts/deploy-production.sh production mimir-edge-enforcement.your-internal-domain.com mimir-admin.your-internal-domain.com complete
 ```
 
 This will deploy:
@@ -47,7 +47,7 @@ This will deploy:
 - ✅ **Envoy Proxy** - ext_authz + ratelimit filters
 - ✅ **Admin UI** - React dashboard with Ingress + SSL + authentication
 
-**Access your Admin UI at:** `https://mimir-admin.your-domain.com`
+**Access your Admin UI at:** `https://mimir-admin.your-internal-domain.com`
 
 ### 🛠️ Manual Setup
 

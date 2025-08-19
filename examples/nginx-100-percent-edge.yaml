@@ -25,7 +25,7 @@ data:
         log_format main '$remote_addr - $remote_user [$time_local]  $status '
                         '"$request" $body_bytes_sent "$http_referer" '
                         '"$http_user_agent" "$http_x_forwarded_for" [$http_x_boltx_cluster] '
-                        'route=edge_enforcement';
+                        'route=$route_decision';
         access_log /dev/stderr main;
 
         sendfile on;
@@ -56,7 +56,7 @@ data:
         # 🎯 DIRECT UPSTREAM: Direct path to Mimir Distributor (for all other users)
         upstream mimir_direct {
             # Direct path to Mimir Distributor (default for most users)
-            server mimir-distributor.mimir.svc.cluster.local:8080;
+            server distributor.mimir.svc.cluster.local:8080;
             keepalive 16;
         }
 
@@ -80,7 +80,7 @@ data:
             }
 
             location /runtime_config {
-                proxy_pass http://mimir-distributor.mimir.svc.cluster.local:8080$request_uri;
+                proxy_pass http://distributor.mimir.svc.cluster.local:8080$request_uri;
             }
 
             location ~ /service/([^/]+)/ {

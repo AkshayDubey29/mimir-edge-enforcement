@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # 🚀 Deploy Mimir Edge Enforcement Admin UI with AWS ALB
-# Domain: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+# Domain: mimir-edge-enforcement.your-internal-domain.com
 
 set -euo pipefail
 
 # Configuration
 NAMESPACE=${NAMESPACE:-mimir-edge-enforcement}
-DOMAIN=${DOMAIN:-mimir-edge-enforcement.vzone1.kr.couwatchdev.net}
-CERT_ARN=${CERT_ARN:-arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043}
+DOMAIN=${DOMAIN:-mimir-edge-enforcement.your-internal-domain.com}
+CERT_ARN=${CERT_ARN:-arn:aws:acm:us-east-1:123456789012:certificate/your-certificate-id}
 VALUES_FILE=${VALUES_FILE:-examples/values/admin-ui-aws-alb.yaml}
 
 # Colors for output
@@ -43,7 +43,7 @@ Usage: $0 [options]
 
 Options:
   --namespace NAMESPACE     Kubernetes namespace (default: mimir-edge-enforcement)
-  --domain DOMAIN          Domain name (default: mimir-edge-enforcement.vzone1.kr.couwatchdev.net)
+  --domain DOMAIN          Domain name (default: mimir-edge-enforcement.your-internal-domain.com)
   --cert-arn ARN           AWS ACM certificate ARN
   --values-file FILE       Helm values file (default: examples/values/admin-ui-aws-alb.yaml)
   --dry-run               Show what would be deployed without actually deploying

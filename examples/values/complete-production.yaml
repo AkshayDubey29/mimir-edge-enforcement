@@ -8,7 +8,7 @@
 global:
   # Your domains (🔴 MUST CHANGE!)
   domains:
-    admin: "mimir-admin.your-domain.com"      # 🔴 CHANGE: Admin UI domain
+    admin: "mimir-admin.your-internal-domain.com"      # 🔴 CHANGE: Admin UI domain
     
   # Your Mimir deployment (🔴 MUST CHANGE!)
   mimir:

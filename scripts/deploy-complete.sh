@@ -6,7 +6,7 @@ set -euo pipefail
 # Usage: ./scripts/deploy-complete.sh [namespace] [admin-domain]
 
 NAMESPACE=${1:-mimir-edge-enforcement}
-ADMIN_DOMAIN=${2:-mimir-admin.your-domain.com}
+ADMIN_DOMAIN=${2:-mimir-admin.your-internal-domain.com}
 
 # Color codes
 GREEN='\033[0;32m'
@@ -49,4 +49,4 @@ echo ""
 echo -e "${BLUE}🔧 Starting deployment...${NC}"
 
 # Run the main deployment script with complete mode
-exec ./scripts/deploy-production.sh "$NAMESPACE" "your-domain.com" "$ADMIN_DOMAIN" "complete"
+exec ./scripts/deploy-production.sh "$NAMESPACE" "mimir-edge-enforcement.your-internal-domain.com" "$ADMIN_DOMAIN" "complete"

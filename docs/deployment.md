@@ -2,6 +2,24 @@
 
 This comprehensive guide walks you through deploying **mimir-edge-enforcement** to a production Kubernetes cluster with **canary rollout** support and **real Mimir ConfigMap integration**.
 
+## 🔧 Environment Variables Setup
+
+Before deploying, set the following environment variables for your AWS infrastructure:
+
+```bash
+# AWS Infrastructure Configuration
+export CERTIFICATE_ARN="arn:aws:acm:us-east-1:123456789012:certificate/your-certificate-id"
+export SECURITY_GROUPS="sg-12345678,sg-87654321"
+export SUBNETS="subnet-12345678,subnet-87654321,subnet-11111111,subnet-22222222"
+export DOMAIN="mimir-edge-enforcement.your-internal-domain.com"
+
+# 🔴 CHANGE THESE VALUES FOR YOUR ENVIRONMENT:
+# CERTIFICATE_ARN: Your ACM certificate ARN for HTTPS
+# SECURITY_GROUPS: Your security group IDs (comma-separated)
+# SUBNETS: Your subnet IDs (comma-separated)
+# DOMAIN: Your internal domain name for the Admin UI (e.g., mimir-edge-enforcement.your-company.com)
+```
+
 ## 📋 Prerequisites
 
 ### 1. Required Tools
@@ -61,7 +79,7 @@ cd mimir-edge-enforcement
 
 # Deploy complete system with Admin UI and canary support
 ./scripts/deploy-complete.sh production \
-  --domain your-domain.com \
+  --domain $DOMAIN \
   --admin-password your-secure-password \
   --github-token $GITHUB_TOKEN
 
@@ -81,7 +99,7 @@ For customized deployment with full control:
 ./scripts/deploy-production.sh complete \
   --namespace mimir-edge-enforcement \
   --mimir-namespace mimir \
-  --admin-domain admin.your-domain.com
+  --admin-domain $DOMAIN
 ```
 
 ### Option 3: Component-by-Component
@@ -92,7 +110,7 @@ Deploy individual components as needed:
 ./scripts/deploy-production.sh core-only
 
 # Deploy Admin UI separately  
-./scripts/deploy-admin-ui.sh --type ingress --domain admin.your-domain.com
+./scripts/deploy-admin-ui.sh --type ingress --domain $DOMAIN
 ```
 
 ## 🔧 Component-by-Component Deployment
@@ -627,7 +645,7 @@ echo "✅ Envoy deployment with buffer overflow fixes is production ready!"
 ### Step 6: Deploy Admin UI (Optional)
 
 ```bash
-# Create values file for Admin UI
+# Create values file for Admin UI (using environment variables)
 cat > values-admin-ui.yaml <<EOF
 # Production configuration for Admin UI
 replicaCount: 3
@@ -669,15 +687,15 @@ ingress:
   className: "alb"  # AWS Application Load Balancer
   annotations:
     # AWS ALB Configuration
-    alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"  # 🔴 CHANGE: Your ACM certificate ARN
+          alb.ingress.kubernetes.io/certificate-arn: "${CERTIFICATE_ARN}"  # 🔴 CHANGE: Your ACM certificate ARN
     alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
     alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
     alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400"
     alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
     alb.ingress.kubernetes.io/scheme: "internal"
-    alb.ingress.kubernetes.io/security-groups: "sg-03a537b10f8b71c3c,sg-0faab6bb8700b4164"  # 🔴 CHANGE: Your security groups
-    alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-0247d97d25e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"  # 🔴 CHANGE: Your subnets
+          alb.ingress.kubernetes.io/security-groups: "${SECURITY_GROUPS}"  # 🔴 CHANGE: Your security groups
+          alb.ingress.kubernetes.io/subnets: "${SUBNETS}"  # 🔴 CHANGE: Your subnets
     alb.ingress.kubernetes.io/success-codes: "200"
     alb.ingress.kubernetes.io/tags: "role=couwatch_mimir"
     alb.ingress.kubernetes.io/target-type: "ip"
@@ -691,20 +709,20 @@ ingress:
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Content-Length"
     nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
-  hosts:
-    - host: mimir-edge-enforcement.vzonel.kr.couwatchdev.net  # 🔴 CHANGE: Your domain
+      hosts:
+      - host: ${DOMAIN}  # 🔴 CHANGE: Your domain
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: mimir-admin-tls
       hosts:
-        - mimir-edge-enforcement.vzonel.kr.couwatchdev.net
+        - ${DOMAIN}
 
 # API configuration
-config:
-  apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
-  serverName: "mimir-edge-enforcement.vzonel.kr.couwatchdev.net"  # 🔴 CHANGE: Your domain
+  config:
+    apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
+    serverName: "${DOMAIN}"  # 🔴 CHANGE: Your domain
 
 # Security
 securityContext:
@@ -723,10 +741,10 @@ htpasswd -c auth admin
 kubectl create secret generic admin-ui-auth --from-file=auth -n mimir-edge-enforcement
 rm auth
 
-# Deploy Admin UI
-helm install mimir-admin charts/admin-ui \
+# Deploy Admin UI (with environment variable substitution)
+envsubst < values-admin-ui.yaml | helm install mimir-admin charts/admin-ui \
   --namespace mimir-edge-enforcement \
-  --values values-admin-ui.yaml \
+  --values - \
   --wait --timeout=300s
 
 # Verify deployment
@@ -734,7 +752,7 @@ kubectl get pods -l app.kubernetes.io/name=mimir-admin -n mimir-edge-enforcement
 kubectl get ingress -n mimir-edge-enforcement
 
 # Test Admin UI
-curl https://mimir-admin.your-domain.com/api/tenants
+curl https://$DOMAIN/api/tenants
 ```
 
 ### Step 7: Deploy with Production Values (All-in-One Alternative)
@@ -742,10 +760,11 @@ curl https://mimir-admin.your-domain.com/api/tenants
 As an alternative to the component-by-component approach above, use the production values template:
 
 ```bash
-# Use the production values file
+# Use the production values file (using environment variables)
 cp examples/values/production.yaml values-production.yaml
 
-# Customize for your environment
+# Customize for your environment (using environment variables)
+# Option 1: Use envsubst for variable substitution
 cat > values-production.yaml <<EOF
 # 🎯 PRODUCTION CONFIGURATION
 global:
@@ -918,15 +937,15 @@ adminUI:
     className: "alb"  # AWS Application Load Balancer
     annotations:
       # AWS ALB Configuration
-      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"  # 🔴 CHANGE: Your ACM certificate
+      alb.ingress.kubernetes.io/certificate-arn: "${CERTIFICATE_ARN}"  # 🔴 CHANGE: Your ACM certificate
       alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
       alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
       alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30"
       alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
       alb.ingress.kubernetes.io/scheme: "internal"
-      alb.ingress.kubernetes.io/security-groups: "sg-03a537b10f8b71c3c,sg-0faab6bb8700b4164"  # 🔴 CHANGE: Your security groups
-      alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-0247d97d25e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"  # 🔴 CHANGE: Your subnets
+      alb.ingress.kubernetes.io/security-groups: "${SECURITY_GROUPS}"  # 🔴 CHANGE: Your security groups
+      alb.ingress.kubernetes.io/subnets: "${SUBNETS}"  # 🔴 CHANGE: Your subnets
       alb.ingress.kubernetes.io/success-codes: "200"
       alb.ingress.kubernetes.io/tags: "role=couwatch_mimir"
       alb.ingress.kubernetes.io/target-type: "ip"
@@ -937,7 +956,7 @@ adminUI:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
     
     hosts:
-      - host: mimir-edge-enforcement.vzonel.kr.couwatchdev.net  # 🔴 CHANGE: Your domain
+      - host: ${DOMAIN}  # 🔴 CHANGE: Your domain
         paths:
           - path: /
             pathType: Prefix
@@ -945,7 +964,7 @@ adminUI:
     tls:
       - secretName: mimir-admin-tls
         hosts:
-          - mimir-edge-enforcement.vzonel.kr.couwatchdev.net
+          - ${DOMAIN}
   
   # 🔐 Security
   auth:
@@ -966,7 +985,7 @@ adminUI:
   cors:
     enabled: true
     allowedOrigins:
-      - "https://mimir-admin.your-domain.com"
+      - "https://$DOMAIN"
     allowedMethods: ["GET", "POST", "PUT", "DELETE"]
     allowedHeaders: ["Content-Type", "Authorization"]
   
@@ -1032,11 +1051,23 @@ networkPolicy:
         port: 53
 EOF
 
-# Deploy using Helm
-helm install mimir-edge-enforcement . \
+# Deploy using Helm (with environment variable substitution)
+# Option 1: Use envsubst for variable substitution
+envsubst < values-production.yaml | helm install mimir-edge-enforcement . \
   --namespace mimir-edge-enforcement \
-  --values values-production.yaml \
+  --values - \
   --wait --timeout=600s
+
+# Option 2: Use --set-string flags (alternative method)
+# helm install mimir-edge-enforcement . \
+#   --namespace mimir-edge-enforcement \
+#   --values values-production.yaml \
+#   --set-string adminUI.ingress.annotations."alb\.ingress\.kubernetes\.io/certificate-arn"="$CERTIFICATE_ARN" \
+#   --set-string adminUI.ingress.annotations."alb\.ingress\.kubernetes\.io/security-groups"="$SECURITY_GROUPS" \
+#   --set-string adminUI.ingress.annotations."alb\.ingress\.kubernetes\.io/subnets"="$SUBNETS" \
+#   --set-string adminUI.ingress.hosts[0].host="$DOMAIN" \
+#   --set-string adminUI.ingress.tls[0].hosts[0]="$DOMAIN" \
+#   --wait --timeout=600s
 ```
 
 ## 🎯 NGINX Canary Integration
@@ -1151,7 +1182,7 @@ kubectl port-forward svc/mimir-envoy 8001:8001 -n mimir-edge-enforcement
 curl http://localhost:8001/stats | grep -E "(ext_authz|ratelimit)"
 
 # Admin UI (if deployed with Ingress)
-curl https://mimir-admin.your-domain.com/api/tenants
+curl https://$DOMAIN/api/tenants
 ```
 
 ### Key Metrics to Monitor
@@ -1167,7 +1198,7 @@ curl https://mimir-admin.your-domain.com/api/tenants
 # Note: Dashboard files are now in the dashboards/ folder
 
 # Or access the Admin UI for real-time monitoring
-open https://mimir-admin.your-domain.com
+open https://$DOMAIN
 ```
 
 ## 🛡️ Production Security

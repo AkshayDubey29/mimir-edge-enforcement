@@ -186,7 +186,7 @@ jobs:
           echo "   helm install admin-ui charts/admin-ui"
           echo ""
           echo "🎨 ADMIN UI ACCESS OPTIONS:"
-          echo "   Ingress:     ./scripts/deploy-admin-ui.sh ingress your-domain.com"
+          echo "   Ingress:     ./scripts/deploy-admin-ui.sh ingress mimir-admin.your-internal-domain.com"
           echo "   LoadBalancer: ./scripts/deploy-admin-ui.sh loadbalancer"
           echo "   NodePort:    ./scripts/deploy-admin-ui.sh nodeport"
           echo "======================================================"

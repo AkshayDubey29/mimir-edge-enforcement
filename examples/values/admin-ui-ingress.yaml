@@ -53,7 +53,7 @@ ingress:
     nginx.ingress.kubernetes.io/whitelist-source-range: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"  # 🔧 CUSTOMIZE: Your allowed IP ranges
     
   hosts:
-    - host: mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+    - host: mimir-admin.your-internal-domain.com  # 🔴 CHANGE: Your domain
       paths:
         - path: /
           pathType: Prefix
@@ -61,13 +61,13 @@ ingress:
   tls:
     - secretName: mimir-admin-tls
       hosts:
-        - mimir-admin.your-domain.com  # 🔴 CHANGE: Your domain
+        - mimir-admin.your-internal-domain.com  # 🔴 CHANGE: Your domain
 
 # Configuration
 config:
   environment: "production"
   apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"  # 🔧 CUSTOMIZE: Your namespace
-  serverName: "mimir-admin.your-domain.com"  # 🔴 CHANGE: Your domain
+  serverName: "mimir-admin.your-internal-domain.com"  # 🔴 CHANGE: Your domain
   nginxConfig: true
 
 # Resource configuration

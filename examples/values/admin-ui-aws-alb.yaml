@@ -1,5 +1,5 @@
 # Admin UI Configuration for AWS ALB Ingress
-# Domain: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+# Domain: mimir-edge-enforcement.your-internal-domain.com
 
 adminUI:
   enabled: true
@@ -45,15 +45,15 @@ adminUI:
     className: "alb"
     annotations:
       # AWS ALB Configuration
-      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:ap-northeast-2:138978013424:certificate/7b1c00f5-19ee-4e6c-9ca5-b30679ea6043"
+      alb.ingress.kubernetes.io/certificate-arn: "arn:aws:acm:us-east-1:123456789012:certificate/your-certificate-id"
       alb.ingress.kubernetes.io/healthcheck-path: "/healthz"
       alb.ingress.kubernetes.io/backend-protocol-version: "HTTP1"
       alb.ingress.kubernetes.io/target-group-attributes: "stickiness.enabled=false,deregistration_delay.timeout_seconds=30,stickiness.type=lb_cookie,stickiness.lb_cookie.duration_seconds=86400"
       alb.ingress.kubernetes.io/inbound-cidrs: "10.0.0.0/8"
       alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
       alb.ingress.kubernetes.io/scheme: "internal"
-      alb.ingress.kubernetes.io/security-groups: "sg-0a537b10f8b71c3c,sg-05a0b6bb8700b4164"
-      alb.ingress.kubernetes.io/subnets: "subnet-01ab33de57fc8101,subnet-02487497d2f5e7469f8,subnet-0ebfe41b055fd0ec3,subnet-0971e77d71ee66018"
+      alb.ingress.kubernetes.io/security-groups: "sg-12345678,sg-87654321"
+      alb.ingress.kubernetes.io/subnets: "subnet-12345678,subnet-87654321,subnet-11111111,subnet-22222222"
       alb.ingress.kubernetes.io/success-codes: "200"
       alb.ingress.kubernetes.io/tags: "role=couwatch_mimir_edge_enforcement"
       alb.ingress.kubernetes.io/target-type: "ip"
@@ -71,26 +71,26 @@ adminUI:
       
       # CORS for Admin UI
       nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
-      nginx.ingress.kubernetes.io/cors-allow-origin: "https://mimir-edge-enforcement.vzone1.kr.couwatchdev.net"
+      nginx.ingress.kubernetes.io/cors-allow-origin: "https://mimir-edge-enforcement.your-internal-domain.com"
       nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,Content-Length"
       nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
 
     hosts:
-    - host: mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+    - host: mimir-edge-enforcement.your-internal-domain.com
       paths:
       - path: /
         pathType: Prefix
     
     tls:
     - hosts:
-      - mimir-edge-enforcement.vzone1.kr.couwatchdev.net
+      - mimir-edge-enforcement.your-internal-domain.com
       secretName: mimir-edge-enforcement-tls
 
   # API configuration
   config:
     environment: "production"
     apiBaseUrl: "http://mimir-rls.mimir-edge-enforcement.svc.cluster.local:8082"
-    serverName: "mimir-edge-enforcement.vzone1.kr.couwatchdev.net"
+    serverName: "mimir-edge-enforcement.your-internal-domain.com"
     nginxConfig: true
 
   # Security configuration
