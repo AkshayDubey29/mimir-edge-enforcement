@@ -568,27 +568,27 @@ export function Overview() {
                         </div>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="font-medium">{tenant.rps.toFixed(1)}</span>
+                        <span className="font-medium">{tenant?.rps?.toFixed(1) || '0.0'}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className="font-medium">{formatSamplesPerSec(tenant.samples_per_sec)}</span>
+                        <span className="font-medium">{formatSamplesPerSec(tenant?.samples_per_sec || 0)}</span>
                       </td>
                       <td className="py-2 px-4">
-                        <span className={`font-medium ${tenant.deny_rate > 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                          {tenant.deny_rate.toFixed(1)}/s
+                        <span className={`font-medium ${(tenant?.deny_rate || 0) > 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                          {(tenant?.deny_rate || 0).toFixed(1)}/s
                         </span>
                       </td>
                       <td className="py-2 px-4">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{tenant.utilization_pct.toFixed(1)}%</span>
+                          <span className="font-medium">{(tenant?.utilization_pct || 0).toFixed(1)}%</span>
                           <div className="w-16 bg-gray-200 rounded-full h-1.5">
                             <div 
                               className={`h-1.5 rounded-full ${
-                                tenant.utilization_pct > 90 ? 'bg-red-500' :
-                                tenant.utilization_pct > 80 ? 'bg-yellow-500' :
-                                tenant.utilization_pct > 60 ? 'bg-blue-500' : 'bg-green-500'
+                                (tenant?.utilization_pct || 0) > 90 ? 'bg-red-500' :
+                                (tenant?.utilization_pct || 0) > 80 ? 'bg-yellow-500' :
+                                (tenant?.utilization_pct || 0) > 60 ? 'bg-blue-500' : 'bg-green-500'
                               }`}
-                              style={{ width: `${Math.min(tenant.utilization_pct, 100)}%` }}
+                              style={{ width: `${Math.min(tenant?.utilization_pct || 0, 100)}%` }}
                             />
                           </div>
                         </div>
@@ -618,25 +618,25 @@ export function Overview() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Cpu className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-                <div className="text-lg font-semibold text-gray-900">{systemMetrics.cpu_usage.toFixed(1)}%</div>
+                <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.cpu_usage || 0).toFixed(1)}%</div>
                 <div className="text-sm text-gray-600">CPU Usage</div>
               </div>
               
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <HardDrive className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                <div className="text-lg font-semibold text-gray-900">{systemMetrics.memory_usage.toFixed(1)}%</div>
+                <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.memory_usage || 0).toFixed(1)}%</div>
                 <div className="text-sm text-gray-600">Memory Usage</div>
               </div>
               
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Network className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-                <div className="text-lg font-semibold text-gray-900">{formatBytes(systemMetrics.network_throughput)}/s</div>
+                <div className="text-lg font-semibold text-gray-900">{formatBytes(systemMetrics?.network_throughput || 0)}/s</div>
                 <div className="text-sm text-gray-600">Network Throughput</div>
               </div>
               
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <Timer className="h-8 w-8 mx-auto mb-2 text-orange-500" />
-                <div className="text-lg font-semibold text-gray-900">{systemMetrics.response_time_p95.toFixed(1)}ms</div>
+                <div className="text-lg font-semibold text-gray-900">{(systemMetrics?.response_time_p95 || 0).toFixed(1)}ms</div>
                 <div className="text-sm text-gray-600">P95 Response Time</div>
               </div>
             </div>
