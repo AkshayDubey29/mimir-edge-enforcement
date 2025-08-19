@@ -316,7 +316,7 @@ export function Overview() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Total Requests</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.total_requests.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats?.total_requests?.toLocaleString() || '0'}</p>
                   <p className="text-xs text-gray-500">Last {timeRange}</p>
                 </div>
                 <Activity className="h-8 w-8 text-blue-500" />
@@ -329,8 +329,8 @@ export function Overview() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Success Rate</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.allow_percentage.toFixed(1)}%</p>
-                  <p className="text-xs text-gray-500">{stats.allowed_requests.toLocaleString()} allowed</p>
+                  <p className="text-2xl font-bold text-green-600">{stats?.allow_percentage?.toFixed(1) || '0.0'}%</p>
+                  <p className="text-xs text-gray-500">{stats?.allowed_requests?.toLocaleString() || '0'} allowed</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-green-500" />
               </div>
@@ -342,8 +342,8 @@ export function Overview() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Denied Requests</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.denied_requests.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{(100 - stats.allow_percentage).toFixed(1)}% denied</p>
+                  <p className="text-2xl font-bold text-red-600">{stats?.denied_requests?.toLocaleString() || '0'}</p>
+                  <p className="text-xs text-gray-500">{stats?.allow_percentage ? (100 - stats.allow_percentage).toFixed(1) : '0.0'}% denied</p>
                 </div>
                 <XCircle className="h-8 w-8 text-red-500" />
               </div>
@@ -355,7 +355,7 @@ export function Overview() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Active Tenants</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.active_tenants}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stats?.active_tenants || '0'}</p>
                   <p className="text-xs text-gray-500">Currently monitored</p>
                 </div>
                 <Users className="h-8 w-8 text-purple-500" />
@@ -392,15 +392,15 @@ export function Overview() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
-                    <span className="font-medium">{flowMetrics.nginx_requests.toLocaleString()}</span>
+                    <span className="font-medium">{flowMetrics?.nginx_requests?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Direct Route:</span>
-                    <span className="font-medium text-green-600">{flowMetrics.nginx_route_direct.toLocaleString()}</span>
+                    <span className="font-medium text-green-600">{flowMetrics?.nginx_route_direct?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Edge Route:</span>
-                    <span className="font-medium text-blue-600">{flowMetrics.nginx_route_edge.toLocaleString()}</span>
+                    <span className="font-medium text-blue-600">{flowMetrics?.nginx_route_edge?.toLocaleString() || '0'}</span>
                   </div>
                 </div>
               </div>
@@ -418,20 +418,20 @@ export function Overview() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
-                    <span className="font-medium">{flowMetrics.envoy_requests.toLocaleString()}</span>
+                    <span className="font-medium">{flowMetrics?.envoy_requests?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Authorized:</span>
-                    <span className="font-medium text-green-600">{flowMetrics.envoy_authorized.toLocaleString()}</span>
+                    <span className="font-medium text-green-600">{flowMetrics?.envoy_authorized?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Denied:</span>
-                    <span className="font-medium text-red-600">{flowMetrics.envoy_denied.toLocaleString()}</span>
+                    <span className="font-medium text-red-600">{flowMetrics?.envoy_denied?.toLocaleString() || '0'}</span>
                   </div>
-                  {flowMetrics.selective_filtering.enabled && (
+                  {flowMetrics?.selective_filtering?.enabled && (
                     <div className="flex justify-between">
                       <span>Filtered:</span>
-                      <span className="font-medium text-orange-600">{flowMetrics.selective_filtering.filtered_requests.toLocaleString()}</span>
+                      <span className="font-medium text-orange-600">{flowMetrics?.selective_filtering?.filtered_requests?.toLocaleString() || '0'}</span>
                     </div>
                   )}
                 </div>
@@ -450,20 +450,20 @@ export function Overview() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Total Requests:</span>
-                    <span className="font-medium">{flowMetrics.mimir_requests.toLocaleString()}</span>
+                    <span className="font-medium">{flowMetrics?.mimir_requests?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Success:</span>
-                    <span className="font-medium text-green-600">{flowMetrics.mimir_success.toLocaleString()}</span>
+                    <span className="font-medium text-green-600">{flowMetrics?.mimir_success?.toLocaleString() || '0'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Errors:</span>
-                    <span className="font-medium text-red-600">{flowMetrics.mimir_errors.toLocaleString()}</span>
+                    <span className="font-medium text-red-600">{flowMetrics?.mimir_errors?.toLocaleString() || '0'}</span>
                   </div>
-                  {flowMetrics.cardinality_monitoring.enabled && (
+                  {flowMetrics?.cardinality_monitoring?.enabled && (
                     <div className="flex justify-between">
                       <span>Cardinality Violations:</span>
-                      <span className="font-medium text-yellow-600">{flowMetrics.cardinality_monitoring.violations_detected.toLocaleString()}</span>
+                      <span className="font-medium text-yellow-600">{flowMetrics?.cardinality_monitoring?.violations_detected?.toLocaleString() || '0'}</span>
                     </div>
                   )}
                 </div>
@@ -476,19 +476,19 @@ export function Overview() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-blue-600">
-                    {(flowMetrics.response_times.nginx_to_envoy * 1000).toFixed(1)}ms
+                    {flowMetrics?.response_times?.nginx_to_envoy ? (flowMetrics.response_times.nginx_to_envoy * 1000).toFixed(1) : '0.0'}ms
                   </div>
                   <div className="text-sm text-gray-600">NGINX → Envoy</div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-purple-600">
-                    {(flowMetrics.response_times.envoy_to_mimir * 1000).toFixed(1)}ms
+                    {flowMetrics?.response_times?.envoy_to_mimir ? (flowMetrics.response_times.envoy_to_mimir * 1000).toFixed(1) : '0.0'}ms
                   </div>
                   <div className="text-sm text-gray-600">Envoy → Mimir</div>
                 </div>
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <div className="text-lg font-semibold text-green-600">
-                    {(flowMetrics.response_times.total_flow * 1000).toFixed(1)}ms
+                    {flowMetrics?.response_times?.total_flow ? (flowMetrics.response_times.total_flow * 1000).toFixed(1) : '0.0'}ms
                   </div>
                   <div className="text-sm text-gray-600">Total Flow</div>
                 </div>

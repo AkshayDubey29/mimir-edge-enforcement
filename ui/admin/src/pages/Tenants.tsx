@@ -503,7 +503,10 @@ export function Tenants() {
                               Details
                             </Link>
                             <button
-                              onClick={() => {/* TODO: Implement quick actions */}}
+                              onClick={() => {
+                                // Navigate to tenant details page for configuration
+                                window.location.href = `/tenants/${tenant.id}`;
+                              }}
                               className="flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
                             >
                               <Settings className="h-3 w-3" />
