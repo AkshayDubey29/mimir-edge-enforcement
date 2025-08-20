@@ -841,7 +841,7 @@ func (rls *RLS) GetTenantsWithTimeRange(timeRange string) []limits.TenantInfo {
 	for _, t := range tenants {
 		c := rls.counters[t.Info.ID]
 		metrics := limits.TenantMetrics{}
-		
+
 		// Always get time-based aggregation data, even if counters are zero
 		tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, normalizedRange)
 
@@ -852,7 +852,7 @@ func (rls *RLS) GetTenantsWithTimeRange(timeRange string) []limits.TenantInfo {
 		metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
 		metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
 		metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
-		
+
 		// If no time-based data, fall back to counter data
 		if metrics.RPS == 0 && c != nil && c.Total > 0 {
 			// Calculate rates from counters
@@ -861,7 +861,7 @@ func (rls *RLS) GetTenantsWithTimeRange(timeRange string) []limits.TenantInfo {
 			metrics.DenyRate = float64(c.Denied) / total * 100.0
 			metrics.RPS = total / 60.0 // Assume 1-minute window for RPS calculation
 		}
-		
+
 		info := t.Info
 		info.Metrics = metrics
 		out = append(out, info)
@@ -898,7 +898,7 @@ func (rls *RLS) ListTenantsWithMetrics() []limits.TenantInfo {
 	for _, t := range tenants {
 		c := rls.counters[t.Info.ID]
 		metrics := limits.TenantMetrics{}
-		
+
 		// Always get time-based aggregation data, even if counters are zero
 		tenantAggregatedData := rls.timeAggregator.GetTenantAggregatedData(t.Info.ID, "1h")
 
@@ -909,7 +909,7 @@ func (rls *RLS) ListTenantsWithMetrics() []limits.TenantInfo {
 		metrics.SamplesPerSec = tenantAggregatedData["samples_per_sec"].(float64)
 		metrics.BytesPerSec = tenantAggregatedData["bytes_per_sec"].(float64)
 		metrics.UtilizationPct = tenantAggregatedData["utilization_pct"].(float64)
-		
+
 		// If no time-based data, fall back to counter data
 		if metrics.RPS == 0 && c != nil && c.Total > 0 {
 			// Calculate rates from counters
@@ -918,7 +918,7 @@ func (rls *RLS) ListTenantsWithMetrics() []limits.TenantInfo {
 			metrics.DenyRate = float64(c.Denied) / total * 100.0
 			metrics.RPS = total / 60.0 // Assume 1-minute window for RPS calculation
 		}
-		
+
 		info := t.Info
 		info.Metrics = metrics
 		out = append(out, info)
